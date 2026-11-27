@@ -1732,6 +1732,7 @@ supports_audio_input = false
 supports_verbosity = false
 supports_strict_tool_calling = false
 cost_input_tokens_per_1m = 5.0
+cost_cached_input_tokens_per_1m = 1.0
 cost_output_tokens_per_1m = 15.0
 ```
 
@@ -1745,6 +1746,7 @@ cost_output_tokens_per_1m = 15.0
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_strict_tool_calling */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_input_tokens_per_1m */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_cached_input_tokens_per_1m */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_output_tokens_per_1m */}
 
 - **`context_size_tokens`** _(default: 1000000)_ - Maximum number of tokens that may be provided to the model including input messages, system prompt, and files
@@ -1755,8 +1757,9 @@ cost_output_tokens_per_1m = 15.0
 - **`supports_encrypted_reasoning_content`** _(default: true)_ - Whether the model supports requesting encrypted reasoning content for stateless reasoning replay
 - **`supports_verbosity`** _(default: false)_ - Whether the model supports providing a verbosity parameter (for future support of advanced models)
 - **`supports_strict_tool_calling`** _(default: false)_ - Opt this model/endpoint into native strict arguments for configured client submissions. Currently supported by the OpenAI-compatible Chat Completions and Responses adapters. Other adapters retain local schema validation and bounded corrections. Set this only after verifying the endpoint's support; it is not inferred from the model name.
-- **`cost_input_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million input tokens (unit-less, for cost estimation)
-- **`cost_output_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million output tokens (unit-less, for cost estimation)
+- **`cost_input_tokens_per_1m`** _(optional)_ - Price per 1 million input tokens. Set to `0.0` for free input tokens.
+- **`cost_cached_input_tokens_per_1m`** _(optional)_ - Price per 1 million input tokens the provider reports as cache reads. An omitted rate uses the regular input price. Set it to `0.0` for free cache reads.
+- **`cost_output_tokens_per_1m`** _(optional)_ - Price per 1 million output tokens. Set to `0.0` for free output tokens.
 
 If not explicitly configured, all capabilities default to conservative values (large context window, no special features, no cost tracking).
 
@@ -7240,6 +7243,25 @@ When enabled, the submission form hides the audience field and the server assign
 force_whole_organization_audience = true
 ```
 
+#### `assistant_hub.validate_version_semver_format`
+
+{/* erato_toml_config_key: assistant_hub.validate_version_semver_format */}
+
+Require new Assistant Hub submissions to use `MAJOR.MINOR.PATCH` with three non-negative decimal components. The API trims surrounding whitespace. Leading zeros, `v` prefixes, prerelease suffixes, and build suffixes are invalid.
+
+Each submission must exceed the highest version in that format previously submitted for the same assistant, including pending, declined, and withdrawn versions. Existing labels outside this format remain visible and are skipped in comparisons. The form suggests `1.0.0` when there is no comparable history, and authors can choose any valid starting version. When disabled, any unique, non-empty version label is accepted after trimming.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[assistant_hub]
+validate_version_semver_format = true
+```
+
 #### `assistant_hub.categories`
 
 {/* erato_toml_config_key: assistant_hub.categories */}
@@ -8187,15 +8209,34 @@ Each action facet supports these fields:
 
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.grant_scope.<key> */}
 
-`grant_scope` sets, per client action the facet offers, how far a user's "Always allow" reaches:
-`device` (the default) keeps it on the device until the user changes it in settings;
-`session_document` keeps it only while the add-in stays open on the document it was given for,
-and ignores an "Always allow" stored on the device. Keys must be Word add-in actions (`word.*`)
-listed in the facet's `client_actions`.
+`grant_scope` marks, per client action the facet offers, an "Always allow" that the Word add-in
+kept only for one session and document (`session_document`; the default is `device`). Decisions
+are now kept on the server and hold on every device; the add-in reads `grant_scope` only when it
+carries its old on-device decisions over to the server once, and does not carry over an "Always
+allow" for a `session_document` action. Keys must be Word add-in actions (`word.*`) listed in the
+facet's `client_actions`.
 
 ```toml
 [action_facets.facets.word_selection]
 grant_scope = { "word.add_comments" = "session_document" }
+```
+
+#### Action facet draft blocks
+
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.draft_block_actions.<key> */}
+
+`draft_block_actions` maps fenced code block languages to one of the facet's `client_actions`. When
+an answer in the facet holds exactly one closed block of a listed language and the model proposed
+no action, the server proposes the mapped action itself, through the same approval as a proposal
+the model makes. Several such blocks leave the choice to the user. Languages match exactly, and a
+block without a language never matches. Each action needs a `called_by = "server"` client tool
+without `follows_tool` that carries it out; nothing is proposed when the client did not register
+that tool or the user set it to Never.
+
+```toml
+[action_facets.facets.editor_compose]
+client_actions = ["editor.open_form"]
+draft_block_actions = { "editor-draft" = "editor.open_form" }
 ```
 
 #### Action facet delegation
@@ -8447,7 +8488,7 @@ client_actions = ["editor.apply_draft"]
 {/* erato_toml_config_key: client_tools.tools.<key>.max_calls_per_message */}
 {/* erato_toml_config_key: client_tools.tools.<key>.invalidated_read_tools.[] */}
 
-- **`called_by`** _(default: `"model"`)_ - `server` makes a tool follow the submission named in `follows_tool`. It is never offered to the model and needs `requires_client_registration = true`; it cannot be a submission, durable, a part tool, read by tasks or set `approval_scope = "context"`. It is offered only to a client that registered it and only when the user did not set it to Never; Never also hides the submission and its part tools.
+- **`called_by`** _(default: `"model"`)_ - `server` makes a tool follow the submission named in `follows_tool`, or, without `follows_tool`, the tool that carries out the `client_actions` it lists when the model proposes one through `propose_client_action`. It is never offered to the model and needs `requires_client_registration = true`; it cannot be a submission, durable, a part tool, read by tasks or set `approval_scope = "context"`. It is offered only to a client that registered it and only when the user did not set it to Never; Never also hides the submission and its part tools.
 - **`approval`** _(default: `"user_decision"`)_ - `user_decision` follows the user's Ask, Always or Never for the tool; a server-called tool asks while the user has stored none. `every_call` asks on every call and never offers Always. `none` runs without asking and is left out of the user's settings; a server-called tool cannot use it. `every_call` and `none` cannot be combined with `child_access = "read"`.
 - **`client_actions`** _(default: `[]`)_ - The action facet action ids the tool carries out. An action facet whose `client_actions_always_ask` lists one the call uses makes that call ask every time in that facet. An id belongs to at most one server-called tool.
 - **`follows_tool`** _(default: none)_ - Qualified name of a configured submission tool. The server calls this tool once for each accepted call of that submission, through this tool's approval. At most one tool follows a submission; only a `called_by = "server"` tool can set it. Without a tool that follows it, acceptance ends generation as before. A config that still has a `submission.apply` table does not load.
@@ -8459,7 +8500,21 @@ the result says it did not fully apply or asks for a follow-up, or the
 submission said more changes follow. A result that asks the user to decide
 something on screen first parks the same call again once, as a question that
 takes no standing Always and no decision by voice. `GET /me/facets` lists the
-apply tools the facets reach in `approval_tools`.
+apply tools the facets reach in `approval_tools`, each with its `client_actions`.
+
+A proposed client action whose server-called tool the client registered is
+carried out the same way: the server calls the tool with
+`{proposal_call_id, action, item_identity}` through its approval, where
+`item_identity` is the request's `item_identity` or `document_identity` facet
+argument, else null. The answer ends after an action that applied cleanly,
+once the rest of the model's batch has run, and without asking the model again;
+it also ends on `unavailable` with the reason `user_picks` (the answer offers
+several versions and the user picks one). A proposal of an action whose tool the
+user set to Never is refused, and the model is told the action is turned off. A
+change request on the action's card lets the model propose it once more. A
+proposed action does not count toward any follower's `max_calls_per_message`. Actions
+without such a tool, or on a client that did not register it, keep the client's
+own flow.
 
 ### Compact replay of earlier client tool calls
 
@@ -8615,7 +8670,7 @@ Whether budget tracking and display is enabled. When disabled, no budget informa
 
 {/* erato_toml_config_key: budget.max_budget */}
 
-The maximum budget amount per budget period (unit-less). This value is used for calculating budget usage percentages and determining when warning thresholds are exceeded.
+The maximum budget amount for the rolling window (unit-less). This value determines the budget usage percentage and when warnings appear.
 
 The budget amount is treated as unit-less for flexibility - the actual monetary value depends on your model pricing configuration and the configured display currency.
 
@@ -8659,13 +8714,60 @@ For example, a value of `0.7` means users will be warned when they've used 70% o
 
 {/* erato_toml_config_key: budget.budget_period_days */}
 
-Number of days that counts as one budget period. Budget usage is calculated and reset based on this period length.
+The number of preceding 24-hour days to include in the rolling budget window. Each contribution expires when it reaches that age. The same window applies to composer warnings and the optional Budget tab.
+
+On upgrade, Erato recalculates spending from stored usage in the rolling window. This can immediately change displayed spending and whether a user has reached their limit.
 
 **Type:** `number`
 
 **Default value:** `30`
 
-**Example:** `7` (for weekly budgets), `30` (for monthly budgets)
+**Example:** `7` to count the last seven days, or `30` to count the last thirty days.
+
+#### `budget.frontend_tab`
+
+{/* erato_toml_config_key: budget.frontend_tab */}
+
+Configuration for the read-only Budget tab in web Settings. The tab shows each signed-in user their spending, remaining allowance, spending by model, and the additional allowance expected to become available in the next 24 hours.
+
+#### `budget.frontend_tab.enabled`
+
+{/* erato_toml_config_key: budget.frontend_tab.enabled */}
+
+Show the Budget tab when `budget.enabled = true`. Defaults to `false`.
+
+```toml
+[budget.frontend_tab]
+enabled = true
+```
+
+#### `budget.model_rates`
+
+{/* erato_toml_config_key: budget.model_rates */}
+{/* erato_toml_config_key: budget.model_rates.<model-identifier>.cost_input_tokens_per_1m */}
+{/* erato_toml_config_key: budget.model_rates.<model-identifier>.cost_cached_input_tokens_per_1m */}
+{/* erato_toml_config_key: budget.model_rates.<model-identifier>.cost_output_tokens_per_1m */}
+
+Set `cost_input_tokens_per_1m` and `cost_output_tokens_per_1m` for a model or
+deployment, in the budget currency. The key must match the chat provider ID
+or the exact `model_identifier` reported by the MCP server. A chat provider ID
+and an MCP model identifier that match share a rate. Use distinct identifiers
+for deployments with different rates.
+
+An exact `budget.model_rates` entry supplies all rates for that identifier.
+Without an entry, chat provider IDs use their rates in `model_capabilities`.
+In either table, set the optional `cost_cached_input_tokens_per_1m` rate to
+price reported cache reads separately. The rate must be finite and nonnegative.
+Use `0.0` for free cache reads. If the count or the rate is omitted, Erato
+charges the full input at the regular rate. Erato records reported usage even
+when it has no rate. The Budget tab marks the spending total as partial when
+usage in the window is missing prices. Adding a rate applies it to existing
+usage in the window.
+
+MCP servers can report `cached_input_tokens` in the `chat.erato/token_usage`
+metadata they return with a tool result. It is an optional nonnegative integer
+already included in `total_prompt_tokens`. Send `0` for a reported zero and
+omit the field when the model provider does not report a count.
 
 #### Complete Budget Configuration Example
 
@@ -8676,6 +8778,9 @@ max_budget = 50.0
 budget_currency = "EUR"
 warn_threshold = 0.75
 budget_period_days = 7
+
+[budget.frontend_tab]
+enabled = true
 
 # You also need to configure model pricing for accurate cost calculations
 [chat_providers]
@@ -8688,10 +8793,13 @@ api_key = "sk-your-key"
 
 [chat_providers.providers.main.model_capabilities]
 cost_input_tokens_per_1m = 5.0
+cost_cached_input_tokens_per_1m = 1.0
+cost_output_tokens_per_1m = 15.0
+
+[budget.model_rates."image-generation/v1"]
+cost_input_tokens_per_1m = 5.0
 cost_output_tokens_per_1m = 15.0
 ```
-
-**Note:** Budget tracking requires that you configure accurate pricing information in your chat provider's `model_capabilities` section. The budget calculations are based on actual token usage multiplied by the configured token prices.
 
 ### `caches`
 

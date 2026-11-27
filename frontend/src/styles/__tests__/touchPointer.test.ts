@@ -131,6 +131,29 @@ describe("hover styles on a touch screen", () => {
   });
 });
 
+describe("a card's own buttons in a slim pane", () => {
+  it("shrink only under a hovering pointer, so a finger keeps the full target", () => {
+    const root = postcss.parse(
+      readFileSync(join(process.cwd(), "src/styles/globals.css"), "utf8"),
+    );
+    const compact: Rule[] = [];
+    root.walkRules((rule) => {
+      if (rule.selector.includes(".card-actions")) compact.push(rule);
+    });
+
+    expect(compact.length).toBeGreaterThan(0);
+    for (const rule of compact) {
+      expect(mediaOf(rule), rule.selector).toMatch(
+        /^\(max-width: [\d.]+px\) and \(hover: hover\) and \(pointer: fine\)$/,
+      );
+      expect(declarations(rule)).toContain("min-height:0");
+      expect(declarations(rule)).toContain(
+        "font-size:var(--theme-font-size-xs)",
+      );
+    }
+  });
+});
+
 describe("holding a finger on a control", () => {
   it("does not select a control's label without a hovering pointer, but leaves links selectable", async () => {
     const result = await postcss([
@@ -202,7 +225,14 @@ describe("the phone blocks in globals.css", () => {
     for (const match of narrow) {
       expect(match[1].trim()).toBe(NO_HOVERING_POINTER);
     }
-    expect(css.match(/639\.98px/g)).toHaveLength(narrow.length);
+    // The one other narrow case is a slim pane used with a mouse (the compact card buttons).
+    const withMouse =
+      css.match(
+        /@media \(max-width: 639\.98px\) and \(hover: hover\) and \(pointer: fine\) \{/g,
+      ) ?? [];
+    expect(css.match(/639\.98px/g)).toHaveLength(
+      narrow.length + withMouse.length,
+    );
     expect(NARROW_SCREEN).toBe("(max-width: 639.98px)");
   });
 });

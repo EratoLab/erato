@@ -3,6 +3,7 @@ import { wordImageAssetMetadata } from "@erato/frontend/word-review";
 import {
   WORD_AUTHORING_CONTRACT as full,
   WORD_SECTION_PROPERTIES,
+  wordAuthoringContract,
 } from "./wordAuthoringContract";
 import { wordReadableStyles } from "./wordAuthoringReadData";
 import { isWordTrackingMode } from "./wordInPlaceSwitch";
@@ -78,7 +79,7 @@ export function wordScopedReadContract(
       include:
         "Optional include:[groups] on a target read adds guidance for intended new content or formatting, regardless of source kind. Re-read the same refs with include if needed; it does not expand authorization. formatting returns available styles; media returns attachment metadata. Full reads return the complete contract.",
       scopedEdit: {
-        input: full.scopedEdit.input,
+        input: wordAuthoringContract().scopedEdit.input,
         authorization: full.scopedEdit.authorization,
         ...(body ? { body: full.scopedEdit.body } : {}),
         ...(objects ? { objects: full.scopedEdit.objects } : {}),

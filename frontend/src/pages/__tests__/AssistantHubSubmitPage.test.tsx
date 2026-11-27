@@ -68,6 +68,7 @@ const submittedVersion = (versionId: string, submittedAt: string) => ({
   source_assistant_id: "assistant-1",
   submitted_at: submittedAt,
   version_number: "1.0.0",
+  status: "submitted",
   long_description: "Turns changelogs into release notes",
   keywords: [],
   category_ids: ["research"],
@@ -79,6 +80,7 @@ let hubConfig: typeof defaultHubConfig;
 let myVersions: ReturnType<typeof submittedVersion>[];
 let isLoadingMyVersions: boolean;
 let loadedShareGrants: Map<string, AssistantHubAudienceGrantInput[]>;
+let validateVersionSemverFormat: boolean | undefined;
 const submitVersion = vi.fn();
 const previewDiff = vi.fn();
 
@@ -105,7 +107,13 @@ vi.mock("@/components/ui/Feedback/Alert", () => ({
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
-  useAssistantHubConfig: () => ({ data: hubConfig, isLoading: false }),
+  useAssistantHubConfig: () => ({
+    data: {
+      ...hubConfig,
+      validate_version_semver_format: validateVersionSemverFormat,
+    },
+    isLoading: false,
+  }),
   useGetAssistant: () => ({ data: assistant, isLoading: false, error: null }),
   useListMyAssistantHubVersions: () => ({
     data: isLoadingMyVersions ? undefined : { versions: myVersions },
@@ -167,6 +175,7 @@ describe("AssistantHubSubmitPage", () => {
     myVersions = [];
     isLoadingMyVersions = false;
     loadedShareGrants = new Map();
+    validateVersionSemverFormat = undefined;
     submitVersion.mockReset();
     submitVersion.mockResolvedValue({ version: { version_id: "new" } });
     previewDiff.mockReset();
@@ -355,6 +364,128 @@ describe("AssistantHubSubmitPage", () => {
       { variant: "success" },
     ]);
   });
+
+  it.each([undefined, false])(
+    "keeps legacy labels and suggestions when the flag is %s",
+    async (flag) => {
+      validateVersionSemverFormat = flag;
+      myVersions = [
+        {
+          ...submittedVersion("first", "2026-01-01T00:00:00Z"),
+          version_number: "5",
+        },
+      ];
+      loadedShareGrants.set("first-clone", []);
+      renderPage();
+
+      const input = screen.getByRole("textbox", { name: /Version number/ });
+      expect(input).toHaveValue("6");
+      fireEvent.change(input, { target: { value: "release-candidate" } });
+      fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+
+      await waitFor(() => expect(submitVersion).toHaveBeenCalledTimes(1));
+      expect(submitVersion.mock.calls[0][0].body.version_number).toBe(
+        "release-candidate",
+      );
+    },
+  );
+
+  it("suggests 1.0.0 when history has no comparable version and accepts another starting value", async () => {
+    validateVersionSemverFormat = true;
+    myVersions = [
+      {
+        ...submittedVersion("legacy", "2026-01-01T00:00:00Z"),
+        version_number: "v99.0.0",
+      },
+    ];
+    loadedShareGrants.set("legacy-clone", []);
+    renderPage();
+
+    const input = screen.getByRole("textbox", { name: /Version number/ });
+    expect(input).toHaveValue("1.0.0");
+    expect(input).toHaveAccessibleDescription(/Use MAJOR\.MINOR\.PATCH/);
+    fireEvent.change(input, { target: { value: " 0.1.0 " } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+
+    await waitFor(() => expect(submitVersion).toHaveBeenCalledTimes(1));
+    expect(submitVersion.mock.calls[0][0].body.version_number).toBe(" 0.1.0 ");
+  });
+
+  it("suggests a patch above the numeric maximum across submission statuses", () => {
+    validateVersionSemverFormat = true;
+    myVersions = [
+      {
+        ...submittedVersion("published", "2026-03-01T00:00:00Z"),
+        version_number: "1.9.0",
+        is_published: true,
+        is_current_published_version: true,
+      },
+      {
+        ...submittedVersion("withdrawn", "2026-02-01T00:00:00Z"),
+        version_number: "1.10.0",
+        status: "withdrawn",
+      },
+      {
+        ...submittedVersion("legacy", "2026-01-01T00:00:00Z"),
+        version_number: "99.0.0-preview",
+      },
+      {
+        ...submittedVersion("unrelated", "2026-04-01T00:00:00Z"),
+        source_assistant_id: "assistant-2",
+        version_number: "99.0.0",
+      },
+    ];
+    loadedShareGrants.set("published-clone", []);
+    renderPage();
+
+    const input = screen.getByRole("textbox", { name: /Version number/ });
+    expect(input).toHaveValue("1.10.1");
+    fireEvent.change(input, { target: { value: "1.10.0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+    expect(input).toHaveAccessibleDescription(
+      /Enter a version greater than 1\.10\.0/,
+    );
+    expect(submitVersion).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "1.010.0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+    expect(input).toHaveAccessibleDescription(
+      /Enter a version in MAJOR\.MINOR\.PATCH format/,
+    );
+    expect(previewDiff).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      { code: "invalid_version_format" },
+      "Enter a version in MAJOR.MINOR.PATCH format.",
+    ],
+    [
+      { code: "version_not_increasing", current_version: "1.10.0" },
+      "Enter a version greater than 1.10.0.",
+    ],
+  ])(
+    "shows a server rejection on the field and keeps the entered value",
+    async (error, message) => {
+      validateVersionSemverFormat = true;
+      submitVersion.mockRejectedValueOnce(error);
+      renderPage();
+
+      const input = screen.getByRole("textbox", { name: /Version number/ });
+      fireEvent.click(screen.getByRole("button", { name: "Research" }));
+      fireEvent.change(input, { target: { value: "1.2.3" } });
+      fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(message);
+      expect(input).toHaveValue("1.2.3");
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(useToastStore.getState().toasts).toEqual([]);
+
+      fireEvent.change(input, { target: { value: "1.10.1" } });
+      expect(input).toHaveAttribute("aria-invalid", "false");
+      fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+      expect(await screen.findByTestId("my-submissions")).toBeInTheDocument();
+    },
+  );
 
   it("reports a validation problem in a toast that cancelling dismisses", async () => {
     renderPage();

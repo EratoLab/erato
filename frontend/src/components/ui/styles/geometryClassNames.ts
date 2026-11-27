@@ -91,6 +91,7 @@ export const ERATO_GEOMETRY_CLASS = Object.freeze({
   sidebarIconColGeometryLogo: "sidebar-icon-col-geometry-logo",
   sidebarInsetGeometry: "sidebar-inset-geometry",
   sidebarLabelColGeometry: "sidebar-label-col-geometry",
+  sidebarPageGeometry: "sidebar-page-geometry",
   sidebarRowGeometry: "sidebar-row-geometry",
   sidebarRowSelected: "sidebar-row-selected",
   sidebarSectionSkin: "sidebar-section-skin",

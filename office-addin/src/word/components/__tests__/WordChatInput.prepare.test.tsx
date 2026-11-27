@@ -60,7 +60,12 @@ const host = vi.hoisted(() => {
     retry: vi.fn(),
     budget: vi.fn(),
     images: vi.fn(),
-    session: { activate: vi.fn(), clear: vi.fn(), execute: vi.fn() },
+    session: {
+      activate: vi.fn(),
+      clear: vi.fn(),
+      execute: vi.fn(),
+      followCopies: () => () => {},
+    },
   };
 });
 
@@ -115,6 +120,11 @@ vi.mock("../../hooks/useWordDocumentSource", () => ({
 
 vi.mock("../../utils/wordAuthoringBudget", () => ({
   checkWordAuthoringBudget: host.budget,
+  wordCompleteReadBudgetFor:
+    (args: Record<string, unknown>) => (snapshot: unknown) => async () => {
+      const budget = await host.budget(snapshot, { ...args, mode: "complete" });
+      return budget.ok ? undefined : budget.issue;
+    },
 }));
 
 vi.mock("../../utils/wordImageAssets", () => ({
@@ -323,6 +333,7 @@ describe("WordChatInput prepared send", () => {
       {
         capture: { changes: build.changes, ordinalMap: build.ordinalMap },
         request: "hi",
+        budgetFor: expect.any(Function),
       },
     );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
@@ -864,6 +875,7 @@ describe("WordChatInput prepared send", () => {
       {
         capture: { changes: earlier.changes, ordinalMap: earlier.ordinalMap },
         request: "hi",
+        budgetFor: expect.any(Function),
       },
     );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
@@ -1129,6 +1141,7 @@ describe("WordChatInput prepared send", () => {
       {
         capture: { changes: build.changes, ordinalMap: build.ordinalMap },
         request: "hi",
+        budgetFor: expect.any(Function),
       },
     );
     expect(build.authoring?.assets).toEqual([{ id: "asset-1" }]);

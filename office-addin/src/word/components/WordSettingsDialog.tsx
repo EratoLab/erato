@@ -1,4 +1,11 @@
-import { DocumentIcon, EntityRow, RadioCard } from "@erato/frontend/library";
+import {
+  approvalToolRows,
+  ClientToolDecisionList,
+  DocumentIcon,
+  EntityRow,
+  RadioCard,
+  useApprovalTools,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState } from "react";
 
@@ -6,18 +13,13 @@ import {
   AddinSettingsDialogCore,
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
-import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import { carryOverMappingsFor } from "../../core/clientActions/proposalApply";
 import {
   useActionFacetClientActions,
   useAvailableActionFacetArgs,
   useAvailableActionFacetIds,
 } from "../../core/clientActions/useAvailableActionFacets";
 import { useOffice } from "../../providers/OfficeProvider";
-import { wordClientActionDecisionStore } from "../utils/clientActionPolicy";
-import {
-  clientActionDisplayLabel,
-  offerableWordClientActions,
-} from "../utils/wordClientActions";
 import { wordCommentAdvertised } from "../utils/wordCommentSend";
 import {
   readWordCompatibilityMode,
@@ -34,6 +36,15 @@ import type { WordCommentAuthorMode } from "@erato/frontend/word-review";
 
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
+  const approvalTools = useApprovalTools();
+  const wordTools = useMemo(() => {
+    const keys = new Set(
+      carryOverMappingsFor(approvalTools, "word").map(
+        (mapping) => mapping.serverKey,
+      ),
+    );
+    return approvalTools.filter((tool) => keys.has(tool.qualified_name));
+  }, [approvalTools]);
   return (
     <AddinSettingsDialogCore
       {...props}
@@ -70,47 +81,29 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
               id: "officeAddin.settings.serversTools.wordActions",
               message: "Word actions",
             })}
-            caption={t({
-              id: "officeAddin.settings.serversTools.wordActions.caption",
-              message: "Built into Word · this device",
-            })}
+            // Without a server tool the row holds only this pane's own switch.
+            caption={
+              wordTools.length > 0
+                ? t({
+                    id: "officeAddin.settings.serversTools.wordActions.everyDevice",
+                    message: "Built into Word · every device",
+                  })
+                : t({
+                    id: "officeAddin.settings.serversTools.wordActions.builtIn",
+                    message: "Built into Word",
+                  })
+            }
             data-testid="servers-tools-word-actions-row"
           >
-            <ClientActionsSettings
-              store={wordClientActionDecisionStore}
-              offerableActions={offerableWordClientActions}
-              displayLabel={clientActionDisplayLabel}
-              copy={{
-                intro: t({
-                  id: "officeAddin.settings.addin.clientActions.intro.word",
-                  message:
-                    "Your decisions from the in-chat confirmation are stored here and can be changed any time. These actions write into the open document straight away.",
-                }),
-                alwaysAllowHelper: (action) =>
-                  action === "word.insert_at_cursor"
-                    ? t({
-                        id: "officeAddin.word.settings.alwaysInsert",
-                        message:
-                          "Inserts text at the current cursor without asking. This action has no Erato Revert; use Word Undo if needed.",
-                      })
-                    : action === "word.apply_document_plan"
-                      ? t({
-                          id: "officeAddin.word.settings.alwaysPlan",
-                          message:
-                            "Applies the complete rewrite without asking, only if the document still matches the reviewed source. Erato Revert is available while the applied document remains unchanged.",
-                        })
-                      : action === "word.replace_selection"
-                        ? t({
-                            id: "officeAddin.word.settings.alwaysReplaceSelection",
-                            message:
-                              "Replaces the selected passage without asking, only if it is unchanged since your request. Undo is available while Track Changes is off.",
-                          })
-                        : t({
-                            id: "officeAddin.settings.addin.clientActions.always.helper.word",
-                            message:
-                              "Writes into the open document without asking. Paragraphs you changed since asking are skipped, every change is listed afterwards, and a single Revert undoes the batch.",
-                          }),
-              }}
+            {/* Kept with the account, so every device has the same choice. */}
+            <ClientToolDecisionList
+              tools={approvalToolRows(wordTools)}
+              defaultDecision="ask"
+              heading={t({
+                id: "officeAddin.word.settings.serverChanges",
+                message: "Changes",
+              })}
+              data-testid="word-server-tool-decisions"
             />
             <WordCompatibilityModeSetting />
           </EntityRow>

@@ -161,15 +161,11 @@ describe("computeShouldRenderEmailCard", () => {
 });
 
 describe("buildOutlookArtifact", () => {
-  const scheduleInfo = {
-    clientActions: ["outlook.create_appointment"],
-    alwaysAskActions: ["outlook.create_appointment"],
-    presentation: "auto_prompt",
-  };
+  const scheduleInfo = { clientActions: ["outlook.create_appointment"] };
 
   it("stamps an artifact for outlook_schedule despite it carrying no body_format", () => {
-    // The decoupled gate (ERMAIN-387): the confirm card can only render when
-    // the artifact (facet metadata + proposal) reaches the fence renderer.
+    // The decoupled gate (ERMAIN-387): the appointment card can only offer its
+    // button when the artifact (facet metadata + proposal) reaches the renderer.
     const artifact = buildOutlookArtifact({
       facetId: "outlook_schedule",
       facetArgs: {
@@ -188,9 +184,7 @@ describe("buildOutlookArtifact", () => {
       renderMode: "body",
       messageId: "msg-1",
       allowedClientActions: ["outlook.create_appointment"],
-      alwaysAskClientActions: ["outlook.create_appointment"],
       proposedClientAction: "outlook.create_appointment",
-      clientActionPresentation: "auto_prompt",
     });
     // No bodyFormat ⇒ the email-shaped paths (drift rescue, whole-body card)
     // stay off for scheduling prose.
@@ -224,10 +218,7 @@ describe("buildOutlookArtifact", () => {
       buildOutlookArtifact({
         facetId: "some_facet",
         facetArgs: {},
-        clientActionInfo: {
-          clientActions: ["teams.post"],
-          alwaysAskActions: [],
-        },
+        clientActionInfo: { clientActions: ["teams.post"] },
         content: [],
         messageId: "msg-1",
         freshItemIdentity: undefined,
@@ -239,11 +230,7 @@ describe("buildOutlookArtifact", () => {
     const artifact = buildOutlookArtifact({
       facetId: "outlook_reply_from_read",
       facetArgs: { body_format: "html" },
-      clientActionInfo: {
-        clientActions: ALLOWED,
-        alwaysAskActions: ["outlook.reply_all"],
-        presentation: "auto_prompt",
-      },
+      clientActionInfo: { clientActions: ALLOWED },
       content: [],
       messageId: "msg-2",
       freshItemIdentity: "item-abc",

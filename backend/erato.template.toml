@@ -842,12 +842,15 @@ chat_provider_ids = ["test-token-limit"]
 # set of client-side action identifiers via `client_actions`. While such a
 # facet is active, the model is offered a `propose_client_action` tool whose
 # input is restricted to exactly these values. The tool is never executed
-# server-side: the resulting tool_use content part is consumed by the client
-# application, which validates the proposal against this list and performs
-# the action only after user confirmation. The identifiers must match actions
-# implemented by the client - the Outlook add-in currently implements
-# "outlook.reply" and "outlook.reply_all" (read mode, opens a pre-filled
-# reply form; sending always remains a manual user step in Outlook).
+# server-side: the client application validates the proposal against this
+# list. A proposed action that a server-called client tool lists in its
+# `client_actions` is carried out through that tool after the user's decision
+# (Ask, Always or Never), which is stored with the account. Where the client
+# shows an action's button, a click on it runs the action directly. The
+# identifiers must match actions implemented by the client - the Outlook
+# add-in currently implements "outlook.reply" and "outlook.reply_all" (read
+# mode, opens a pre-filled reply form; sending always remains a manual user
+# step in Outlook).
 #
 # Per-turn directives are persisted as metadata markers and dropped from
 # prior-turn history when it is replayed on later turns, so stripping does
@@ -860,18 +863,17 @@ chat_provider_ids = ["test-token-limit"]
 # display_name = "Outlook Reply from Read Mode"
 # platform = "outlook"
 # client_actions = ["outlook.reply", "outlook.reply_all"]
-# # How the client surfaces a proposal: "render_buttons" (default - show
-# # buttons, the user clicks) or "auto_prompt" (the client may surface the
-# # proposed action immediately after a fresh assistant completion, subject
-# # to the user's local approval preferences in the add-in settings).
+# # No longer read: a proposed action follows the user's decision for its
+# # tool whatever this says. Still accepted ("render_buttons", "auto_prompt")
+# # so existing configurations load.
 # presentation = "render_buttons"
-# # Subset of client_actions the deployment ENFORCES confirmation for on
-# # ASSISTANT-INITIATED execution: an LLM proposal always shows the card and
-# # a persistent "always allow" is never offered (greyed out with a reason in
-# # the client settings). Users can still deny. Does not gate manual clicks
-# # on fully-described buttons — those consent by clicking. (The three keys
-# # are startup-validated together: presentation requires non-empty
-# # client_actions; always_ask must be a subset of client_actions.)
+# # Subset of client_actions the deployment ENFORCES confirmation for: in
+# # this facet the server asks every time for a call that carries out one of
+# # these actions and offers no "always allow" for it. A user's Never still
+# # refuses them. Does not gate manual clicks on fully-described buttons —
+# # those consent by clicking. (The three keys are startup-validated
+# # together: presentation requires non-empty client_actions; always_ask must
+# # be a subset of client_actions.)
 # client_actions_always_ask = ["outlook.reply_all"]
 # allowed_args = ["body_format"]
 # template = """
@@ -1043,7 +1045,7 @@ chat_provider_ids = ["test-token-limit"]
 # # (never rebuild times from day/start/utcOffset), and for attendees use each
 # # availability entry's "email" when present (the resolved address), never a
 # # bare display name — this keeps the slot→appointment loop copy-exact.
-# # Enforcement gates assistant-initiated runs only — see the
+# # Enforcement gates the server's calls only — see the
 # # client_actions_always_ask note above.
 # client_actions = ["outlook.create_appointment"]
 # client_actions_always_ask = ["outlook.create_appointment"]

@@ -1370,6 +1370,16 @@ msgstr "Agrega un numero de version antes de enviar."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.validation.versionFormat"
+msgstr "Introduce una versión con el formato MAJOR.MINOR.PATCH."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.validation.versionNotIncreasing"
+msgstr "Introduce una versión superior a {version}."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Comentario de version"
 
@@ -1377,6 +1387,11 @@ msgstr "Comentario de version"
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionCommentHelp"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionFormatHelp"
+msgstr "Usa el formato MAJOR.MINOR.PATCH sin ceros iniciales, por ejemplo, 1.0.0."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -1741,6 +1756,16 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 msgid "builtinToolApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.elsewhere"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.title"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -3296,8 +3321,18 @@ msgstr "Ha alcanzado o superado su límite presupuestario personal de {formatted
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid "chat.warning.budget.period_suffix"
-msgstr " Esto es para su período presupuestario de {days} días."
+#~ msgid "chat.warning.budget.period_suffix"
+#~ msgstr " Esto es para su período presupuestario de {days} días."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.rolling_window"
+msgstr "{days, plural, one {Incluye el gasto del último día.} other {Incluye el gasto de los últimos # días.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.stale"
+msgstr "No se pudo actualizar tu presupuesto. Es posible que estas cifras estén desactualizadas."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -4674,8 +4709,8 @@ msgstr "Subir archivos"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
-msgid "home.redirecting"
-msgstr "Redirigiendo al chat..."
+#~ msgid "home.redirecting"
+#~ msgstr "Redirigiendo al chat..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/InfoTooltip.tsx
@@ -5956,6 +5991,97 @@ msgid "parkedTaskNotice.text"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.error"
+msgstr "No se pudo cargar tu presupuesto."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.freeingUp"
+msgstr "Presupuesto que se liberará en las próximas 24 horas"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.incompletePricing"
+msgstr "Parte del uso no tiene un precio configurado."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.limit"
+msgstr "Límite"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.loading"
+msgstr "Cargando presupuesto…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.model"
+msgstr "Modelo o implementación"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.modelBreakdown"
+msgstr "Gasto por modelo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.noNewSpend"
+msgstr "Supone que no habrá nuevos gastos."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.noUsage"
+msgstr "No hubo uso en este período."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.partial"
+msgstr "Parcial"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.remaining"
+msgstr "Presupuesto restante"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.retry"
+msgstr "Reintentar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.spent"
+msgstr "Gasto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.stale"
+msgstr "No se pudo actualizar tu presupuesto. Es posible que estas cifras estén desactualizadas."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.unavailable"
+msgstr "No disponible"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.used"
+msgstr "Presupuesto utilizado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.window"
+msgstr "{days, plural, one {Gasto del último día} other {Gasto de los últimos # días}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.windowDates"
+msgstr "Del {start} al {end}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.actions.cancel"
 msgstr "Cancelar"
@@ -6484,6 +6610,11 @@ msgstr "Cómo suena"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.backToList"
+msgstr "Volver a Preferencias"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 #: src/pages/AssistantsPage.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archivando..."
@@ -6624,7 +6755,7 @@ msgid "preferences.dialog.desktopSidecar.tools.heading"
 msgstr "Herramientas disponibles"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/SidecarToolDecisions.tsx
+#: src/components/ui/Settings/ClientToolDecisionList.tsx
 msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
 msgstr ""
 
@@ -7166,6 +7297,26 @@ msgid "preferences.dialog.mcpServers.tools.permissions.heading"
 msgstr "Permisos de herramientas"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.caption"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.intro"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.name"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.tools.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
@@ -7265,6 +7416,11 @@ msgstr "Apariencia"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.audio"
 msgstr "Audio"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.budget"
+msgstr "Presupuesto"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

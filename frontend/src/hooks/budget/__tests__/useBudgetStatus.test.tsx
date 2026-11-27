@@ -1,14 +1,27 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+import { ProfileContext } from "@/providers/ProfileProvider";
 
 import { useBudgetStatus, BUDGET_QUERY_KEY } from "../useBudgetStatus";
 
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
 describe("useBudgetStatus", () => {
   let queryClient: QueryClient;
-  let fetchMock: ReturnType<typeof vi.fn>;
+  let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 
   beforeEach(() => {
     queryClient = new QueryClient({
@@ -20,7 +33,7 @@ describe("useBudgetStatus", () => {
     });
 
     // Create a proper mock function
-    fetchMock = vi.fn();
+    fetchMock = vi.fn<typeof fetch>();
     // Replace global fetch with our mock
     vi.stubGlobal("fetch", fetchMock);
   });
@@ -29,6 +42,8 @@ describe("useBudgetStatus", () => {
     // Restore global fetch
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    focusManager.setFocused(undefined);
+    queryClient.clear();
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -62,7 +77,7 @@ describe("useBudgetStatus", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     // Should have the correct data
-    expect(result.current.data).toEqual(mockData);
+    expect(result.current.data).toEqual({ ...mockData, user_settings: null });
     expect(result.current.isLoading).toBe(false);
   });
 
@@ -91,6 +106,49 @@ describe("useBudgetStatus", () => {
 
   it("should use the correct query key", () => {
     expect(BUDGET_QUERY_KEY).toEqual(["budget-status"]);
+  });
+
+  it("keeps cached budget data scoped to the signed-in profile", async () => {
+    function CurrentSpending() {
+      const { data } = useBudgetStatus();
+      return <output>{data?.current_spending ?? "Loading budget"}</output>;
+    }
+
+    const budgetFor = (id?: string) => (
+      <QueryClientProvider client={queryClient}>
+        <ProfileContext.Provider
+          value={{
+            profile: id ? ({ id } as UserProfile) : undefined,
+            isLoading: false,
+            error: null,
+          }}
+        >
+          <CurrentSpending />
+        </ProfileContext.Provider>
+      </QueryClientProvider>
+    );
+    fetchMock
+      .mockResolvedValueOnce(
+        createJsonResponse({ enabled: true, current_spending: 80 }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({ enabled: true, current_spending: 20 }),
+      );
+
+    const { rerender } = render(budgetFor("first-account"));
+    expect(await screen.findByText("80")).toBeInTheDocument();
+
+    rerender(budgetFor());
+    expect(screen.getByText("Loading budget")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    rerender(budgetFor("second-account"));
+    expect(screen.getByText("Loading budget")).toBeInTheDocument();
+    expect(await screen.findByText("20")).toBeInTheDocument();
+
+    rerender(budgetFor("first-account"));
+    expect(screen.getByText("80")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("should handle disabled budget feature", async () => {
@@ -127,6 +185,31 @@ describe("useBudgetStatus", () => {
       warn_threshold: null,
       budget_limit: null,
       budget_currency: null,
+      user_settings: null,
     });
+  });
+
+  it("refreshes a fresh snapshot on focus and polls in the foreground", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        createJsonResponse({ enabled: true, current_spending: 40 }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({ enabled: true, current_spending: 20 }),
+      )
+      .mockImplementation(async () =>
+        createJsonResponse({ enabled: true, current_spending: 0 }),
+      );
+    focusManager.setFocused(false);
+    const { result } = renderHook(
+      () => useBudgetStatus({ refetchInterval: 100 }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.data?.current_spending).toBe(40));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    act(() => focusManager.setFocused(true));
+    await waitFor(() => expect(result.current.data?.current_spending).toBe(20));
+    await waitFor(() => expect(result.current.data?.current_spending).toBe(0));
   });
 });

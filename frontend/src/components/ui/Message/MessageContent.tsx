@@ -64,6 +64,7 @@ import {
   useMessageTextActionsFeature,
   useTraceFeature,
 } from "@/providers/FeatureConfigProvider";
+import { submittedCardsOf } from "@/types/chat";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import {
   rehypeWrittenStart,
@@ -404,6 +405,13 @@ export function useHostArtifact(): HostArtifact | null {
 }
 
 /**
+ * Provides a message's host artifact to host code drawn outside the message
+ * body, such as a host's card in the decision place, so it reads the same
+ * artifact through {@link useHostArtifact}.
+ */
+export const HostArtifactProvider = HostArtifactContext.Provider;
+
+/**
  * @deprecated Use {@link useHostArtifact}; same context, same value. Kept for
  * one release so existing host renderers keep working.
  */
@@ -609,7 +617,8 @@ function MarkdownCode({
 
   if (isBlockCode && rules.isHostCardLanguage(language)) {
     // An accepted submission replaces the echoed fence to avoid a second actionable card.
-    if (artifact?.submittedCard?.language === language) return null;
+    if (submittedCardsOf(artifact).some((card) => card.language === language))
+      return null;
     return <HostCardBlock language={language} content={codeContent} />;
   }
 
@@ -2058,16 +2067,34 @@ export const MessageContent = memo(function MessageContent({
     [content],
   );
 
-  const submittedCard = hostArtifact?.submittedCard;
-  const hasSubmittedCard =
-    submittedCard &&
-    fenceRulesFor(hostArtifact).isHostCardLanguage(submittedCard.language) &&
-    content.some(
-      (part) =>
-        part.content_type === "tool_use" &&
-        part.tool_call_id === submittedCard.toolCallId &&
-        (submittedCard.pending === true || part.status === "success"),
-    );
+  // Each submitted card with the index of the call it shows, in call order:
+  // it is drawn after the step that made the call.
+  const submittedCards = React.useMemo(() => {
+    const cards = submittedCardsOf(hostArtifact);
+    if (cards.length === 0) return [];
+    const rules = fenceRulesFor(hostArtifact ?? null);
+    return cards
+      .filter((card) => rules.isHostCardLanguage(card.language))
+      .flatMap((card) => {
+        const index = content.findIndex(
+          (part) =>
+            part.content_type === "tool_use" &&
+            part.tool_call_id === card.toolCallId &&
+            (card.pending === true || part.status === "success"),
+        );
+        return index === -1 ? [] : [{ card, index }];
+      })
+      .sort((left, right) => left.index - right.index);
+  }, [content, hostArtifact]);
+  const unplacedCards = submittedCards.filter(
+    ({ index }) =>
+      !clusters.some(
+        (cluster) =>
+          cluster.kind === "trace" &&
+          index >= cluster.startIndex &&
+          index <= cluster.endIndex,
+      ),
+  );
 
   const traceDurationMs = React.useMemo(
     () =>
@@ -2132,8 +2159,15 @@ export const MessageContent = memo(function MessageContent({
           // (text/image) content exists below it.
           const lastTracePartIndex = cluster.endIndex;
           // A card shown while the message streams follows the work the trace still does.
+          const clusterCards = submittedCards.filter(
+            ({ index }) =>
+              index >= cluster.startIndex && index <= cluster.endIndex,
+          );
           const hasLaterContent =
-            (!!hasSubmittedCard && !isStreaming) ||
+            (!isStreaming &&
+              submittedCards.some(
+                ({ index }) => index >= cluster.startIndex,
+              )) ||
             foldsWordPlan ||
             content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 
@@ -2197,6 +2231,17 @@ export const MessageContent = memo(function MessageContent({
                   </React.Fragment>
                 );
               })}
+              {clusterCards.map(({ card }) => (
+                <HostArtifactContext.Provider
+                  key={`submitted-card-${card.toolCallId}`}
+                  value={hostArtifact ?? null}
+                >
+                  <HostCardBlock
+                    language={card.language}
+                    content={card.content}
+                  />
+                </HostArtifactContext.Provider>
+              ))}
             </React.Fragment>
           );
         }
@@ -2347,15 +2392,14 @@ export const MessageContent = memo(function MessageContent({
 
         return null;
       })}
-      {hasSubmittedCard && (
-        <HostArtifactContext.Provider value={hostArtifact}>
-          <HostCardBlock
-            key={submittedCard.toolCallId}
-            language={submittedCard.language}
-            content={submittedCard.content}
-          />
+      {unplacedCards.map(({ card }) => (
+        <HostArtifactContext.Provider
+          key={`submitted-card-${card.toolCallId}`}
+          value={hostArtifact ?? null}
+        >
+          <HostCardBlock language={card.language} content={card.content} />
         </HostArtifactContext.Provider>
-      )}
+      ))}
       {showsWordPlan && messageId && (
         <React.Suspense fallback={null}>
           <WordHistoryPlanCard

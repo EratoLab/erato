@@ -1,5 +1,3 @@
-import { t } from "@lingui/core/macro";
-
 import { extractProposedClientAction as extractProposedClientActionFor } from "../../core/clientActions/proposedClientAction";
 
 import type { ContentPart, HostArtifact } from "@erato/frontend/library";
@@ -54,30 +52,6 @@ export function isImplementedClientAction(
   action: string,
 ): action is OutlookClientAction {
   return (IMPLEMENTED_CLIENT_ACTIONS as readonly string[]).includes(action);
-}
-
-/**
- * Human-readable description of an action, shared by the permission card
- * payload and the settings decision toggles.
- */
-export function clientActionDisplayLabel(action: OutlookClientAction): string {
-  switch (action) {
-    case "outlook.reply_all":
-      return t({
-        id: "officeAddin.clientActions.replyAll",
-        message: "Reply to all recipients",
-      });
-    case "outlook.create_appointment":
-      return t({
-        id: "officeAddin.clientActions.createAppointment",
-        message: "Open a prefilled appointment",
-      });
-    case "outlook.reply":
-      return t({
-        id: "officeAddin.clientActions.reply",
-        message: "Reply to sender",
-      });
-  }
 }
 
 /**
@@ -185,13 +159,7 @@ export function buildOutlookArtifact(args: {
   facetId: string | undefined;
   facetArgs: Record<string, string> | undefined;
   /** The facet's entry from `GET /me/facets`, if it declares client actions. */
-  clientActionInfo:
-    | {
-        clientActions: string[];
-        alwaysAskActions: string[];
-        presentation?: string;
-      }
-    | undefined;
+  clientActionInfo: { clientActions: string[] } | undefined;
   /** The assistant message's content parts (proposal extraction). */
   content: ContentPart[] | undefined;
   messageId: string;
@@ -237,14 +205,7 @@ export function buildOutlookArtifact(args: {
     ...(renderMode === "body" && !shouldRenderEmailCard
       ? { shouldRenderEmailCard: false }
       : {}),
-    ...(args.clientActionInfo &&
-    args.clientActionInfo.alwaysAskActions.length > 0
-      ? { alwaysAskClientActions: args.clientActionInfo.alwaysAskActions }
-      : {}),
     ...(proposedClientAction ? { proposedClientAction } : {}),
-    ...(args.clientActionInfo?.presentation
-      ? { clientActionPresentation: args.clientActionInfo.presentation }
-      : {}),
     ...(args.freshItemIdentity !== undefined
       ? { isFreshCompletion: true, itemIdentity: args.freshItemIdentity }
       : {}),

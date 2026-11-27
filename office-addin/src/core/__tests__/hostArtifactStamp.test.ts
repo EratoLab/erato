@@ -175,18 +175,12 @@ describe("isSameHostArtifact", () => {
   });
 
   it("counts a nested value that is not a plain record as changed", () => {
-    const scopes = new Map([["word.apply_edits", "device"]]);
+    const card = new Map([["toolCallId", "call-1"]]);
+    type Card = HostArtifact["submittedCard"];
     expect(
       isSameHostArtifact(
-        artifact({
-          clientActionGrantScopes: scopes as unknown as Record<string, string>,
-        }),
-        artifact({
-          clientActionGrantScopes: new Map(scopes) as unknown as Record<
-            string,
-            string
-          >,
-        }),
+        artifact({ submittedCard: card as unknown as Card }),
+        artifact({ submittedCard: new Map(card) as unknown as Card }),
       ),
     ).toBe(false);
   });

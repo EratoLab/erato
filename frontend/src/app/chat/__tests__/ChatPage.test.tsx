@@ -100,6 +100,7 @@ vi.mock("@/hooks/ui/useSidebar", () => ({
     isOpen: true,
     toggle: vi.fn(),
   }),
+  useIsNarrowScreen: () => false,
 }));
 
 vi.mock("@/hooks/ui/useFilePreviewModal", () => ({

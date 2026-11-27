@@ -3,8 +3,9 @@ import type { Message } from "@erato/frontend/library";
 /**
  * Tracks which assistant messages finished streaming DURING this session.
  *
- * Auto-prompt must never fire for messages loaded from history, refetches,
- * or chat switches — only for a completion the user just watched happen.
+ * Only such a completion carries the identity of the item open when its
+ * request was sent; messages loaded from history, refetches or chat switches
+ * never do, so their drafts are not bound to an item.
  *
  * Two signals mark a message fresh:
  *

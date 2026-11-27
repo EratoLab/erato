@@ -13,6 +13,7 @@ import {
   WordProposalCard,
   WordReviewGenerating,
   WordUndoLine,
+  submittedCardsOf,
   wordPlanApplyLabel,
   wordPlanTitleText,
   wordUndoLabel,
@@ -29,6 +30,10 @@ import {
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  WordDecisionChoices,
+  wordPlanStandingLabel,
+} from "./WordDecisionChoices";
 import { wordPartsLabelText } from "./WordDocumentPartsCard";
 import { WordImportConfirm, WordImportRefusal } from "./WordImportConfirm";
 import {
@@ -36,25 +41,25 @@ import {
   WordPlanCommentRemovals,
 } from "./WordPlanCommentRemovals";
 import {
-  isAutomaticWordRun,
   WordApplyButton,
   wordBlockedReasonText,
   WordDiagnosticDetails,
-  WordReviewConfirm,
   WordStatusAlert,
 } from "./WordReviewCardParts";
 import { WordReviewReceipt } from "./WordReviewReceipt";
-import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
+import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
+import {
+  useWordChainedApply,
+  useWordPlanCapture,
+} from "../hooks/useWordChainedApply";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import {
   useWordPlanParts,
   wordPartsChangesByRow,
 } from "../hooks/useWordPlanParts";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
-import { useWordWrite } from "../providers/WordWriteProvider";
+import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
 import { withoutParagraphMark } from "../utils/buildWordDocumentArgs";
-import { isActionDenied } from "../utils/clientActionPolicy";
 import {
   renderWordDiagnosticReport,
   renderWordOutcomeReport,
@@ -64,9 +69,10 @@ import {
   wordRevertImportRefusal,
   wordRevertMechanism,
 } from "../utils/wordApplyDocumentPlan";
-import { wordApplyHost, wordApplyPolicy } from "../utils/wordApplyPolicy";
+import { wordApplyHost } from "../utils/wordApplyPolicy";
 import {
   wordApplyAdjustmentText,
+  wordApplyStageLabel,
   wordAuthoringIssueText,
   wordCoauthorsEditingText,
   wordDocumentDiagnosticText,
@@ -78,6 +84,7 @@ import {
   wordTrackedApplyText,
   wordUnverifiedPassagesText,
 } from "../utils/wordAuthoringMessages";
+import { wordChainedApplyText } from "../utils/wordChainedApply";
 import { offerableWordClientActionsForFacet } from "../utils/wordClientActions";
 import { readWordCoauthoring } from "../utils/wordCoauthoring";
 import {
@@ -85,20 +92,17 @@ import {
   decodeWordInPlaceBackup,
   isWordDocumentBackup,
 } from "../utils/wordDocumentPackage";
-import {
-  captureWordAuthoringSnapshot,
-  compileWordDocumentPlan,
-  wordPlanDraftText,
-} from "../utils/wordDocumentXml";
+import { wordPlanDraftText } from "../utils/wordDocumentXml";
 import { WORD_VISIBLE_ADJUSTMENTS } from "../utils/wordFullDocumentComparison";
 import { wordHostPlatform } from "../utils/wordHostPlatform";
-import { wordInPlaceCapabilities } from "../utils/wordInPlaceCapabilities";
+import { wordPlanPassages } from "../utils/wordInPlaceRoute";
 import {
-  routeWordDocumentPlan,
-  wordPlanPassages,
-  wordWholeDocumentWrite,
-} from "../utils/wordInPlaceRoute";
-import { wordInPlaceAvailability } from "../utils/wordInPlaceSwitch";
+  runWordPlanApply,
+  wordCoauthorNotice,
+  wordPlanChecksCoauthors,
+  wordPlanRouting,
+  wordPlanRoutingEnvironment,
+} from "../utils/wordPlanApply";
 import {
   wordCommentsChangedText,
   wordCommentsDeletedText,
@@ -110,7 +114,6 @@ import {
   wordKeepCommentedPassagesNote,
   wordKeepCommentedPassagesText,
 } from "../utils/wordPlanCommentMessages";
-import { wordPlanCommentConsequences } from "../utils/wordPlanComments";
 import {
   capturedWordAnchor,
   showWordParagraphs,
@@ -120,8 +123,6 @@ import {
   wordInPlaceWrittenRegions,
 } from "../utils/wordReviewLocation";
 import {
-  EMPTY_WORD_REVIEW,
-  isWordWholeDocumentBlock,
   wordMismatchedPassages,
   wordPlanOutcomeState,
   wordWholeDocumentBlockRoute,
@@ -129,60 +130,58 @@ import {
 } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
-import type {
-  WordClientAction,
-  WordClientActionEntry,
-} from "../utils/wordClientActions";
-import type { WordCoauthoringState } from "../utils/wordCoauthoring";
+import type { WordCardDecision } from "./WordDecisionChoices";
+import type { WordPlanConfirmation } from "../utils/wordApplyCall";
+import type { WordClientActionEntry } from "../utils/wordClientActions";
 import type { WordInPlaceBackup } from "../utils/wordDocumentPackage";
 import type { WordWholeDocumentWrite } from "../utils/wordInPlaceRoute";
-import type {
-  WordDocumentPlan,
-  WordPlanCommentThread,
-} from "@erato/frontend/word-review";
-
-function coauthorNotice(
-  state: WordCoauthoringState | undefined,
-): "editing" | "pending" | undefined {
-  return state?.othersEditing
-    ? "editing"
-    : state?.pendingUpdates
-      ? "pending"
-      : undefined;
-}
+import type { WordPlanCommentThread } from "@erato/frontend/word-review";
 
 export function WordDocumentPlanCard({
   entry,
   content,
+  decision,
 }: {
   entry: WordClientActionEntry;
   content: string;
+  /** Drawn in the decision place: Apply approves the server's call, which writes. */
+  decision?: WordCardDecision;
 }) {
   const artifact = useHostArtifact();
   const { currentChatId, getTranscript } = useChatSession();
   const host = useWordWrite();
-  const { decisions, setDecisions, grantAlways } = useWordClientActionDecisions(
-    entry.action,
-  );
   const [copyNote, setCopyNote] = useState("");
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
-  const generating = useConversationSelector(
+  const streaming = useConversationSelector(
     (messages) =>
       messageId !== undefined && messages[messageId]?.status === "sending",
     Object.is,
   );
+  const chainedState = useWordChainedApply(
+    decision ? undefined : messageId,
+    submittedCardsOf(artifact).find(
+      (card) =>
+        card.language === entry.fenceLanguage && card.content === content,
+    )?.toolCallId,
+  );
+  // The server applies this change: the card in the answer shows where it stands, never Apply.
+  // Where the server makes no such call, the card applies on the user's own click.
+  const chained = chainedState !== undefined;
+  // The decision place shows a parked call, and an answer goes on after a change it applied.
+  const generating = streaming && !decision && !chained;
   const key = `${messageId ?? ""}:${entry.action}:${content}`;
-  const review = host.reviews.get(key) ?? EMPTY_WORD_REVIEW;
+  const review = useWordReview(key);
   const cardRef = useWordReviewFocus(
     `${review.status}:${review.documentPlanStatus ?? ""}:${!!review.detailsExpanded}`,
   );
-  const capture =
-    (messageId
-      ? host.capturesByAssistantMessageId.get(messageId)
-      : undefined) ?? review.capture;
-  const snapshot = capture?.authoring;
   const parsed = useMemo(() => parseWordDocumentPlan(content), [content]);
+  const capture = useWordPlanCapture(
+    messageId ? host.capturesByAssistantMessageId.get(messageId) : undefined,
+    parsed?.snapshot,
+    review.capture,
+  );
+  const snapshot = capture?.authoring;
   const liveMatches = !!parsed && parsed.snapshot === snapshot?.token;
   const lineage = useWordMessageLineage(messageId);
   // Without the live capture, review against what the model read; it never applies.
@@ -220,7 +219,9 @@ export function WordDocumentPlanCard({
   );
   const gate = resolveWordWriteGate({
     capture,
-    expectedIdentity: artifact?.itemIdentity,
+    // A parked answer's artifact may not name its document yet; its live copy does.
+    expectedIdentity:
+      artifact?.itemIdentity ?? (decision ? capture?.identity : undefined),
     currentIdentity: host.documentIdentity,
   });
   const idle = review.status === "idle";
@@ -234,22 +235,14 @@ export function WordDocumentPlanCard({
     hasCopy: !!snapshot,
     revoked: !ownsCapture || issue === "expired",
   });
-  const configuredAskActions = useMemo(
-    () => artifact?.alwaysAskClientActions ?? [],
-    [artifact],
-  );
+  const neverAllowed = useNeverAllowedActions("word");
   const offered =
     offerableWordClientActionsForFacet(
       facetId,
       artifact?.allowedClientActions,
-    ).includes(entry.action) &&
-    !isActionDenied({
-      facetId,
-      action: entry.action,
-      decisions,
-      enforcedAskActions: configuredAskActions,
-    });
+    ).includes(entry.action) && !neverAllowed.has(entry.action);
   const ready =
+    !chained &&
     idle &&
     !generating &&
     !issue &&
@@ -257,47 +250,16 @@ export function WordDocumentPlanCard({
     gate.allowed &&
     ownsCapture &&
     offered;
-  const availability = wordInPlaceAvailability();
-  const unavailable = availability.enabled ? undefined : availability.reason;
   // Kept while applying, so a confirmed Apply keeps its busy button in place.
   const routable = ready || applying;
-  const routing = useMemo(() => {
-    if (!routable || !plan || !snapshot) return undefined;
-    try {
-      const xml = compileWordDocumentPlan(plan, snapshot);
-      const compiled = captureWordAuthoringSnapshot(
-        xml,
-        snapshot.identity,
-        "Off",
-        snapshot.fullDocument,
-        "verify",
-      );
-      if (compiled.issue) return undefined;
-      const route = routeWordDocumentPlan(
-        plan,
-        snapshot,
-        unavailable
-          ? { enabled: false, reason: unavailable }
-          : { enabled: true },
-        wordInPlaceCapabilities(),
-        compiled,
-      );
-      return {
-        route: route.route,
-        text: wordRoutePreviewText(route, wordPlanPassages(plan)),
-        write: wordWholeDocumentWrite(
-          route,
-          plan,
-          snapshot,
-          wordApplyPolicy(),
-          xml,
-        ),
-        comments: wordPlanCommentConsequences(snapshot, xml, compiled),
-      };
-    } catch {
-      return undefined;
-    }
-  }, [routable, plan, snapshot, unavailable]);
+  const environment = wordPlanRoutingEnvironment();
+  const routing = useMemo(
+    () =>
+      routable && plan && snapshot && environment
+        ? wordPlanRouting(plan, snapshot, content)
+        : undefined,
+    [routable, plan, snapshot, content, environment],
+  );
   const routePreview = routing?.text;
   const commentPlan = routing?.comments;
   const removals = commentPlan?.removals ?? [];
@@ -306,13 +268,6 @@ export function WordDocumentPlanCard({
   const [commentsTicked, setCommentsTicked] = useState<string>();
   const commentsConfirmed =
     !!commentPlan && commentsTicked === commentPlan.fingerprint;
-  const enforcedAskActions = useMemo(
-    () =>
-      needsCommentTick
-        ? [...configuredAskActions, entry.action]
-        : configuredAskActions,
-    [needsCommentTick, configuredAskActions, entry.action],
-  );
   const block = review.wholeDocumentBlock;
   const liveRefusal =
     routing?.write.write === "refuse" ? routing.write.reason : undefined;
@@ -344,20 +299,21 @@ export function WordDocumentPlanCard({
       ? wordPartsReorderingText()
       : undefined;
   // Word for Mac reports Word.Coauthoring too, but its P-D-COAUTH run has not completed.
-  const checkCoauthors =
-    wordApplyHost(wordHostPlatform()) === "pc" && !!replaces;
+  const checkCoauthors = wordPlanChecksCoauthors(
+    replaces ? { route: replaces } : undefined,
+  );
   const coauthorsRead = useRef(false);
   const [coauthors, setCoauthors] = useState<"editing" | "pending">();
   useEffect(() => {
     if (!checkCoauthors || coauthorsRead.current) return;
     coauthorsRead.current = true;
     void readWordCoauthoring().then((state) =>
-      setCoauthors(coauthorNotice(state)),
+      setCoauthors(wordCoauthorNotice(state)),
     );
   }, [checkCoauthors]);
-  const run = useCallback(
-    async (importConfirmed: boolean, commentRemovalsConfirmed?: string) => {
-      // Always allow and auto-prompt reach this too; only the card's own ticks confirm.
+  const apply = useCallback(
+    (importConfirmed: boolean, commentRemovalsConfirmed?: string) => {
+      // Only the card's own ticks confirm.
       if (
         !ready ||
         !capture ||
@@ -366,117 +322,38 @@ export function WordDocumentPlanCard({
         (needsCommentTick &&
           commentRemovalsConfirmed !== commentPlan?.fingerprint)
       )
-        return false;
-      if (checkCoauthors) {
-        // Someone who joined since the card was read is shown before anything is replaced.
-        const now = coauthorNotice(await readWordCoauthoring());
-        if (now !== coauthors) {
-          setCoauthors(now);
-          if (now) return false;
-        }
+        return;
+      if (decision) {
+        // The server's call writes once the user approved; the card sends what they ticked.
+        const confirmation: WordPlanConfirmation = {
+          ...(importConfirmed ? { importConfirmed } : {}),
+          ...(commentRemovalsConfirmed ? { commentRemovalsConfirmed } : {}),
+          ...(coauthors ? { coauthors } : {}),
+        };
+        decision.onDecide("approve", { clientConfirmation: confirmation });
+        return;
       }
-      if (!host.beginOperation()) return false;
-      host.updateReview(key, {
-        status: "applying",
-        applyStage: "checking",
+      void runWordPlanApply({
+        key,
+        content,
         capture,
-        documentPlanDiagnostic: undefined,
-        documentPlanOutcome: undefined,
+        messageId,
+        entry,
+        host,
+        importConfirmed,
+        commentRemovalsConfirmed,
+        coauthors: checkCoauthors ? { shown: coauthors } : undefined,
+      }).then((outcome) => {
+        // Someone who joined since the card was read is shown before anything is replaced.
+        if (outcome.kind === "coauthors") setCoauthors(outcome.now);
+        if (outcome.kind !== "comment-tick") return;
+        setCommentsTicked(undefined);
+        // Without the card's own rows, the diagnostic tells the user why nothing ran.
+        if (!needsCommentTick)
+          host.updateReview(key, {
+            documentPlanDiagnostic: outcome.diagnostic,
+          });
       });
-      try {
-        const outcome = await entry.execute({
-          fenceContent: content,
-          capture,
-          messageId,
-          onStage: (applyStage) => host.updateReview(key, { applyStage }),
-          onBeforeDocumentWrite: (before) => {
-            if (messageId)
-              host.setRevertSlot({
-                messageId,
-                batchKey: key,
-                identity: capture.identity,
-                ooxml: before,
-              });
-          },
-          importConfirmed,
-          commentRemovalsConfirmed,
-        });
-        const result = outcome.documentPlanResult;
-        if (
-          result?.status === "blocked" &&
-          result.diagnostic?.reason === "comment-removals-need-confirmation"
-        ) {
-          setCommentsTicked(undefined);
-          // Without the card's own rows, the diagnostic is what tells the user why nothing ran.
-          host.updateReview(key, {
-            applyStage: undefined,
-            status: "idle",
-            documentPlanDiagnostic: needsCommentTick
-              ? undefined
-              : result.diagnostic,
-          });
-          return false;
-        }
-        if (
-          result?.status === "blocked" &&
-          isWordWholeDocumentBlock(result.diagnostic)
-        ) {
-          host.updateReview(key, {
-            applyStage: undefined,
-            status: "idle",
-            wholeDocumentBlock: result.diagnostic,
-          });
-          return false;
-        }
-        if (result?.before) {
-          host.invalidateLocations();
-          host.setRevertSlot(
-            messageId
-              ? {
-                  messageId,
-                  batchKey: key,
-                  identity: capture.identity,
-                  ooxml: result.before,
-                  afterFingerprint: result.afterFingerprint,
-                }
-              : null,
-          );
-        }
-        host.updateReview(key, {
-          applyStage: undefined,
-          status: outcome.ok
-            ? "done"
-            : result?.status === "interrupted"
-              ? "write-failed"
-              : "error",
-          documentPlanStatus: result?.status,
-          documentPlanDiagnostic: result?.diagnostic,
-          documentPlanOutcome: result?.outcome,
-          wholeDocumentBlock: undefined,
-          detailsExpanded: false,
-          automatic:
-            !importConfirmed &&
-            isAutomaticWordRun({
-              presentation: artifact?.clientActionPresentation,
-              decisions,
-              facetId,
-              action: entry.action,
-              enforcedAskActions,
-            }),
-        });
-        return outcome.ok;
-      } catch {
-        host.updateReview(key, {
-          applyStage: undefined,
-          status: "write-failed",
-          documentPlanStatus: "interrupted",
-          documentPlanDiagnostic: { stage: "write", reason: "host-error" },
-          wholeDocumentBlock: undefined,
-        });
-        return false;
-      } finally {
-        host.endOperation();
-      }
     },
     [
       ready,
@@ -485,47 +362,16 @@ export function WordDocumentPlanCard({
       confirmImport,
       needsCommentTick,
       commentPlan,
-      checkCoauthors,
+      decision,
       coauthors,
+      checkCoauthors,
       host,
       key,
-      entry,
       content,
       messageId,
-      artifact,
-      decisions,
-      facetId,
-      enforcedAskActions,
+      entry,
     ],
   );
-  const execute = useCallback(() => run(false), [run]);
-  // The refusal offers no Apply, so a consent card behind it could never be answered.
-  const buildSummary = useCallback(
-    () => (ready && !refusal ? plan : null),
-    [ready, refusal, plan],
-  );
-  const { confirmCard, isConfirmPending, allowCard, denyCard } =
-    useClientActionConfirmFlow<WordDocumentPlan, WordClientAction>({
-      promptScope: entry.promptScope,
-      facetId,
-      decisions,
-      enforcedAskActions,
-      buildSummary,
-      execute,
-      itemIdentity: host.documentIdentity,
-      presentation: artifact?.clientActionPresentation,
-      messageId,
-      isFreshCompletion: !!artifact?.isFreshCompletion,
-      proposedAction:
-        artifact?.proposedClientAction === entry.action
-          ? entry.action
-          : undefined,
-      expectedItemIdentity: artifact?.itemIdentity,
-      currentItemIdentity: host.documentIdentity,
-    });
-  useEffect(() => {
-    if (refusal && confirmCard) denyCard(confirmCard);
-  }, [refusal, confirmCard, denyCard]);
   const recoverySlot =
     host.revertSlot?.batchKey === key &&
     host.revertSlot.identity === host.documentIdentity
@@ -681,7 +527,6 @@ export function WordDocumentPlanCard({
     }
   };
   const askAgainWith = (instruction: string) => {
-    if (confirmCard) denyCard(confirmCard);
     const { messages } = getTranscript();
     const message = messageId ? messages[messageId] : undefined;
     const request = message?.previous_message_id
@@ -709,15 +554,13 @@ export function WordDocumentPlanCard({
       }),
     );
   };
-  const deny = () => {
-    if (confirmCard) denyCard(confirmCard);
-    host.updateReview(key, { status: "denied", capture });
-  };
-  const completed = ["done", "denied", "reverted"].includes(review.status);
+  const deny = decision && (() => decision.onDecide("reject"));
+  const completed = ["done", "reverted"].includes(review.status);
   // An Apply Word refused wrote nothing; once a later request took a new copy, its card folds too.
+  // A parked change stays open: its answer waits for a decision.
   const folds =
     completed ||
-    (idle && !generating && copyGone) ||
+    (idle && !generating && copyGone && !decision) ||
     (review.status === "error" && !!snapshot?.revoked);
   const collapsed = folds && !review.detailsExpanded;
   const outcomeState = wordPlanOutcomeState(review);
@@ -813,6 +656,12 @@ export function WordDocumentPlanCard({
           review.documentPlanDiagnostic,
         )
       : undefined;
+  if (chainedState && idle)
+    return (
+      <p className="word-review__hint" data-testid="word-chained-status">
+        {wordChainedApplyText(chainedState)}
+      </p>
+    );
   // A change in parts keeps its rows while the turn winds down; Apply waits for its end.
   if (generating && !parts)
     return (
@@ -873,9 +722,36 @@ export function WordDocumentPlanCard({
             wordPlanPassages(plan),
           )
         : routePreview);
-  const applyControl = refusal ? (
-    idle && <WordImportRefusal reason={refusal} onAskAgain={askAgainInPlace} />
-  ) : copyGone && idle ? null : confirmImport && (idle || applying) ? (
+  const consentTitle = t({
+    id: "officeAddin.word.planReview.consent",
+    message: "Apply the changes reviewed above?",
+  });
+  // A parked change this card cannot make is still declined here: the answer waits for it.
+  const declineOnly = decision && idle && (
+    <WordDecisionChoices
+      decision={decision}
+      title={consentTitle}
+      applyLabel={applyLabel}
+      canApply={false}
+      standingLabel={wordPlanStandingLabel()}
+    />
+  );
+  const applyControl = chained ? (
+    applying && (
+      <p className="word-review__hint" role="status">
+        {wordApplyStageLabel(review.applyStage)}
+      </p>
+    )
+  ) : refusal ? (
+    idle && (
+      <>
+        <WordImportRefusal reason={refusal} onAskAgain={askAgainInPlace} />
+        {declineOnly}
+      </>
+    )
+  ) : copyGone && idle ? (
+    declineOnly || null
+  ) : confirmImport && (idle || applying) ? (
     <WordImportConfirm
       key={key}
       routeText={routeText}
@@ -912,14 +788,7 @@ export function WordDocumentPlanCard({
       canApply={ready && !host.operationInProgress}
       applying={applying}
       applyStage={review.applyStage}
-      onApply={() =>
-        void run(true, needsCommentTick ? commentsTicked : undefined).then(
-          () => {
-            // The tick is this plan's consent, so a pending consent card is settled with it.
-            if (confirmCard) denyCard(confirmCard);
-          },
-        )
-      }
+      onApply={() => apply(true, needsCommentTick ? commentsTicked : undefined)}
       onAskAgain={askAgainInPlace}
       onCancel={deny}
     />
@@ -936,11 +805,7 @@ export function WordDocumentPlanCard({
       canApply={ready && !host.operationInProgress}
       applying={applying}
       applyStage={review.applyStage}
-      onApply={() =>
-        void run(false, commentsTicked).then(() => {
-          if (confirmCard) denyCard(confirmCard);
-        })
-      }
+      onApply={() => apply(false, commentsTicked)}
       onKeepPassages={keepCommentedPassages}
       onCopyThreads={() => copyThreads(removals.map((r) => r.thread))}
       onCancel={deny}
@@ -953,43 +818,24 @@ export function WordDocumentPlanCard({
         </p>
       )}
       {(idle || applying) && offered && coauthorsNotice}
-      {(idle || applying) && offered && !confirmCard && (
+      {decision && idle && offered && (
+        <WordDecisionChoices
+          decision={decision}
+          title={consentTitle}
+          applyLabel={applyLabel}
+          canApply={ready}
+          standingLabel={wordPlanStandingLabel()}
+          confirmation={coauthors ? { coauthors } : undefined}
+        />
+      )}
+      {!offered && declineOnly}
+      {!decision && (idle || applying) && offered && (
         <WordApplyButton
           applying={applying}
           applyStage={review.applyStage}
-          disabled={!ready || host.operationInProgress || isConfirmPending}
+          disabled={!ready || host.operationInProgress}
           label={applyLabel}
-          onApply={() => void execute()}
-        />
-      )}
-      {confirmCard && (
-        <WordReviewConfirm
-          key={confirmCard.requestId}
-          card={confirmCard}
-          title={
-            parts
-              ? t({
-                  id: "officeAddin.word.parts.consent",
-                  message: "Apply the changes reviewed below?",
-                })
-              : t({
-                  id: "officeAddin.word.planReview.consent",
-                  message: "Apply the changes reviewed above?",
-                })
-          }
-          allowOnceLabel={applyLabel}
-          canApply={ready}
-          operationInProgress={host.operationInProgress}
-          enforcedAskActions={enforcedAskActions}
-          decisions={decisions}
-          setDecisions={setDecisions}
-          onGrantAlways={grantAlways}
-          facetId={facetId}
-          allowCard={allowCard}
-          denyCard={denyCard}
-          onDenied={() => host.updateReview(key, { status: "denied", capture })}
-          applying={applying}
-          applyStage={review.applyStage}
+          onApply={() => apply(false)}
         />
       )}
     </>
@@ -998,7 +844,10 @@ export function WordDocumentPlanCard({
     <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
   ) : (
     commentWarning && (
-      <Alert type="warning" className="m-3 [overflow-wrap:anywhere]">
+      <Alert
+        type="warning"
+        className="word-review__aside my-3 [overflow-wrap:anywhere]"
+      >
         {commentWarning}
       </Alert>
     )
@@ -1006,7 +855,7 @@ export function WordDocumentPlanCard({
   const statusTrailing = (
     <>
       {mismatchedParagraphs.length > 0 && (
-        <div className="word-review__actions m-3 mt-0">
+        <div className="word-review__actions word-review__aside mb-3">
           {mismatchedParagraphs.map((id, i) => (
             <Button
               key={id}
@@ -1026,7 +875,7 @@ export function WordDocumentPlanCard({
       )}
       <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
       {status && errorReport && (
-        <div className="m-3 mt-0">
+        <div className="word-review__aside mb-3">
           <CopyErrorButton
             error={errorReport}
             reportOptions={{ chatId: currentChatId }}
@@ -1260,7 +1109,7 @@ export function WordDocumentPlanCard({
             <Alert
               type="info"
               role="status"
-              className="m-3 [overflow-wrap:anywhere]"
+              className="word-review__aside my-3 [overflow-wrap:anywhere]"
             >
               {blockedText}
             </Alert>

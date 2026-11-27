@@ -1,11 +1,22 @@
-import { t, msg } from "@lingui/core/macro";
+import { t, msg, plural } from "@lingui/core/macro";
 import clsx from "clsx";
+import { useContext } from "react";
 
-import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
-import { useBudgetWarning } from "@/hooks/budget/useBudgetWarning";
+import {
+  BUDGET_REFRESH_INTERVAL,
+  useBudgetStatus,
+} from "@/hooks/budget/useBudgetStatus";
+import {
+  getBudgetWarningLevel,
+  useBudgetWarning,
+} from "@/hooks/budget/useBudgetWarning";
+import { useBudgetWarningAcknowledgement } from "@/hooks/budget/useBudgetWarningAcknowledgement";
+import { ProfileContext } from "@/providers/ProfileProvider";
 
+import { Button } from "../../Controls/Button";
 import { Alert } from "../Alert";
 
+import type { BudgetWarningSeverity } from "@/hooks/budget/useBudgetWarningAcknowledgement";
 import type React from "react";
 
 interface BudgetWarningProps {
@@ -30,21 +41,42 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
   className,
   onDismiss,
 }) => {
-  // Fetch budget status (will use cached data if available)
-  const { data: budgetStatus } = useBudgetStatus();
-
-  // Calculate warning states
+  const userId = useContext(ProfileContext)?.profile?.id;
+  const {
+    data: budgetStatus,
+    fetchStatus,
+    isSuccess,
+    isPlaceholderData,
+    isError,
+    isFetching,
+    refetch,
+  } = useBudgetStatus({
+    // A confirmed drop in severity clears a previous dismissal.
+    refetchInterval: (status) =>
+      getBudgetWarningLevel(status) ? BUDGET_REFRESH_INTERVAL : false,
+  });
   const warning = useBudgetWarning(budgetStatus);
 
-  // Only show if we have data and are in warning or error state
-  const shouldShow = warning.hasData && (warning.isWarning || warning.isError);
+  let severity: BudgetWarningSeverity | null | undefined;
+  if (warning.hasData) {
+    severity = warning.isError ? "error" : warning.isWarning ? "warning" : null;
+  } else if (budgetStatus?.enabled === false) {
+    severity = null;
+  }
 
-  if (!shouldShow) {
+  const confirmedSeverity =
+    isSuccess && fetchStatus === "idle" && !isPlaceholderData
+      ? severity
+      : undefined;
+  const [acknowledgement, acknowledge] = useBudgetWarningAcknowledgement(
+    userId,
+    confirmedSeverity,
+  );
+
+  if (!severity || acknowledgement === severity) {
     return null;
   }
 
-  // Determine alert type and title
-  const alertType = warning.isError ? "error" : "warning";
   const title = warning.isError
     ? t(
         msg({
@@ -75,27 +107,53 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
     message = t`You are using ${percentUsed}% of your budget (${formattedSpending} of ${formattedLimit}).`;
   }
 
-  // Show budget period if available
+  // Show the rolling window if available.
   if (budgetStatus?.budget_period_days) {
     const days = budgetStatus.budget_period_days;
-    message += t(
-      msg({
-        id: "chat.warning.budget.period_suffix",
-        message: ` This is for your ${days}-day budget period.`,
+    const windowDescription = t({
+      id: "chat.warning.budget.rolling_window",
+      message: plural(days, {
+        one: "This covers spending over the last day.",
+        other: "This covers spending over the last # days.",
       }),
-    );
+    });
+    message = `${message} ${windowDescription}`;
   }
 
   return (
     <Alert
-      type={alertType}
+      type={severity}
       title={title}
       geometryVariant="message"
-      dismissible={!!onDismiss}
-      onDismiss={onDismiss}
+      dismissible
+      onDismiss={() => {
+        acknowledge(severity);
+        onDismiss?.();
+      }}
       className={clsx("mb-2", className)}
+      action={
+        isError ? (
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={isFetching}
+            onClick={() => void refetch()}
+          >
+            {t({ id: "preferences.budget.retry", message: "Retry" })}
+          </Button>
+        ) : undefined
+      }
     >
       {message}
+      {isError ? (
+        <p className="mt-1">
+          {t({
+            id: "chat.warning.budget.stale",
+            message:
+              "Could not refresh your budget. These figures may be out of date.",
+          })}
+        </p>
+      ) : null}
     </Alert>
   );
 };

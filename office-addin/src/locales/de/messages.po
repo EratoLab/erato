@@ -26,8 +26,8 @@ msgstr ""
 # ==============================
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
-msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
-msgstr "Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
+#~ msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
+#~ msgstr "Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
@@ -36,8 +36,8 @@ msgstr "Teilnehmer:"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
-msgid "officeAddin.appointmentRenderer.confirmMessage"
-msgstr "Dies öffnet ein vorausgefülltes Terminformular in Outlook. Nichts wird gespeichert oder gesendet, bis Sie es dort tun."
+#~ msgid "officeAddin.appointmentRenderer.confirmMessage"
+#~ msgstr "Dies öffnet ein vorausgefülltes Terminformular in Outlook. Nichts wird gespeichert oder gesendet, bis Sie es dort tun."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
@@ -441,18 +441,18 @@ msgstr "Wird von der KI nicht gelesen"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookClientActions.ts
-msgid "officeAddin.clientActions.createAppointment"
-msgstr "Einen vorausgefüllten Termin öffnen"
+#~ msgid "officeAddin.clientActions.createAppointment"
+#~ msgstr "Einen vorausgefüllten Termin öffnen"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookClientActions.ts
-msgid "officeAddin.clientActions.reply"
-msgstr "Dem Absender antworten"
+#~ msgid "officeAddin.clientActions.reply"
+#~ msgstr "Dem Absender antworten"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookClientActions.ts
-msgid "officeAddin.clientActions.replyAll"
-msgstr "Allen Empfängern antworten"
+#~ msgid "officeAddin.clientActions.replyAll"
+#~ msgstr "Allen Empfängern antworten"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
@@ -497,8 +497,8 @@ msgstr "Anmelden, um die E-Mail zu laden"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.alwaysAllowLocked"
-msgstr "Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
+#~ msgid "officeAddin.emailRenderer.alwaysAllowLocked"
+#~ msgstr "Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
@@ -562,8 +562,8 @@ msgstr "Allen antworten"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyAllConfirmMessage"
-msgstr "{confirmRecipientCount, plural, one {Dies öffnet eine Antwort an # Person aus der E-Mail, die Sie gerade lesen. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken.} other {Dies öffnet eine Antwort an # Personen aus der E-Mail, die Sie gerade lesen. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken.}}"
+#~ msgid "officeAddin.emailRenderer.replyAllConfirmMessage"
+#~ msgstr "{confirmRecipientCount, plural, one {Dies öffnet eine Antwort an # Person aus der E-Mail, die Sie gerade lesen. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken.} other {Dies öffnet eine Antwort an # Personen aus der E-Mail, die Sie gerade lesen. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken.}}"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -582,8 +582,8 @@ msgstr "{confirmRecipientCount, plural, one {Dies öffnet eine Antwort an # Pers
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyConfirmMessage"
-msgstr "Dies öffnet eine vorausgefüllte Antwort an den Absender der E-Mail, die Sie gerade lesen. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken."
+#~ msgid "officeAddin.emailRenderer.replyConfirmMessage"
+#~ msgstr "Dies öffnet eine vorausgefüllte Antwort an den Absender der E-Mail, die Sie gerade lesen. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -606,12 +606,14 @@ msgstr "Das Antwortfenster konnte nicht geöffnet werden. Stellen Sie sicher, da
 #~ msgstr "Antwortfenster geöffnet"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyStaleItem"
 msgstr "Dieser Entwurf wurde für eine andere E-Mail verfasst. Öffnen Sie diese E-Mail erneut oder verwenden Sie Kopieren."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "Der Entwurf ist zu groß zum Vorausfüllen einer Antwort. Verwenden Sie Kopieren und fügen Sie ihn in eine Antwort ein."
 
@@ -1371,9 +1373,94 @@ msgid "officeAddin.outlook.context.thread.spoken"
 msgstr "E-Mail-Verlauf"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentMaybeOpen"
+msgstr "Der Termin ist in Outlook möglicherweise schon geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentNotOpened"
+msgstr "Es wurde kein Termin geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentOpened"
+msgstr "Termin in Outlook geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.deniedAppointment"
+msgstr "Abgelehnt. Es wurde kein Termin geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.deniedReply"
+msgstr "Abgelehnt. Es wurde keine Antwort geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.openingAppointment"
+msgstr "Der Termin wird geöffnet…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.openingReply"
+msgstr "Die Antwort wird geöffnet…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.otherEmail"
+msgstr "Es wurde keine Antwort geöffnet: Jetzt ist eine andere E-Mail geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.paneGoneAppointment"
+msgstr "Es wurde kein Termin geöffnet: Der Erato-Bereich wurde geschlossen."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.paneGoneReply"
+msgstr "Es wurde keine Antwort geöffnet: Der Erato-Bereich wurde geschlossen."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyMaybeOpen"
+msgstr "Die Antwort ist in Outlook möglicherweise schon geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyNotOpened"
+msgstr "Es wurde keine Antwort geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyOpened"
+msgstr "Antwort in Outlook geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.stoppedAppointment"
+msgstr "Gestoppt. Es wurde kein Termin geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.stoppedReply"
+msgstr "Gestoppt. Es wurde keine Antwort geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.waiting"
+msgstr "Wartet auf Ihre Entscheidung"
+
+#. js-lingui-explicit-id
 #: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.sentWith.draft.meta.to"
 msgstr "{others, plural, =0 {An {first}} other {An {first} +#}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinSettingsDialog.tsx
+msgid "officeAddin.outlook.settings.serverActions"
+msgstr "Aktionen"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinPinHintBanner.tsx
@@ -1576,6 +1663,31 @@ msgid "officeAddin.powerpoint.slidePicture.uploadPartly"
 msgstr "{missing} von {total} Folienbildern konnten nicht hochgeladen werden. Die anderen sind angehängt."
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.appointmentFromDraft"
+msgstr "Dies öffnet den Termin oben in Outlook. Nichts wird gespeichert oder gesendet, bis Sie es dort tun."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+#~ msgid "officeAddin.proposal.appointmentNotSent"
+#~ msgstr "Dies öffnet einen vorausgefüllten Termin. Nichts wird gespeichert oder gesendet, bis Sie es in Outlook tun."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyFromDraft"
+msgstr "Dies öffnet den Entwurf oben als Antwort. Nichts wird gesendet, bis Sie in Outlook auf Senden klicken."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+#~ msgid "officeAddin.proposal.replyNotSent"
+#~ msgstr "Dies öffnet eine vorausgefüllte Antwort. Nichts wird gesendet, bis Sie in Outlook auf Senden klicken."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyTo"
+msgstr "An:"
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "„{excerpt}“"
@@ -1637,18 +1749,18 @@ msgstr "Letzten Chat auswählen"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.addin.clientActions.always.helper"
-msgstr "Führt die Aktion ohne Nachfrage aus. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken."
+#~ msgid "officeAddin.settings.addin.clientActions.always.helper"
+#~ msgstr "Führt die Aktion ohne Nachfrage aus. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-msgid "officeAddin.settings.addin.clientActions.always.helper.word"
-msgstr "Schreibt ohne Nachfrage in das geöffnete Dokument. Seit deiner Anfrage veränderte Absätze werden übersprungen, jede Änderung wird anschließend aufgelistet, und der Stapel lässt sich mit einer einzigen Wiederherstellung rückgängig machen."
+#~ msgid "officeAddin.settings.addin.clientActions.always.helper.word"
+#~ msgstr "Schreibt ohne Nachfrage in das geöffnete Dokument. Seit deiner Anfrage veränderte Absätze werden übersprungen, jede Änderung wird anschließend aufgelistet, und der Stapel lässt sich mit einer einzigen Wiederherstellung rückgängig machen."
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.always.label"
-msgstr "Immer erlauben"
+#~ msgid "officeAddin.settings.addin.clientActions.always.label"
+#~ msgstr "Immer erlauben"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
@@ -1657,8 +1769,8 @@ msgstr "Immer erlauben"
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.always.session"
-msgstr "Wird nur in der Bestätigung im Chat erteilt, für ein Dokument, bis das Add-in geschlossen wird. Eine andere Auswahl nimmt die Erlaubnis zurück."
+#~ msgid "officeAddin.settings.addin.clientActions.always.session"
+#~ msgstr "Wird nur in der Bestätigung im Chat erteilt, für ein Dokument, bis das Add-in geschlossen wird. Eine andere Auswahl nimmt die Erlaubnis zurück."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
@@ -1672,33 +1784,33 @@ msgstr "Wird nur in der Bestätigung im Chat erteilt, für ein Dokument, bis das
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
-msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
+#~ msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
+#~ msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
-msgstr "Zeigt einen Bestätigungsschritt nur an, wenn der Assistent diese Aktion von sich aus auslöst. Ein Klick auf die Schaltfläche der Aktion führt sie immer direkt aus."
+#~ msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
+#~ msgstr "Zeigt einen Bestätigungsschritt nur an, wenn der Assistent diese Aktion von sich aus auslöst. Ein Klick auf die Schaltfläche der Aktion führt sie immer direkt aus."
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
-msgstr "Vor automatischer Ausführung fragen"
+#~ msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
+#~ msgstr "Vor automatischer Ausführung fragen"
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.empty"
-msgstr "Derzeit sind keine vom Assistenten vorgeschlagenen Aktionen verfügbar."
+#~ msgid "officeAddin.settings.addin.clientActions.empty"
+#~ msgstr "Derzeit sind keine vom Assistenten vorgeschlagenen Aktionen verfügbar."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.addin.clientActions.intro"
-msgstr "Ihre Entscheidungen aus der Bestätigung im Chat werden hier gespeichert und können jederzeit geändert werden. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken."
+#~ msgid "officeAddin.settings.addin.clientActions.intro"
+#~ msgstr "Ihre Entscheidungen aus der Bestätigung im Chat werden hier gespeichert und können jederzeit geändert werden. Es wird nichts gesendet, bis Sie in Outlook auf Senden klicken."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-msgid "officeAddin.settings.addin.clientActions.intro.word"
-msgstr "Deine Entscheidungen aus der Bestätigung im Chat werden hier gespeichert und können jederzeit geändert werden. Diese Aktionen schreiben sofort in das geöffnete Dokument."
+#~ msgid "officeAddin.settings.addin.clientActions.intro.word"
+#~ msgstr "Deine Entscheidungen aus der Bestätigung im Chat werden hier gespeichert und können jederzeit geändert werden. Diese Aktionen schreiben sofort in das geöffnete Dokument."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/BehaviorTabContent.tsx
@@ -1707,18 +1819,18 @@ msgstr "Deine Entscheidungen aus der Bestätigung im Chat werden hier gespeicher
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.never.helper"
-msgstr "Blendet diese Aktion aus und ignoriert den Vorschlag des Assistenten."
+#~ msgid "officeAddin.settings.addin.clientActions.never.helper"
+#~ msgstr "Blendet diese Aktion aus und ignoriert den Vorschlag des Assistenten."
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.never.label"
-msgstr "Nie"
+#~ msgid "officeAddin.settings.addin.clientActions.never.label"
+#~ msgstr "Nie"
 
 #. js-lingui-explicit-id
 #: src/core/clientActions/ClientActionsSettings.tsx
-msgid "officeAddin.settings.addin.clientActions.scope"
-msgstr "Diese Entscheidungen werden nur auf diesem Gerät gespeichert."
+#~ msgid "officeAddin.settings.addin.clientActions.scope"
+#~ msgstr "Diese Entscheidungen werden nur auf diesem Gerät gespeichert."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/BehaviorTabContent.tsx
@@ -1876,6 +1988,11 @@ msgid "officeAddin.settings.audio.unsupported"
 msgstr "Audioeingabe wird auf dieser Plattform nicht unterstützt"
 
 #. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.backToList"
+msgstr "Zurück zu Einstellungen"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.outlook.description"
 msgstr "Konfiguriere, wie der Wechsel zwischen Outlook-E-Mails Chats zugeordnet wird."
@@ -1912,8 +2029,13 @@ msgstr "Outlook-Aktionen"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.serversTools.outlookActions.caption"
-msgstr "In Outlook integriert · dieses Gerät"
+#~ msgid "officeAddin.settings.serversTools.outlookActions.caption"
+#~ msgstr "In Outlook integriert · dieses Gerät"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.outlookActions.everyDevice"
+msgstr "In Outlook integriert · alle Geräte"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
@@ -1922,8 +2044,18 @@ msgstr "Word-Aktionen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-msgid "officeAddin.settings.serversTools.wordActions.caption"
-msgstr "In Word integriert · dieses Gerät"
+msgid "officeAddin.settings.serversTools.wordActions.builtIn"
+msgstr "In Word integriert"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+#~ msgid "officeAddin.settings.serversTools.wordActions.caption"
+#~ msgstr "In Word integriert · dieses Gerät"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.wordActions.everyDevice"
+msgstr "In Word integriert · alle Geräte"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -3231,6 +3363,16 @@ msgid "officeAddin.teams.signInToLoad.title"
 msgstr "Anmelden, um Teams-Chats zu laden"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordApprovalPreview.ts
+msgid "officeAddin.word.apply.previewTitle"
+msgstr "„{name}“ ändern"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordApprovalPreview.ts
+msgid "officeAddin.word.apply.previewTitleUnnamed"
+msgstr "Das Dokument ändern"
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.apply.stage.backup"
 msgstr "Sicherung wird erstellt…"
@@ -3824,8 +3966,8 @@ msgstr "Word konnte den Vorgang nicht abschließen. Das Dokument wurde mögliche
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
 #: src/word/components/WordReviewCardParts.tsx
-msgid "officeAddin.word.card.alwaysAllowLocked"
-msgstr "Deine Organisation verlangt bei jeder automatischen Ausführung dieser Aktion eine Bestätigung."
+#~ msgid "officeAddin.word.card.alwaysAllowLocked"
+#~ msgstr "Deine Organisation verlangt bei jeder automatischen Ausführung dieser Aktion eine Bestätigung."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
@@ -3876,6 +4018,82 @@ msgstr "In das Dokument eingefügt."
 #: src/word/components/WordHostCardRenderer.tsx
 #~ msgid "officeAddin.word.card.writeFailed"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.applied"
+msgstr "Angewendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+msgid "officeAddin.word.chained.apply"
+msgstr "Änderung anwenden"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.applying"
+msgstr "Die Änderung wird angewendet…"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.cancelled"
+msgstr "Abgebrochen. Es wurde nichts geändert."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+#: src/word/components/WordProposalApprovalCard.tsx
+msgid "officeAddin.word.chained.consent"
+msgstr "Diese Änderung anwenden?"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.notChanged"
+msgstr "Nicht geändert."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.onScreen"
+msgstr "Wartet auf Ihre Entscheidung auf dem Bildschirm"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.otherDocument"
+msgstr "Nicht geändert: In Word ist ein anderes Dokument geöffnet als das, für das diese Änderung gemacht wurde."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.paneGone"
+msgstr "Nicht geändert: Der Erato-Bereich wurde geschlossen."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.partial"
+msgstr "Teilweise angewendet. Erato prüft das Dokument noch einmal."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+msgid "officeAddin.word.chained.readAgain"
+msgstr "Das Dokument muss neu gelesen werden, bevor diese Änderung gemacht werden kann."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.stale"
+msgstr "Nicht geändert: Das Dokument muss neu gelesen werden, bevor diese Änderung gemacht werden kann."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.stopped"
+msgstr "Gestoppt. Es wurde nichts geändert."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.unconfirmed"
+msgstr "Die Änderung ist vielleicht schon im Dokument. Erato liest es neu, bevor es weitergeht."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.waiting"
+msgstr "Wartet auf Ihre Entscheidung"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
@@ -4044,8 +4262,8 @@ msgstr "Kommentare tragen hier keine KI-Kennzeichnung, daher fragt Erato jedes M
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
-msgid "officeAddin.word.comments.always.session"
-msgstr "„Immer erlauben“ gilt für dieses Dokument, bis das Add-in geschlossen wird."
+#~ msgid "officeAddin.word.comments.always.session"
+#~ msgstr "„Immer erlauben“ gilt für dieses Dokument, bis das Add-in geschlossen wird."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
@@ -4295,8 +4513,8 @@ msgstr "Was gesendet wird"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
-msgid "officeAddin.word.comments.declined"
-msgstr "Abgelehnt. Es wurde nichts geschrieben."
+#~ msgid "officeAddin.word.comments.declined"
+#~ msgstr "Abgelehnt. Es wurde nichts geschrieben."
 
 #. js-lingui-explicit-id
 #. placeholder {0}: others.length
@@ -4635,17 +4853,17 @@ msgid "officeAddin.word.comments.thread.unknown"
 msgstr "Gewählter Kommentar"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.add"
 msgstr "{n, plural, one {Einen Kommentar hinzufügen} other {# Kommentare hinzufügen}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.modify"
 msgstr "Kommentare bearbeiten oder löschen"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.respond"
 msgstr "Auf Kommentare antworten, sie auflösen oder erneut öffnen"
 
@@ -5214,6 +5432,21 @@ msgid "officeAddin.word.context.sendInstead"
 msgstr "Stattdessen dies senden"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDecisionChoices.tsx
+msgid "officeAddin.word.decision.standing.comments"
+msgstr "Jede Kommentaränderung, auch neue Kommentare:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDecisionChoices.tsx
+msgid "officeAddin.word.decision.standing.plan"
+msgstr "Jede Änderung am Dokument:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordProposalApprovalCard.tsx
+msgid "officeAddin.word.decision.standing.proposal"
+msgstr "Jedes Mal, wenn Erato das vorschlägt:"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.askAgain"
 msgstr "Erneut nach direkten Bearbeitungen fragen"
@@ -5335,8 +5568,8 @@ msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Er
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
-msgid "officeAddin.word.parts.consent"
-msgstr "Die unten geprüften Änderungen übernehmen?"
+#~ msgid "officeAddin.word.parts.consent"
+#~ msgstr "Die unten geprüften Änderungen übernehmen?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPartsCard.tsx
@@ -6012,8 +6245,8 @@ msgstr "Änderung anwenden"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx
-msgid "officeAddin.word.review.automatic"
-msgstr "Automatische Aktion gemäß deiner Einstellung „Immer erlauben“."
+#~ msgid "officeAddin.word.review.automatic"
+#~ msgstr "Automatische Aktion gemäß deiner Einstellung „Immer erlauben“."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
@@ -6021,10 +6254,9 @@ msgid "officeAddin.word.review.batchScopeAll"
 msgstr "Jede vorgeschlagene Änderung wird angewendet, auch in durch Filter ausgeblendeten Zeilen. Seit der Anfrage veränderte Absätze werden übersprungen und aufgelistet."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/components/WordDecisionChoices.tsx
 #: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordPlanCommentRemovals.tsx
-#: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Abbrechen"
 
@@ -6060,8 +6292,8 @@ msgstr "Original bei der Anfrage → vorgeschlagener Ersatz"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.consent"
-msgstr "Diesen Stapel anwenden?"
+#~ msgid "officeAddin.word.review.consent"
+#~ msgstr "Diesen Stapel anwenden?"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: capture.paragraphsSent
@@ -6071,8 +6303,8 @@ msgstr "Anfragebereich: Absätze 1–{0}. Nur eingeschlossener Text wurde geprü
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx
-msgid "officeAddin.word.review.denied"
-msgstr "Vorschlag abgelehnt. Es wurde nichts geschrieben."
+#~ msgid "officeAddin.word.review.denied"
+#~ msgstr "Vorschlag abgelehnt. Es wurde nichts geschrieben."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
@@ -6111,8 +6343,8 @@ msgstr "Stapel konnte nicht abgeschlossen werden"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.insertConsent"
-msgstr "Diesen Text einfügen?"
+#~ msgid "officeAddin.word.review.insertConsent"
+#~ msgstr "Diesen Text einfügen?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
@@ -6564,8 +6796,8 @@ msgstr "Auswahl bei der Anfrage → vorgeschlagener Ersatz"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
-msgid "officeAddin.word.selection.consent"
-msgstr "Ausgewählte Passage ersetzen?"
+#~ msgid "officeAddin.word.selection.consent"
+#~ msgstr "Ausgewählte Passage ersetzen?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -7051,18 +7283,18 @@ msgstr "Ohne Dokument senden"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-msgid "officeAddin.word.settings.alwaysInsert"
-msgstr "Fügt Text ohne Nachfrage an der aktuellen Cursorposition ein. Für diese Aktion gibt es keine Erato-Wiederherstellung. Nutze bei Bedarf „Rückgängig“ in Word."
+#~ msgid "officeAddin.word.settings.alwaysInsert"
+#~ msgstr "Fügt Text ohne Nachfrage an der aktuellen Cursorposition ein. Für diese Aktion gibt es keine Erato-Wiederherstellung. Nutze bei Bedarf „Rückgängig“ in Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-msgid "officeAddin.word.settings.alwaysPlan"
-msgstr "Wendet die vollständige Überarbeitung ohne Nachfrage an, sofern das Dokument noch der geprüften Quelle entspricht. Die Erato-Wiederherstellung ist verfügbar, solange das angewendete Dokument unverändert bleibt."
+#~ msgid "officeAddin.word.settings.alwaysPlan"
+#~ msgstr "Wendet die vollständige Überarbeitung ohne Nachfrage an, sofern das Dokument noch der geprüften Quelle entspricht. Die Erato-Wiederherstellung ist verfügbar, solange das angewendete Dokument unverändert bleibt."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-msgid "officeAddin.word.settings.alwaysReplaceSelection"
-msgstr "Ersetzt die ausgewählte Passage ohne Nachfrage, aber nur, wenn sie seit Ihrer Anfrage unverändert ist. Rückgängig ist verfügbar, solange die Änderungsnachverfolgung aus ist."
+#~ msgid "officeAddin.word.settings.alwaysReplaceSelection"
+#~ msgstr "Ersetzt die ausgewählte Passage ohne Nachfrage, aber nur, wenn sie seit Ihrer Anfrage unverändert ist. Rückgängig ist verfügbar, solange die Änderungsnachverfolgung aus ist."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
@@ -7149,6 +7381,11 @@ msgstr "Geöffnetes Dokument in neue Chats einschließen"
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.includeDocument.helper"
 msgstr "Erato liest das Dokument, wenn Sie eine Nachricht senden. Sie können es aus jedem Chat entfernen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.serverChanges"
+msgstr "Änderungen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

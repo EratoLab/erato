@@ -1018,6 +1018,26 @@ impl ApprovalPolicyServer {
             tool_router: Self::tool_router(),
         }
     }
+
+    fn metered_result(
+        text: &str,
+        identifier: &str,
+        prompt_tokens: u64,
+        cached_input_tokens: u64,
+    ) -> CallToolResult {
+        CallToolResult::success(vec![ContentBlock::text(text)]).with_meta(Some(MetaObject(
+            serde_json::Map::from_iter([(
+                "chat.erato/token_usage".to_string(),
+                json!({
+                    "model_identifier": identifier,
+                    "total_prompt_tokens": prompt_tokens,
+                    "cached_input_tokens": cached_input_tokens,
+                    "total_completion_tokens": 0,
+                    "total_tokens": prompt_tokens,
+                }),
+            )]),
+        )))
+    }
 }
 
 #[tool_router]
@@ -1031,8 +1051,8 @@ impl ApprovalPolicyServer {
             open_world_hint = false
         )
     )]
-    fn read_approval_fixture(&self) -> String {
-        "closed-world approval fixture read".to_string()
+    fn read_approval_fixture(&self) -> CallToolResult {
+        Self::metered_result("closed-world approval fixture read", "mock-llm", 10, 0)
     }
 
     #[tool(
@@ -1045,8 +1065,8 @@ impl ApprovalPolicyServer {
             open_world_hint = true
         )
     )]
-    fn publish_approval_probe(&self) -> String {
-        "approval probe published".to_string()
+    fn publish_approval_probe(&self) -> CallToolResult {
+        Self::metered_result("approval probe published", "Mock/v1", 25, 6)
     }
 }
 

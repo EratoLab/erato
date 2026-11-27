@@ -303,7 +303,7 @@ impl BlockScan {
     }
 }
 
-fn opens_fence(line: &str) -> Option<(char, usize)> {
+pub(crate) fn opens_fence(line: &str) -> Option<(char, usize)> {
     let line = line.trim_start();
     let mark = line.chars().next().filter(|c| matches!(c, '`' | '~'))?;
     let length = line.chars().take_while(|&c| c == mark).count();
@@ -311,7 +311,7 @@ fn opens_fence(line: &str) -> Option<(char, usize)> {
     (length >= 3 && !(mark == '`' && info.contains('`'))).then_some((mark, length))
 }
 
-fn closes_fence(line: &str, (mark, length): (char, usize)) -> bool {
+pub(crate) fn closes_fence(line: &str, (mark, length): (char, usize)) -> bool {
     let line = line.trim();
     line.chars().count() >= length && line.chars().all(|c| c == mark)
 }

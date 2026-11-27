@@ -25,50 +25,26 @@ import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const mockUseHostArtifact = vi.fn();
 const mockUseChatContext = vi.fn();
-const mockUsePersistedState = vi.fn();
+const server = vi.hoisted(() => ({
+  decisions: {},
+}));
 
 vi.mock("@erato/frontend/library", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof EratoLibrary>()),
     SyntaxHighlightedCode: ({ code }: { code: string }) => <pre>{code}</pre>,
-    ActionConfirmationCard: (props: {
-      description?: unknown;
-      onAllowOnce: () => void;
-      onAlwaysAllow: () => void;
-      onDeny: () => void;
-      isBusy?: boolean;
-    }) => (
-      <div data-testid="confirmation-card">
-        <div data-testid="confirmation-description">
-          {props.description as never}
-        </div>
-        <button type="button" onClick={props.onAllowOnce}>
-          allow-once
-        </button>
-        <button type="button" onClick={props.onAlwaysAllow}>
-          always-allow
-        </button>
-        <button type="button" onClick={props.onDeny}>
-          deny
-        </button>
-      </div>
-    ),
     useChatContext: () => mockUseChatContext(),
     ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
       () => mockUseChatContext(),
     ),
     useHostArtifact: () => mockUseHostArtifact(),
-    usePersistedState: () => mockUsePersistedState(),
-    useConfirmationRegistryStore: (
-      selector: (state: {
-        registerConfirmation: () => void;
-        unregisterConfirmation: () => void;
-      }) => unknown,
-    ) =>
-      selector({
-        registerConfirmation: () => {},
-        unregisterConfirmation: () => {},
-      }),
+    useApprovalTools: () => [
+      { qualified_name: "word/apply_edits", client_actions: [APPLY] },
+      { qualified_name: "word/insert_at_cursor", client_actions: [INSERT] },
+    ],
+    useProfile: () => ({
+      profile: { client_tool_decisions: server.decisions },
+    }),
   };
 });
 
@@ -103,15 +79,11 @@ interface TestArtifact {
   messageId: string;
   cardFenceLanguages: string[];
   allowedClientActions: string[];
-  alwaysAskClientActions?: string[];
-  clientActionPresentation: string;
   isFreshCompletion?: boolean;
   itemIdentity?: string;
   proposedClientAction?: string;
 }
 
-// Unique per test: the once-per-message auto-prompt slot is module-level state
-// that intentionally survives remounts (and thus tests).
 let nextMessageId = 0;
 
 function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
@@ -122,7 +94,6 @@ function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
     messageId: `word-msg-${nextMessageId}`,
     cardFenceLanguages: ["erato-word-edits", "erato-word-insert"],
     allowedClientActions: [APPLY],
-    clientActionPresentation: "render_buttons",
     isFreshCompletion: true,
     itemIdentity: IDENTITY,
     ...overrides,
@@ -135,21 +106,31 @@ function renderCard(options: {
   content?: string;
   currentIdentity?: string | null;
   captures?: Map<string, WordDocumentCapture>;
+  /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
+  /** The stored answer's parts. */
+  messageContent?: unknown[];
+  /** The answer is still being written. */
+  sending?: boolean;
+  /** The copy staged for an answer still being written. */
+  captureFor?: (messageId: string) => WordDocumentCapture | undefined;
 }) {
   const artifact = options.artifact;
   mockUseHostArtifact.mockReturnValue(artifact);
   const messageId = artifact?.messageId ?? "unrelated";
   mockUseChatContext.mockReturnValue({
-    messages: { [messageId]: { id: messageId, role: "assistant" } },
+    messages: {
+      [messageId]: {
+        id: messageId,
+        role: "assistant",
+        content: options.messageContent,
+        ...(options.sending ? { status: "sending" } : {}),
+      },
+    },
     messageOrder: [messageId],
     currentChatId: "chat-1",
   });
-  const setDecisions = vi.fn();
-  mockUsePersistedState.mockReturnValue([
-    options.decisions ?? {},
-    setDecisions,
-  ]);
+  server.decisions = options.decisions ?? {};
 
   const captures =
     options.captures ??
@@ -163,6 +144,7 @@ function renderCard(options: {
           : options.currentIdentity
       }
       capturesByAssistantMessageId={captures}
+      captureFor={options.captureFor}
     >
       <WordHostCardRenderer
         language={options.language ?? "erato-word-edits"}
@@ -171,7 +153,7 @@ function renderCard(options: {
     </WordWriteProvider>,
     { wrapper: TestTheme },
   );
-  return { ...view, setDecisions };
+  return view;
 }
 
 const flush = () => act(() => Promise.resolve());
@@ -255,17 +237,24 @@ describe("WordHostCardRenderer", () => {
       expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
     });
 
-    it("hides the action and ignores the proposal on a `never` decision", () => {
+    it("hides the action the user set to Never", () => {
       renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-        decisions: { [`${REVIEW_FACET}/${APPLY}`]: "never" },
+        artifact: makeArtifact({ proposedClientAction: APPLY }),
+        decisions: { "word/apply_edits": "never_allow" },
       });
 
       expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
+    });
+
+    it("still offers the action under Ask or Always", () => {
+      renderCard({
+        artifact: makeArtifact(),
+        decisions: { "word/apply_edits": "always_allow" },
+      });
+
+      expect(
+        screen.getByRole("button", { name: /^Apply (edit|all \d+ edits)$/ }),
+      ).toBeEnabled();
     });
   });
 
@@ -298,38 +287,6 @@ describe("WordHostCardRenderer", () => {
       expect(
         screen.getByText(/different document than the one open now/),
       ).toBeInTheDocument();
-    });
-
-    it("re-checks identity at execution, not only at render", async () => {
-      const artifact = makeArtifact({
-        clientActionPresentation: "auto_prompt",
-        proposedClientAction: APPLY,
-      });
-      const captures = new Map<string, WordDocumentCapture>([
-        [artifact.messageId, capture()],
-      ]);
-      const { rerender } = renderCard({ artifact, captures });
-      await flush();
-      expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-
-      rerender(
-        <WordWriteProvider
-          documentIdentity="pane-session:switched-away"
-          capturesByAssistantMessageId={captures}
-        >
-          <WordHostCardRenderer
-            language="erato-word-edits"
-            content={EDITS_FENCE}
-          />
-        </WordWriteProvider>,
-      );
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-      await flush();
-
-      expect(word.word.writes()).toEqual([]);
-      expect(
-        screen.getAllByText(/different document than the one open now/).length,
-      ).toBeGreaterThan(0);
     });
 
     it("writes nothing when the identity is missing on either side", () => {
@@ -370,7 +327,6 @@ describe("WordHostCardRenderer", () => {
       expect(report).toBeVisible();
       expect(report).toHaveTextContent("Paragraph 2");
       expect(report).toHaveTextContent("Applied");
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
     });
 
     it("reports a partial batch and applies only the surviving edits", async () => {
@@ -515,11 +471,8 @@ describe("WordHostCardRenderer", () => {
       ).toBeInTheDocument();
     });
 
-    it("never offers or prompts for a proposal read under Track Changes", async () => {
-      const artifact = makeArtifact({
-        clientActionPresentation: "auto_prompt",
-        proposedClientAction: APPLY,
-      });
+    it("never offers a proposal read under Track Changes", async () => {
+      const artifact = makeArtifact({ proposedClientAction: APPLY });
       renderCard({
         artifact,
         captures: new Map([
@@ -529,7 +482,6 @@ describe("WordHostCardRenderer", () => {
       await flush();
 
       expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
       expect(
         screen.getByText(/Track Changes is on, so Erato doesn't apply/),
       ).toBeInTheDocument();
@@ -724,7 +676,6 @@ describe("WordHostCardRenderer", () => {
         messageOrder: [artifact.messageId],
         currentChatId: "chat-1",
       });
-      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
       render(
         <WordWriteProvider
           documentIdentity={IDENTITY}
@@ -778,7 +729,6 @@ describe("WordHostCardRenderer", () => {
         messageOrder: [artifact.messageId],
         currentChatId: "chat-1",
       });
-      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
       render(
         <WordWriteProvider
           documentIdentity={IDENTITY}
@@ -856,6 +806,259 @@ describe("WordHostCardRenderer", () => {
     });
   });
 
+  describe("a change the server carries out", () => {
+    const fence = (language: string, body: string) => ({
+      content_type: "text",
+      text: `\`\`\`${language}\n${body}\n\`\`\``,
+    });
+    const insertFence = (text: string) => fence("erato-word-insert", text);
+    const proposalOf = (
+      action: string,
+      id = "proposal-1",
+      call = "call-1",
+    ) => ({
+      content_type: "tool_use",
+      tool_call_id: id,
+      tool_name: "propose_client_action",
+      status: "success",
+      input: { action },
+      output: { apply: { call_id: call } },
+    });
+    const proposal = proposalOf(INSERT);
+    const callOf = (
+      output: unknown,
+      status: "success" | "error" = "success",
+      id = "call-1",
+    ) => ({
+      content_type: "tool_use",
+      tool_call_id: id,
+      tool_name: "apply",
+      status,
+      output,
+    });
+    const cancelled = callOf({ status: "rejected" }, "error");
+    const renderChained = (
+      messageContent: unknown[],
+      options: Partial<Parameters<typeof renderCard>[0]> = {},
+    ) =>
+      renderCard({
+        artifact: makeArtifact({
+          facetId: COMPOSE_FACET,
+          allowedClientActions: [INSERT],
+        }),
+        language: "erato-word-insert",
+        content: "A drafted paragraph.",
+        messageContent,
+        ...options,
+      });
+    const renderChainedEdits = (
+      calls: unknown[],
+      options: Partial<Parameters<typeof renderCard>[0]> = {},
+    ) =>
+      renderCard({
+        artifact: makeArtifact(),
+        messageContent: [
+          fence("erato-word-edits", EDITS_FENCE),
+          proposalOf(APPLY),
+          ...calls,
+        ],
+        ...options,
+      });
+    const insertButton = () =>
+      screen.queryByRole("button", { name: "Insert the text at the cursor" });
+    const applyButton = () =>
+      screen.queryByRole("button", { name: "Apply edit" });
+    const status = () => screen.getByTestId("word-chained-status");
+
+    it("shows the edits in full while the decision waits, with no button of its own", () => {
+      renderChainedEdits([]);
+
+      const card = within(screen.getByTestId("word-edits-card"));
+      expect(card.getByText("Paragraph 2")).toBeInTheDocument();
+      fireEvent.click(card.getByRole("tab", { name: "Proposed" }));
+      expect(card.getByText("Bravo, revised.")).toBeInTheDocument();
+      expect(
+        within(card.getByTestId("word-chained-status")).getByText(
+          "Waiting for your decision",
+        ),
+      ).toBeInTheDocument();
+      expect(applyButton()).not.toBeInTheDocument();
+    });
+
+    it("shows them on the copy staged for the request while the answer is still being written", () => {
+      const staged = capture();
+      const artifact = makeArtifact({ itemIdentity: undefined });
+      renderChainedEdits([], {
+        artifact,
+        sending: true,
+        captures: new Map(),
+        captureFor: (id) => (id === artifact.messageId ? staged : undefined),
+      });
+
+      const card = within(screen.getByTestId("word-edits-card"));
+      expect(card.getAllByText("Bravo.")).not.toHaveLength(0);
+      expect(status()).toHaveTextContent("Waiting for your decision");
+      expect(
+        screen.queryByText(/no longer has the document snapshot/),
+      ).not.toBeInTheDocument();
+      expect(applyButton()).not.toBeInTheDocument();
+    });
+
+    it("shows the text to insert while the decision waits, with no button of its own", () => {
+      renderChained([insertFence("A drafted paragraph."), proposal]);
+
+      expect(
+        within(screen.getByTestId("word-insert-card")).getByText(
+          "A drafted paragraph.",
+        ),
+      ).toBeInTheDocument();
+      expect(status()).toHaveTextContent("Waiting for your decision");
+      expect(insertButton()).not.toBeInTheDocument();
+    });
+
+    it("offers no button of its own while the server's call runs", () => {
+      renderChained([
+        insertFence("A drafted paragraph."),
+        proposal,
+        callOf(undefined),
+      ]);
+
+      expect(status()).toHaveTextContent("Applying the change…");
+      expect(insertButton()).not.toBeInTheDocument();
+    });
+
+    it("gives the button back after the user cancelled, and the click writes", async () => {
+      word.word.setSelection("");
+      renderChained([insertFence("A drafted paragraph."), proposal, cancelled]);
+
+      expect(status()).toHaveTextContent("Cancelled. Nothing was changed.");
+      expect(screen.getByText("A drafted paragraph.")).toBeInTheDocument();
+      fireEvent.click(insertButton()!);
+
+      expect(
+        await screen.findByText("Inserted into the document."),
+      ).toBeInTheDocument();
+      expect(word.word.writes()).toHaveLength(1);
+      expect(screen.queryByTestId("word-chained-status")).toBeNull();
+    });
+
+    it("keeps the given-back button behind the write gate", () => {
+      renderChained(
+        [insertFence("A drafted paragraph."), proposal, cancelled],
+        {
+          currentIdentity: "https://contoso.sharepoint.com/other.docx",
+        },
+      );
+
+      expect(status()).toHaveTextContent("Cancelled. Nothing was changed.");
+      expect(insertButton()).toBeDisabled();
+    });
+
+    it("keeps the given-back button away under Never and under Track Changes", async () => {
+      renderChained(
+        [insertFence("A drafted paragraph."), proposal, cancelled],
+        {
+          decisions: { "word/insert_at_cursor": "never_allow" },
+        },
+      );
+      expect(insertButton()).not.toBeInTheDocument();
+      cleanup();
+
+      word.word.setTrackingMode("TrackAll");
+      renderChainedEdits([callOf({ status: "rejected" }, "error")]);
+      await flush();
+      expect(status()).toHaveTextContent("Cancelled. Nothing was changed.");
+      expect(applyButton()).not.toBeInTheDocument();
+    });
+
+    it.each([
+      [{ status: "stale" }, /^Not changed: the document has to be read again/],
+      [{ status: "unavailable", reason: "capture_lost" }, "Not changed."],
+      [{ status: "failed", reason: "track_changes" }, "Not changed."],
+    ])(
+      "gives the button back after a call that wrote nothing: %j",
+      (result, text) => {
+        renderChained([
+          insertFence("A drafted paragraph."),
+          proposal,
+          callOf({ result }),
+        ]);
+
+        expect(status()).toHaveTextContent(text);
+        expect(insertButton()).toBeInTheDocument();
+      },
+    );
+
+    it.each([
+      [{ status: "applied" }, "Applied."],
+      [{ status: "partial" }, /^Partly applied/],
+      [{ status: "unconfirmed" }, /may already be in the document/],
+      [{ status: "needs_decision" }, "Waiting for your decision on screen"],
+    ])(
+      "offers no button after a call that wrote or still asks: %j",
+      (result, text) => {
+        renderChained([
+          insertFence("A drafted paragraph."),
+          proposal,
+          callOf({ result }),
+        ]);
+
+        expect(screen.getByText("A drafted paragraph.")).toBeInTheDocument();
+        expect(status()).toHaveTextContent(text);
+        expect(insertButton()).not.toBeInTheDocument();
+      },
+    );
+
+    it("offers no button while the answer goes on after a call that wrote nothing", () => {
+      renderChained(
+        [
+          insertFence("A drafted paragraph."),
+          proposal,
+          callOf({ result: { status: "failed", reason: "busy" } }),
+        ],
+        { sending: true },
+      );
+
+      expect(status()).toHaveTextContent("Not changed.");
+      expect(insertButton()).not.toBeInTheDocument();
+    });
+
+    it("follows the call of a second proposal after a change request", () => {
+      renderChained([
+        insertFence("A drafted paragraph."),
+        proposal,
+        callOf({ status: "change_requested" }, "error"),
+        proposalOf(INSERT, "proposal-2", "call-2"),
+      ]);
+
+      expect(status()).toHaveTextContent("Waiting for your decision");
+      expect(insertButton()).not.toBeInTheDocument();
+    });
+
+    it("keeps each version's button when the answer offers several", () => {
+      renderChained([
+        insertFence("A drafted paragraph."),
+        insertFence("Another draft."),
+        proposal,
+      ]);
+
+      expect(
+        screen.queryByTestId("word-chained-status"),
+      ).not.toBeInTheDocument();
+      expect(insertButton()).toBeInTheDocument();
+    });
+
+    it("keeps the button for the user's pick after the server left it to them", () => {
+      renderChained([
+        insertFence("A drafted paragraph."),
+        proposal,
+        callOf({ result: { status: "unavailable", reason: "user_picks" } }),
+      ]);
+
+      expect(insertButton()).toBeInTheDocument();
+    });
+  });
+
   describe("inserting", () => {
     it("inserts the FENCE content, not the message body", async () => {
       word.word.setSelection("");
@@ -900,7 +1103,6 @@ describe("WordHostCardRenderer", () => {
         messageOrder: [artifact.messageId],
         currentChatId: "chat-1",
       });
-      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
       mockUseHostArtifact.mockReturnValue(artifact);
       const cards = (withInsert: boolean) => (
         <WordWriteProvider
@@ -980,242 +1182,6 @@ describe("WordHostCardRenderer", () => {
     });
   });
 
-  describe("auto_prompt consent", () => {
-    const holdWordRuns = () => {
-      const run = word.word.run.getMockImplementation()!;
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      word.word.run.mockImplementation(async (callback) => {
-        await held;
-        return run(callback);
-      });
-      return () =>
-        act(async () => {
-          release();
-          await held;
-          await Promise.resolve();
-        });
-    };
-
-    it.each([
-      ["Off", true],
-      ["TrackAll", false],
-    ] as const)(
-      "opens no prompt for edits before the live Track Changes mode (%s) is known",
-      async (mode, prompted) => {
-        word.word.setTrackingMode(mode);
-        const release = holdWordRuns();
-        renderCard({
-          artifact: makeArtifact({
-            clientActionPresentation: "auto_prompt",
-            proposedClientAction: APPLY,
-          }),
-        });
-        await flush();
-        expect(screen.queryByTestId("confirmation-card")).toBeNull();
-
-        await release();
-        await flush();
-
-        expect(!!screen.queryByTestId("confirmation-card")).toBe(prompted);
-        expect(word.word.writes()).toEqual([]);
-      },
-    );
-
-    it("explains instead of writing when Track Changes was turned on before Allow", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-      });
-      await flush();
-      expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-
-      word.word.setTrackingMode("TrackAll");
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-      await flush();
-      await flush();
-
-      expect(word.word.writes()).toEqual([]);
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
-      expect(
-        screen.getByText(/Track Changes is on, so Erato doesn't apply/),
-      ).toBeInTheDocument();
-
-      word.word.setTrackingMode("Off");
-      await act(async () => {
-        window.dispatchEvent(new Event("blur"));
-        window.dispatchEvent(new Event("focus"));
-        await Promise.resolve();
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
-      await flush();
-
-      expect(word.word.paragraphs()[1].text).toBe("Bravo, revised.");
-    });
-
-    it("surfaces ONE card per turn covering the whole edit list", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-        content: JSON.stringify({
-          edits: [
-            { paragraph: 1, text: "First." },
-            { paragraph: 3, text: "Third." },
-          ],
-        }),
-      });
-      await flush();
-
-      const cards = screen.getAllByTestId("confirmation-card");
-      expect(cards).toHaveLength(1);
-      expect(
-        screen.getByTestId("confirmation-description"),
-      ).toBeEmptyDOMElement();
-      expect(
-        screen.getByText(/Every proposed edit is applied/),
-      ).toBeInTheDocument();
-      expect(screen.getAllByTestId("word-edits-list")).toHaveLength(1);
-      expect(screen.getByTestId("word-edits-list")).toHaveTextContent(
-        "Paragraph 1",
-      );
-      expect(screen.getByTestId("word-edits-list")).toHaveTextContent(
-        "Paragraph 3",
-      );
-    });
-
-    it("writes only after the card is allowed", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-      });
-      await flush();
-      expect(word.word.writes()).toEqual([]);
-
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-      await flush();
-
-      expect(word.word.paragraphs()[1].text).toBe("Bravo, revised.");
-    });
-
-    it("writes nothing when the card is denied", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-      });
-      await flush();
-
-      fireEvent.click(screen.getByRole("button", { name: "deny" }));
-      await flush();
-
-      expect(word.word.writes()).toEqual([]);
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-        "Proposal declined",
-      );
-    });
-
-    it("stores the grant under the Word key when Always allow is chosen", async () => {
-      const { setDecisions } = renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-      });
-      await flush();
-
-      fireEvent.click(screen.getByRole("button", { name: "always-allow" }));
-      await flush();
-
-      expect(setDecisions).toHaveBeenCalledWith({
-        [`${REVIEW_FACET}/${APPLY}`]: "always",
-      });
-    });
-
-    it("executes with no prompt on a stored `always`, and still reports", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-        decisions: { [`${REVIEW_FACET}/${APPLY}`]: "always" },
-      });
-      await flush();
-
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(word.word.paragraphs()[1].text).toBe("Bravo, revised.");
-      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-        "1 edit applied",
-      );
-      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-        "Always allow",
-      );
-      expect(screen.getByTestId("word-edit-report")).not.toBeVisible();
-    });
-
-    it("clamps a stored `always` back to a card when the deployment enforces asking", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-          alwaysAskClientActions: [APPLY],
-        }),
-        decisions: { [`${REVIEW_FACET}/${APPLY}`]: "always" },
-      });
-      await flush();
-
-      expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-      expect(word.word.writes()).toEqual([]);
-    });
-
-    it("surfaces nothing for a message this pane did not complete", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-          isFreshCompletion: false,
-        }),
-      });
-      await flush();
-
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(word.word.writes()).toEqual([]);
-    });
-
-    it("surfaces nothing when the open document is a different one", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-        currentIdentity: "pane-session:other",
-      });
-      await flush();
-
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(word.word.writes()).toEqual([]);
-    });
-
-    it("surfaces nothing under the default render_buttons presentation", async () => {
-      renderCard({
-        artifact: makeArtifact({ proposedClientAction: APPLY }),
-      });
-      await flush();
-
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(word.word.writes()).toEqual([]);
-    });
-  });
   describe("v1 review contract", () => {
     it("keeps all 41 edits in scope when filtering a long document", async () => {
       const texts = Array.from(

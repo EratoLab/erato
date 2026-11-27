@@ -74,12 +74,18 @@ export {
   type MessageEditorTokenContext,
 } from "@/components/ui/MessageList/MessageEditor";
 export {
+  HostArtifactProvider,
   MessageContent,
   useHostArtifact,
   useOutlookArtifact,
   type HostFenceRules,
 } from "@/components/ui/Message/MessageContent";
-export type { HostArtifact, OutlookArtifact } from "@/types/chat";
+export type {
+  HostArtifact,
+  HostSubmittedCard,
+  OutlookArtifact,
+} from "@/types/chat";
+export { submittedCardsOf } from "@/types/chat";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
@@ -111,10 +117,35 @@ export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabCont
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
 export { TextSizeSetting } from "@/components/ui/Settings/TextSizeSetting";
 export {
+  SettingsPageList,
+  useSettingsPages,
+  type SettingsPagesState,
+} from "@/components/ui/Settings/SettingsPages";
+export {
   EntityRow,
   type EntityRowStatus,
 } from "@/components/ui/Settings/EntityRow";
 export { McpToolApprovalSettings } from "@/components/ui/Settings/McpToolApprovalSettings";
+export {
+  ClientToolDecisionList,
+  type ClientToolDecisionListTool,
+} from "@/components/ui/Settings/ClientToolDecisionList";
+export {
+  approvalToolRows,
+  useApprovalTools,
+} from "@/components/ui/Settings/OfficeAppsToolDecisions";
+export {
+  addUnsetClientToolDecisions,
+  controlDecisionOf,
+  clientToolDecisionOf,
+  saveClientToolDecision,
+} from "@/lib/clientToolDecisions";
+export { alwaysAllowLockedLine } from "@/lib/toolCallGist/decisionLabels";
+export {
+  spokenApprovalFor,
+  spokenApprovalPieces,
+  voiceApprovalOffered,
+} from "@/lib/toolCallGist/spokenCard";
 export { DisclaimersPane } from "@/components/ui/Settings/DisclaimersPane";
 export {
   disclaimersSettingsHref,
@@ -665,6 +696,8 @@ export {
   type EratoEmailCodeBlockProps,
   type EratoAppointmentCodeBlockProps,
   type HostCardCodeBlockProps,
+  type ApprovalItemCardProps,
+  type ApprovalItemDecisionExtras,
   type ChatAddMenuExtraContentProps,
   type AddinStartViewProps,
   type AddinChatAccess,
@@ -672,6 +705,7 @@ export {
 } from "@/config/componentRegistry";
 export {
   CLIENT_TOOL_SCOPE_CHANGED,
+  clientToolAvailabilityChanged,
   clientToolScopeChanged,
   registerClientToolExecutor,
   type ClientToolApprovalScope,
@@ -766,6 +800,8 @@ export type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchem
 export type {
   ActionFacetInfo,
   ActionFacetRequest,
+  ApprovalToolInfo,
+  ChainedApprovalRef,
   ChatModel,
   ContentPart,
   FacetsResponse,

@@ -530,6 +530,7 @@ export const ChatInput = ({
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const composerShellRef = useRef<HTMLDivElement>(null);
   // Latched intent for conversational audio mode: VAD decided the user's
   // turn ended, and the dictated text should be submitted after the final
   // dictation chunk lands.
@@ -1452,6 +1453,31 @@ export const ChatInput = ({
   const focusInput = useCallback(() => {
     textareaRef.current?.focus();
   }, []);
+
+  const restoreFocusAfterBudgetDismiss = useCallback(() => {
+    const shell = composerShellRef.current;
+    if (!shell) return;
+    const ownerDocument = shell.ownerDocument;
+    focusInput();
+    if (textareaRef.current === ownerDocument.activeElement) return;
+
+    const controls = shell.querySelectorAll<HTMLElement>(
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector
+      "button, a[href], input, select, textarea, [tabindex]",
+    );
+    for (const control of controls) {
+      if (
+        control.tabIndex < 0 ||
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector
+        control.matches(":disabled, [aria-disabled='true']")
+      ) {
+        continue;
+      }
+      control.focus();
+      if (control === ownerDocument.activeElement) return;
+    }
+    shell.focus();
+  }, [focusInput]);
 
   // The handle is built above the pending-caret hook, whose layout effect has
   // to stay behind the auto-resize one, so the method reaches it through a ref.
@@ -3648,8 +3674,7 @@ export const ChatInput = ({
           </Alert>
         )}
 
-        {/* Budget warning - shows when user approaches spending limit */}
-        <BudgetWarning />
+        <BudgetWarning onDismiss={restoreFocusAfterBudgetDismiss} />
 
         {/* File error message */}
         {fileError && (
@@ -3820,6 +3845,8 @@ export const ChatInput = ({
           )}
           data-ui="chat-input-shell"
           data-layout={oneLineComposer ? "one-line" : undefined}
+          ref={composerShellRef}
+          tabIndex={-1}
         >
           {/* Out of flow on purpose: the shell is a gapped flex column, so an
               in-flow anchor would add a row of spacing to every composer. */}

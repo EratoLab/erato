@@ -56,6 +56,26 @@ export interface MessageError {
   filter_details?: MessageErrorFilterDetails | null;
 }
 
+/** The card a host shows for one accepted (or still pending) submission. */
+export interface HostSubmittedCard {
+  toolCallId: string;
+  language: string;
+  content: string;
+  pending?: boolean;
+}
+
+const NO_SUBMITTED_CARDS: readonly HostSubmittedCard[] = [];
+
+/** A message's submitted cards: `submittedCards`, else `submittedCard` as one. */
+export const submittedCardsOf = (
+  artifact:
+    | Pick<HostArtifact, "submittedCard" | "submittedCards">
+    | null
+    | undefined,
+): readonly HostSubmittedCard[] =>
+  artifact?.submittedCards ??
+  (artifact?.submittedCard ? [artifact.submittedCard] : NO_SUBMITTED_CARDS);
+
 /**
  * Host-neutral artifact envelope: a render hint set on an ASSISTANT message
  * whose triggering user message carried a host action facet (an Outlook
@@ -99,14 +119,15 @@ export interface HostArtifact {
    * Review hint only; the host still owns consent and live-state validation.
    * `pending` shows the card while its call is still being written or
    * checked, as for a draft the host fills in; otherwise only for an accepted
-   * call.
+   * call. Read as a one-item `submittedCards` when that is absent.
    */
-  submittedCard?: {
-    toolCallId: string;
-    language: string;
-    content: string;
-    pending?: boolean;
-  };
+  submittedCard?: HostSubmittedCard;
+  /**
+   * Every submission of the message that has a card, each shown after the
+   * step that made its call: an answer that makes several changes shows one
+   * card per change. Takes the place of `submittedCard` when set.
+   */
+  submittedCards?: readonly HostSubmittedCard[];
   /**
    * Replaces the default set of drifted fence tags rescued as the email
    * artifact when `bodyFormat` is present (the default covers the tags
@@ -133,17 +154,6 @@ export interface HostArtifact {
    * actually implements.
    */
   allowedClientActions?: string[];
-  /**
-   * Actions the deployment enforces a per-use confirmation for (the facet's
-   * `client_actions_always_ask`). The client must not offer or honor a
-   * persistent "always allow" for these.
-   */
-  alwaysAskClientActions?: string[];
-  /**
-   * Per action, how far a persistent "always allow" reaches: `device` (the
-   * default) or `session_document`, kept only for this session and document.
-   */
-  clientActionGrantScopes?: Record<string, string>;
   /** Host-validated proposal; a rendering hint, never authorization to write. */
   proposedClientAction?: string;
   /**
@@ -154,21 +164,14 @@ export interface HostArtifact {
    */
   shouldRenderEmailCard?: boolean;
   /**
-   * The producing facet's `presentation` from `GET /me/facets`:
-   * `render_buttons` (default) or `auto_prompt`.
-   */
-  clientActionPresentation?: string;
-  /**
-   * Id of the assistant message this artifact was stamped from. Lets a
-   * fence renderer key once-per-message behavior (auto-prompt) stably
-   * across remounts.
+   * Id of the assistant message this artifact was stamped from, so a fence
+   * renderer finds its message and keeps its state stably across remounts.
    */
   messageId?: string;
   /**
    * True only when this assistant message finished streaming during the
    * current session (a status transition to complete was observed). False
-   * for messages loaded from history — auto-prompt must never fire for
-   * those.
+   * for messages loaded from history, whose send-time item is unknown.
    */
   isFreshCompletion?: boolean;
   /**
@@ -183,8 +186,7 @@ export interface HostArtifact {
    * A fresh completion ({@link HostArtifact.isFreshCompletion}) WITHOUT
    * this field means no send-time identity was recorded (no open item at
    * send, or the completion could not be matched to a send): executors must
-   * fail closed — never auto-prompt, and treat the draft as stale rather
-   * than as unguarded. Absent together with `isFreshCompletion` for history
+   * fail closed and treat the draft as stale rather than as unguarded. Absent together with `isFreshCompletion` for history
    * messages, where the generation-time item is unknown.
    */
   itemIdentity?: string;

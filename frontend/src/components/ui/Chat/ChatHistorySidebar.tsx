@@ -66,6 +66,7 @@ import {
   useApplySidebarWidth,
 } from "./SidebarResizeHandle";
 import { SidebarToggle } from "./SidebarToggle";
+import { useSidebarPushesPage } from "./sidebarPage";
 import { useSidebarDrawerSwipe } from "./useSidebarDrawerSwipe";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
@@ -77,11 +78,12 @@ import {
   CalendarIcon,
   ResolvedIcon,
 } from "../icons";
+import { ERATO_GEOMETRY_CLASS } from "../styles/geometryClassNames";
 
 import type { SidebarToggleSurface } from "./SidebarToggle";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
-import type { ReactNode, Ref } from "react";
+import type { ReactNode, Ref, RefObject } from "react";
 
 // Create logger for this component
 const logger = createLogger("UI", "ChatHistorySidebar");
@@ -174,6 +176,11 @@ export interface ChatHistorySidebarProps {
   hasMoreSessions?: boolean;
   isLoadingMoreSessions?: boolean;
   onLoadMoreSessions?: () => void;
+  /**
+   * The page rendered beside the sidebar (see `useSidebarPage`). On a narrow
+   * screen a drag moves it with the sidebar.
+   */
+  pageRef?: RefObject<HTMLElement | null>;
 }
 
 const SidebarLogo = memo<{
@@ -484,6 +491,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     hasMoreSessions = false,
     isLoadingMoreSessions = false,
     onLoadMoreSessions,
+    pageRef,
   }) => {
     const ref = useRef<HTMLElement>(null);
     const navigate = useNavigate();
@@ -520,10 +528,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       [collapsed, effectiveCollapsedMode],
     );
 
-    // On a narrow screen the open sidebar is a drawer over the page; after a
+    // On a narrow screen the open sidebar pushes the page aside; after a
     // pick in it the person wants to see where they went.
     const isNarrowScreen = useIsNarrowScreen();
-    const isDrawerOpen = isNarrowScreen && !collapsed;
+    const isDrawerOpen = useSidebarPushesPage(collapsed);
     const closeDrawerAfterPick = useCallback(() => {
       if (isDrawerOpen) {
         onToggleCollapse?.();
@@ -565,6 +573,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       drawerRef: ref,
       scrimRef,
       edgeRef,
+      pageRef,
       onOpen: openDrawer,
       onClose: dismissDrawer,
     });
@@ -875,6 +884,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         width: isSlimMode
           ? "var(--theme-layout-sidebar-slim-width)"
           : "var(--sidebar-width-override, var(--theme-layout-sidebar-width))",
+        // A large text size scales the rem width past a narrow screen; a
+        // strip beside the drawer stays to tap it closed.
+        maxWidth: "calc(100vw - 3rem)",
       }),
       [isSlimMode],
     );
@@ -921,9 +933,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             />
           )}
 
-          {/* On a narrow screen the open sidebar lies over the page. A tap
-              beside it lands here and only closes it; the control underneath
-              never gets that tap. */}
+          {/* On a narrow screen the open sidebar pushes the page aside, and
+              this dims what stays in view of it. A tap there lands here and
+              only closes the sidebar; the control underneath never gets that
+              tap. */}
           {isNarrowScreen && (
             <div
               ref={scrimRef}
@@ -935,9 +948,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               onClick={dismissDrawer}
               className={clsx(
                 "drawer-overlay-skin viewport-layer fixed inset-0 z-40 touch-pan-y",
-                "transition-opacity duration-300 ease-in-out motion-reduce:transition-none",
+                ERATO_GEOMETRY_CLASS.sidebarPageGeometry,
+                "transition-[opacity,transform] duration-300 ease-in-out motion-reduce:transition-none",
                 isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0",
               )}
+              data-sidebar-pushed={isDrawerOpen ? "" : undefined}
               data-ui="sidebar-scrim"
               data-testid="sidebar-scrim"
             />

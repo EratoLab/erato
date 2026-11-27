@@ -1,13 +1,10 @@
 use crate::config::BudgetCurrency;
-use crate::metrics_constants::POSTGRES_QUERY_USER_SPENDING_BY_PROVIDER;
-use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::budget::{BudgetSnapshot, user_budget};
 use crate::state::AppState;
 use axum::extract::State;
 use axum::{Extension, Json};
-use chrono::{DateTime, Duration, Utc};
-use eyre::Report;
-use sea_orm::{DatabaseConnection, FromQueryResult};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -16,11 +13,11 @@ use utoipa::ToSchema;
 pub struct BudgetStatusResponse {
     /// Whether the budget feature is enabled
     enabled: bool,
-    /// Number of days in the current budget period
+    /// Number of days in the rolling budget window
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     budget_period_days: Option<u32>,
-    /// Current spending in the budget period for the user (unit-less)
+    /// Known spending in the rolling window for the user (unit-less)
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     current_spending: Option<f64>,
@@ -36,15 +33,52 @@ pub struct BudgetStatusResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     budget_currency: Option<BudgetCurrency>,
+    /// Extra detail for the optional Budget tab in web Settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    user_settings: Option<BudgetUserSettings>,
 }
 
-/// Database result for user token usage aggregation by chat provider
-#[derive(Debug, FromQueryResult)]
-struct UserTokenUsageByProvider {
-    chat_provider_id: String,
-    total_prompt_tokens: Option<i64>,
-    total_completion_tokens: Option<i64>,
-    total_reasoning_tokens: Option<i64>,
+#[derive(Debug, ToSchema, Serialize)]
+pub struct BudgetUserSettings {
+    pub as_of: DateTime<Utc>,
+    pub window_start: DateTime<Utc>,
+    pub models: Vec<BudgetModelSpending>,
+    pub pricing_complete: bool,
+    /// Extra allowance that becomes spendable in the next 24 hours with no new spend.
+    #[schema(required = true)]
+    pub allowance_freed_next_24h: Option<f64>,
+}
+
+#[derive(Debug, ToSchema, Serialize)]
+pub struct BudgetModelSpending {
+    pub identifier: String,
+    pub label: String,
+    /// Known spending. Null when none of this model's usage could be priced.
+    #[schema(required = true)]
+    pub spending: Option<f64>,
+    pub pricing_complete: bool,
+}
+
+impl From<BudgetSnapshot> for BudgetUserSettings {
+    fn from(snapshot: BudgetSnapshot) -> Self {
+        Self {
+            as_of: snapshot.as_of,
+            window_start: snapshot.window_start,
+            models: snapshot
+                .models
+                .into_iter()
+                .map(|model| BudgetModelSpending {
+                    identifier: model.identifier,
+                    label: model.label,
+                    spending: model.spending,
+                    pricing_complete: model.pricing_complete,
+                })
+                .collect(),
+            pricing_complete: snapshot.pricing_complete,
+            allowance_freed_next_24h: snapshot.allowance_freed_next_24h,
+        }
+    }
 }
 
 #[utoipa::path(
@@ -74,124 +108,26 @@ pub async fn budget_status(
             warn_threshold: None,
             budget_limit: None,
             budget_currency: None,
+            user_settings: None,
         }));
     }
 
-    // Calculate current budget period dates
-    let now = Utc::now();
-    let period_duration = Duration::days(budget_config.budget_period_days as i64);
-
-    // For simplicity, we'll calculate the period start as the beginning of the current period
-    // This assumes periods start from a fixed point and roll over every N days
-    // A more sophisticated implementation might use user-specific period starts
-    let days_since_epoch = now.timestamp() / (24 * 60 * 60);
-    let period_number = days_since_epoch / budget_config.budget_period_days as i64;
-    let period_start_timestamp =
-        period_number * budget_config.budget_period_days as i64 * 24 * 60 * 60;
-    let current_period_start =
-        DateTime::from_timestamp(period_start_timestamp, 0).unwrap_or(now - period_duration);
-    let current_period_end = current_period_start + period_duration;
-
-    // Calculate current spending for the user in this period
-    let current_spending = match calculate_user_spending(
-        &app_state.db,
-        &me_user.id,
-        current_period_start,
-        current_period_end,
-        &app_state,
-    )
-    .await
-    {
-        Ok(spending) => Some(spending),
-        Err(e) => {
-            tracing::error!("Failed to calculate user spending: {}", e);
-            return Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
+    let snapshot = user_budget(&app_state.db, &app_state.config, &me_user.id, Utc::now())
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "Failed to calculate user budget");
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(BudgetStatusResponse {
         enabled: true,
         budget_period_days: Some(budget_config.budget_period_days),
-        current_spending,
+        current_spending: Some(snapshot.current_spending),
         warn_threshold: Some(budget_config.warn_threshold),
-        budget_limit: budget_config.max_budget,
+        budget_limit: Some(snapshot.limit),
         budget_currency: Some(budget_config.budget_currency.clone()),
+        user_settings: budget_config
+            .frontend_tab_enabled()
+            .then(|| snapshot.into()),
     }))
-}
-
-/// Calculate the total spending for a user in a given time period
-async fn calculate_user_spending(
-    db: &DatabaseConnection,
-    user_id: &str,
-    period_start: DateTime<Utc>,
-    period_end: DateTime<Utc>,
-    app_state: &AppState,
-) -> Result<f64, Report> {
-    // Use the updated view to get token usage grouped by chat provider
-    let sql = r#"
-        SELECT 
-            chat_provider_id,
-            SUM(total_prompt_tokens)::BIGINT as total_prompt_tokens,
-            SUM(total_completion_tokens)::BIGINT as total_completion_tokens,
-            SUM(total_reasoning_tokens)::BIGINT as total_reasoning_tokens
-        FROM user_daily_token_usage
-        WHERE user_id = $1
-          AND usage_date >= $2::date
-          AND usage_date < $3::date
-        GROUP BY chat_provider_id
-    "#;
-
-    let usage_results =
-        UserTokenUsageByProvider::find_by_statement(named_statement_from_sql_and_values(
-            sea_orm::DatabaseBackend::Postgres,
-            POSTGRES_QUERY_USER_SPENDING_BY_PROVIDER,
-            sql,
-            vec![
-                user_id.into(),
-                period_start.date_naive().into(),
-                period_end.date_naive().into(),
-            ],
-        ))
-        .all(db)
-        .await?;
-
-    let mut total_cost = 0.0;
-
-    // Calculate cost for each provider separately using their specific pricing
-    for usage in usage_results {
-        let prompt_tokens = usage.total_prompt_tokens.unwrap_or(0) as f64;
-        let completion_tokens = usage.total_completion_tokens.unwrap_or(0) as f64;
-        let reasoning_tokens = usage.total_reasoning_tokens.unwrap_or(0) as f64;
-
-        // Find the provider configuration for this usage
-        let provider_config = if let Some(chat_providers) = &app_state.config.chat_providers {
-            chat_providers.providers.get(&usage.chat_provider_id)
-        } else if let Some(single_provider) = &app_state.config.chat_provider {
-            // For legacy single provider, match any provider ID
-            Some(single_provider)
-        } else {
-            None
-        };
-
-        if let Some(provider) = provider_config {
-            // Calculate costs per million tokens using provider-specific pricing
-            let prompt_cost = (prompt_tokens / 1_000_000.0)
-                * provider.model_capabilities.cost_input_tokens_per_1m;
-            let completion_cost = (completion_tokens / 1_000_000.0)
-                * provider.model_capabilities.cost_output_tokens_per_1m;
-            // Reasoning tokens are priced the same as output tokens
-            let reasoning_cost = (reasoning_tokens / 1_000_000.0)
-                * provider.model_capabilities.cost_output_tokens_per_1m;
-
-            total_cost += prompt_cost + completion_cost + reasoning_cost;
-        } else {
-            // If we can't find the provider config, log a warning but continue
-            tracing::warn!(
-                "No provider configuration found for chat_provider_id: {}, skipping cost calculation",
-                usage.chat_provider_id
-            );
-        }
-    }
-
-    Ok(total_cost)
 }

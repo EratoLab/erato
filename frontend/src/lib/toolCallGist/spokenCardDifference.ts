@@ -1061,7 +1061,13 @@ export const spokenDifference = (
   if (!words.full) return { intro: "reread", pieces: whole };
   const heard = new Set(previous.heard);
   const before = previous.approval;
-  if (before.type !== "call" || next.type !== "call") {
+  // An app's summary is its own sentence, with no entries to compare.
+  if (
+    before.type !== "call" ||
+    next.type !== "call" ||
+    before.summary ||
+    next.summary
+  ) {
     return introduced(whole, "reread", words);
   }
   const oldCard = toolCallCardOf(before.label, before.input);

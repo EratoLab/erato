@@ -294,4 +294,48 @@ describe("buildContinueStreamBody", () => {
       shows_limit_and_builtin_child_items: true,
     });
   });
+  it("names an approval with a host card's choices, and sends them with approvals only", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        itemDecisions: [
+          {
+            approvalId: "call-a.apply",
+            decision: "approve",
+            clientConfirmation: { replace_whole_document: true },
+          },
+        ],
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [
+        {
+          approval_id: "call-a.apply",
+          decision: "approve",
+          client_confirmation: { replace_whole_document: true },
+        },
+      ],
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "reject",
+        itemDecisions: [
+          {
+            approvalId: "call-a.apply",
+            decision: "reject",
+            clientConfirmation: { replace_whole_document: true },
+          },
+        ],
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [{ approval_id: "call-a.apply", decision: "reject" }],
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
+  });
 });

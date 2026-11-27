@@ -1,5 +1,8 @@
+import { i18n, setupI18n } from "@lingui/core";
+import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -14,6 +17,7 @@ import {
   ThemeProvider,
   type ThemeMode,
 } from "@/components/providers/ThemeProvider";
+import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   clearMcpAuthorization,
@@ -22,6 +26,7 @@ import {
 import { getMcpOauthServerId } from "@/lib/mcpOauthCallback";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
 import { toast, Toaster } from "../Toast";
@@ -29,6 +34,10 @@ import { toast, Toaster } from "../Toast";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 import type { ReactNode } from "react";
+
+vi.mock("@/lib/systemTextSize", () => ({
+  systemTextScale: () => 1,
+}));
 
 const mockNavigate = vi.fn();
 const localStorageValues = new Map<string, string>();
@@ -49,8 +58,17 @@ vi.mock("./VoiceOutputSetting", () => ({
 }));
 
 vi.mock("../Feedback/Alert", () => ({
-  Alert: ({ children }: { children: ReactNode }) => (
-    <div role="alert">{children}</div>
+  Alert: ({
+    children,
+    action,
+  }: {
+    children: ReactNode;
+    action?: ReactNode;
+  }) => (
+    <div role="alert">
+      {children}
+      {action}
+    </div>
   ),
 }));
 
@@ -107,6 +125,7 @@ function renderDialog({
   initialTab,
   mcpServersTabEnabled = true,
   desktopSidecarTabEnabled = false,
+  budgetTabEnabled = false,
   disclaimersTabEnabled = false,
   dataTabEnabled = true,
   audioTranscriptionEnabled = false,
@@ -121,6 +140,7 @@ function renderDialog({
   profile = userProfile,
   themeMode = "light",
   userPreferencesEnabled = true,
+  formatLocale,
 }: {
   initialEntries?: string[];
   initialTab?:
@@ -128,10 +148,12 @@ function renderDialog({
     | "appearance"
     | "audio"
     | "serversTools"
+    | "budget"
     | "data"
     | "disclaimers";
   mcpServersTabEnabled?: boolean;
   desktopSidecarTabEnabled?: boolean;
+  budgetTabEnabled?: boolean;
   disclaimersTabEnabled?: boolean;
   dataTabEnabled?: boolean;
   audioTranscriptionEnabled?: boolean;
@@ -144,7 +166,9 @@ function renderDialog({
   profile?: UserProfile | null;
   themeMode?: ThemeMode;
   userPreferencesEnabled?: boolean;
+  formatLocale?: string;
 } = {}) {
+  const locale = formatLocale ? setupI18n({ locale: formatLocale }) : i18n;
   const tree = (shownProfile: UserProfile | null, isOpen: boolean) => (
     <MemoryRouter initialEntries={initialEntries}>
       <StaticFeatureConfigProvider
@@ -154,6 +178,7 @@ function renderDialog({
             dataTabEnabled,
             mcpServersTabEnabled,
             desktopSidecarTabEnabled,
+            budgetTabEnabled,
             disclaimersTabEnabled,
           },
           audioTranscription: {
@@ -187,7 +212,11 @@ function renderDialog({
       </StaticFeatureConfigProvider>
     </MemoryRouter>
   );
-  const view = render(tree(profile, true));
+  const view = render(tree(profile, true), {
+    wrapper: ({ children }) => (
+      <I18nProvider i18n={locale}>{children}</I18nProvider>
+    ),
+  });
   return Object.assign(view, {
     update: (next: { profile?: UserProfile | null; isOpen?: boolean }) =>
       view.rerender(
@@ -245,6 +274,105 @@ describe("UserPreferencesDialog", () => {
     expect(
       screen.getByRole("tab", { name: "Personalization" }),
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("hides the Budget tab by default", () => {
+    renderDialog({ initialTab: "budget" });
+    expect(screen.queryByRole("tab", { name: "Budget" })).toBeNull();
+  });
+
+  it("loads the Budget tab on demand, retries, and keeps stale figures after a failed refresh", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 } },
+    });
+    const report = {
+      enabled: true,
+      budget_period_days: 7,
+      current_spending: 1234.56,
+      budget_limit: 1000,
+      budget_currency: "EUR",
+      user_settings: {
+        as_of: "2026-10-25T12:00:00Z",
+        window_start: "2026-10-18T12:00:00Z",
+        models: [
+          {
+            identifier: "chat",
+            label: "Chat Model",
+            spending: 1234.56,
+            pricing_complete: true,
+          },
+        ],
+        pricing_complete: true,
+        allowance_freed_next_24h: 0,
+      },
+    };
+    const budgetFetch = vi
+      .fn<() => Promise<Response>>()
+      .mockImplementation(async () => createJsonResponse({}, 500));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith("/me/budget")
+        ? budgetFetch()
+        : createJsonResponse([]),
+    );
+
+    renderDialog({
+      budgetTabEnabled: true,
+      formatLocale: "de-DE",
+      queryClient,
+    });
+    expect(budgetFetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("tab", { name: "Budget" }));
+    const panel = within(screen.getByRole("tabpanel", { name: "Budget" }));
+    expect(panel.getByRole("status")).toHaveTextContent("Loading budget");
+    const retry = await panel.findByRole("button", { name: "Retry" });
+    budgetFetch.mockResolvedValueOnce(createJsonResponse(report));
+    fireEvent.click(retry);
+
+    expect(
+      await panel.findByText("Spending over the last 7 days"),
+    ).toBeVisible();
+    expect(panel.getByText("Chat Model").closest("tr")).toHaveTextContent(
+      "1.234,56 €",
+    );
+    expect(
+      panel.getByText("Remaining allowance").parentElement,
+    ).toHaveTextContent("0,00 €");
+    expect(
+      panel.getByText("Budget freeing up in the next 24 hours").parentElement,
+    ).toHaveTextContent("0,00 €");
+
+    await act(() =>
+      queryClient.invalidateQueries({ queryKey: BUDGET_QUERY_KEY }),
+    );
+    expect(await panel.findByText(/figures may be out of date/)).toBeVisible();
+    expect(panel.getByText("Chat Model")).toBeVisible();
+
+    budgetFetch.mockResolvedValueOnce(
+      createJsonResponse({
+        ...report,
+        user_settings: {
+          ...report.user_settings,
+          pricing_complete: false,
+          allowance_freed_next_24h: null,
+          models: [
+            ...report.user_settings.models,
+            {
+              identifier: "image",
+              label: "Image Tool",
+              spending: null,
+              pricing_complete: false,
+            },
+          ],
+        },
+      }),
+    );
+    fireEvent.click(panel.getByRole("button", { name: "Retry" }));
+    expect(await panel.findByText("Image Tool")).toBeVisible();
+    expect(panel.getByText("Image Tool").closest("tr")).toHaveTextContent(
+      "Unavailable",
+    );
+    expect(panel.getByText("Partial")).toBeVisible();
+    expect(panel.getAllByText("Unavailable")).toHaveLength(4);
   });
 
   it("loads Markdown on the final tab and retries a failed request", async () => {
@@ -340,6 +468,20 @@ describe("UserPreferencesDialog", () => {
     expect(
       within(control).getByRole("tab", { name: "Default" }),
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("leaves the text size to the device inside an app", () => {
+    installHostShell({});
+    try {
+      renderDialog();
+      fireEvent.click(screen.getByRole("tab", { name: "Appearance" }));
+
+      expect(
+        screen.queryByRole("tablist", { name: "Text size" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      removeHostShell();
+    }
   });
 
   it("renders accessible vertical tabs and linked tabpanels", () => {
@@ -1347,5 +1489,127 @@ describe("UserPreferencesDialog", () => {
         screen.getByText("Could not save preferences. Please try again."),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("UserPreferencesDialog on a narrow screen", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 639.98px)",
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => {},
+    }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      createJsonResponse([]),
+    );
+  });
+
+  it("lists the tabs as pages, opens one and goes back to the list", () => {
+    renderDialog();
+
+    const dialog = screen.getByRole("dialog", { name: "Preferences" });
+    expect(dialog).toHaveAttribute("data-placement", "fullscreen");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Back to Preferences" }),
+    ).toBeNull();
+    const list = screen.getByRole("list", { name: "Preferences" });
+    expect(
+      within(list)
+        .getAllByRole("button")
+        .map((row) => row.textContent),
+    ).toEqual(["Personalization", "Appearance", "MCP & Apps", "Data"]);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+    fireEvent.click(within(list).getByRole("button", { name: "Appearance" }));
+
+    expect(screen.getByRole("dialog", { name: "Appearance" })).toBeVisible();
+    const back = screen.getByRole("button", { name: "Back to Preferences" });
+    expect(back).toHaveFocus();
+    expect(screen.queryByRole("list", { name: "Preferences" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Color mode" })).toBeVisible();
+    expect(screen.getByLabelText("Nickname")).not.toBeVisible();
+
+    fireEvent.click(back);
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Appearance" })).toHaveFocus();
+    expect(screen.queryByRole("heading", { name: "Color mode" })).toBeNull();
+  });
+
+  it("keeps focus in the dialog after a tap, on the dialog rather than a button", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }), {
+      detail: 1,
+    });
+
+    const page = screen.getByRole("dialog", { name: "Appearance" });
+    expect(page).toHaveFocus();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+      { detail: 1 },
+    );
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toHaveFocus();
+  });
+
+  it("keeps unsaved edits across the list and shows Save on their page only", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalization" }));
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Max" },
+    });
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+    );
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalization" }));
+    expect(screen.getByLabelText("Nickname")).toHaveValue("Max");
+  });
+
+  it("names a page once, in the title", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "MCP & Apps" }));
+
+    expect(screen.getAllByRole("heading", { name: "MCP & Apps" })).toHaveLength(
+      1,
+    );
+  });
+
+  it("opens on the page a link asks for, with the list one step back", () => {
+    renderDialog({ initialTab: "data" });
+
+    expect(screen.getByRole("dialog", { name: "Data" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Archive all chats" }),
+    ).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+    );
+    expect(screen.getByRole("list", { name: "Preferences" })).toBeVisible();
+  });
+
+  it("starts on the list again each time it opens", () => {
+    const view = renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    view.update({ isOpen: false });
+    view.update({ isOpen: true });
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toBeVisible();
+    expect(screen.getByRole("list", { name: "Preferences" })).toBeVisible();
   });
 });

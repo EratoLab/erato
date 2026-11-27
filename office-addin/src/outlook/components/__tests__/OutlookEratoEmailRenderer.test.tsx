@@ -14,6 +14,11 @@ import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../../test/mocks/outlook/mailbox";
+import {
+  createOutlookProposalExecutor,
+  markOutlookFormOpened,
+  outlookFormOpened,
+} from "../../utils/outlookProposalApply";
 import { OutlookEratoEmailRenderer } from "../OutlookEratoEmailRenderer";
 
 import type * as ComposeSelectionStore from "../../hooks/composeSelectionStore";
@@ -21,17 +26,16 @@ import type * as EratoLibrary from "@erato/frontend/library";
 
 // The renderer's collaborators are mocked at the seams the tests steer:
 // the artifact + chat snapshot (what AddinChat stamps), the current Outlook
-// item identity, the persisted decisions, and the Office.js reply module —
+// item identity, the user's server decisions, and the Office.js reply module —
 // the tests only assert WHETHER the reply form is reached, never how.
 const mockUseOutlookMailItem = vi.fn();
 const mockUseOutlookArtifact = vi.fn();
 const mockUseChatContext = vi.fn();
-const mockUsePersistedState = vi.fn();
 const mockOpenReplyForm = vi.fn();
-const mockGetReadModeRecipientSummary = vi.fn();
 const mockCopyEmailToClipboard = vi.fn();
-const mockRegisterConfirmation = vi.fn();
-const mockUnregisterConfirmation = vi.fn();
+const server = vi.hoisted(() => ({
+  decisions: {},
+}));
 const mockComposeSelection = vi.fn(() => ({
   data: "",
   sourceProperty: "body",
@@ -42,46 +46,10 @@ const realLibrary = await vi.hoisted(() =>
 );
 
 vi.mock("@erato/frontend/library", async () => ({
-  // Mirrors the real card's lifecycle contract: decision buttons only while
-  // pending, a resolved row afterwards.
-  ActionConfirmationCard: (props: {
-    onAllowOnce: () => void;
-    onAlwaysAllow: () => void;
-    onDeny: () => void;
-    status?: string;
-    resolvedLabel?: string;
-    isBusy?: boolean;
-  }) => (
-    <div
-      data-testid="confirmation-card"
-      data-status={props.status ?? "pending"}
-      data-busy={props.isBusy ? "true" : "false"}
-    >
-      {(props.status ?? "pending") === "pending" ? (
-        <>
-          <button
-            type="button"
-            disabled={props.isBusy}
-            onClick={props.onAllowOnce}
-          >
-            allow-once
-          </button>
-          <button
-            type="button"
-            disabled={props.isBusy}
-            onClick={props.onAlwaysAllow}
-          >
-            always-allow
-          </button>
-          <button type="button" disabled={props.isBusy} onClick={props.onDeny}>
-            deny
-          </button>
-        </>
-      ) : (
-        <span data-testid="resolved-label">{props.resolvedLabel}</span>
-      )}
-    </div>
+  Button: ({ icon: _icon, ...props }: Record<string, unknown>) => (
+    <button type="button" {...props} />
   ),
+  isEmailDraftHtml: realLibrary.isEmailDraftHtml,
   sanitizeHtmlPreview: realLibrary.sanitizeHtmlPreview,
   emailDraftHtmlToText: realLibrary.emailDraftHtmlToText,
   copyEmailToClipboard: (...args: unknown[]) =>
@@ -91,17 +59,16 @@ vi.mock("@erato/frontend/library", async () => ({
     () => mockUseChatContext(),
   ),
   useOutlookArtifact: () => mockUseOutlookArtifact(),
-  usePersistedState: () => mockUsePersistedState(),
-  useConfirmationRegistryStore: (
-    selector: (state: {
-      registerConfirmation: (chatId: string, id: string) => void;
-      unregisterConfirmation: (chatId: string, id: string) => void;
-    }) => unknown,
-  ) =>
-    selector({
-      registerConfirmation: mockRegisterConfirmation,
-      unregisterConfirmation: mockUnregisterConfirmation,
-    }),
+  useApprovalTools: () => [
+    { qualified_name: "outlook/open_reply", client_actions: ["outlook.reply"] },
+    {
+      qualified_name: "outlook/open_reply_all",
+      client_actions: ["outlook.reply_all"],
+    },
+  ],
+  useProfile: () => ({
+    profile: { client_tool_decisions: server.decisions },
+  }),
 }));
 
 vi.mock("../../providers/OutlookMailItemProvider", () => ({
@@ -116,7 +83,6 @@ vi.mock("../../hooks/composeSelectionStore", async (importOriginal) => ({
 vi.mock("../../utils/outlookReadReply", () => ({
   ReplyBodyTooLargeError: class ReplyBodyTooLargeError extends Error {},
   isReplyFormHostSupported: () => true,
-  getReadModeRecipientSummary: () => mockGetReadModeRecipientSummary(),
   openReplyForm: (...args: unknown[]) => mockOpenReplyForm(...args),
 }));
 
@@ -129,15 +95,12 @@ interface TestArtifact {
   renderMode: "body" | "suggestions";
   messageId: string;
   allowedClientActions: string[];
-  clientActionPresentation: string;
   isFreshCompletion?: boolean;
   itemIdentity?: string;
   proposedClientAction?: string;
   rewriteTarget?: { selectedText: string; sourceProperty: "body" | "subject" };
 }
 
-// Unique per test: the renderer's once-per-message auto-prompt slot is
-// module-level state that intentionally survives remounts (and thus tests).
 let nextMessageId = 0;
 
 function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
@@ -148,7 +111,6 @@ function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
     renderMode: "body",
     messageId: `msg-${nextMessageId}`,
     allowedClientActions: ["outlook.reply", "outlook.reply_all"],
-    clientActionPresentation: "render_buttons",
     ...overrides,
   };
 }
@@ -156,7 +118,10 @@ function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
 function prime(options: {
   artifact: TestArtifact;
   currentItemIdentity: string | null;
+  /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
+  /** The stored answer's parts. */
+  content?: unknown[];
 }) {
   mockUseOutlookArtifact.mockReturnValue(options.artifact);
   mockUseOutlookMailItem.mockReturnValue({
@@ -169,37 +134,12 @@ function prime(options: {
       [options.artifact.messageId]: {
         id: options.artifact.messageId,
         role: "assistant",
+        content: options.content,
       },
     },
     messageOrder: [options.artifact.messageId],
   });
-  mockUsePersistedState.mockReturnValue([options.decisions ?? {}, vi.fn()]);
-  mockGetReadModeRecipientSummary.mockReturnValue({
-    sender: "Alice Sender",
-    recipients: ["Bob", "Carol"],
-  });
-}
-
-/** Primes a fresh auto_prompt proposal so the card auto-surfaces on render —
- * clicks execute directly, so this is the only route to the card. */
-function primeAutoCard(
-  options: {
-    proposedAction?: string;
-    decisions?: Record<string, string>;
-  } = {},
-): TestArtifact {
-  const artifact = makeArtifact({
-    isFreshCompletion: true,
-    itemIdentity: "item-a",
-    clientActionPresentation: "auto_prompt",
-    proposedClientAction: options.proposedAction ?? REPLY,
-  });
-  prime({
-    artifact,
-    currentItemIdentity: "item-a",
-    decisions: options.decisions,
-  });
-  return artifact;
+  server.decisions = options.decisions ?? {};
 }
 
 beforeAll(() => {
@@ -281,7 +221,6 @@ describe("OutlookEratoEmailRenderer — wrong-item guard", () => {
         itemIdentity: "item-a",
       }),
       currentItemIdentity: "item-a",
-      decisions: { [`${FACET}/${REPLY}`]: "always" },
     });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
@@ -297,10 +236,9 @@ describe("OutlookEratoEmailRenderer — identity-unknown completions degrade to 
   // When no send-time identity is known for a regenerate/edit (e.g. after a
   // reload — the identity map is in-memory only), AddinChat does NOT stamp
   // the completion fresh. The artifact is then indistinguishable from a
-  // history draft: buttons stay usable, the stale-item error never fires
-  // (it requires a KNOWN mismatching identity), and auto-prompt is
-  // impossible. A click executes directly — the reply form is the review
-  // surface (universal click-is-consent).
+  // history draft: buttons stay usable and the stale-item error never fires
+  // (it requires a KNOWN mismatching identity). A click executes directly —
+  // the reply form is the review surface (universal click-is-consent).
 
   it("executes a click directly with no stale-item error", async () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
@@ -312,309 +250,319 @@ describe("OutlookEratoEmailRenderer — identity-unknown completions degrade to 
 
     expect(mockOpenReplyForm).toHaveBeenCalledWith(REPLY, "Draft body", false);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
   });
+});
 
-  it("never auto-prompts, even under auto_prompt with a granted proposal", () => {
+describe("OutlookEratoEmailRenderer — the user's decisions", () => {
+  it("opens nothing on its own for a proposal, whatever the user decided for Erato", () => {
     prime({
       artifact: makeArtifact({
-        clientActionPresentation: "auto_prompt",
+        isFreshCompletion: true,
+        itemIdentity: "item-a",
         proposedClientAction: REPLY,
       }),
       currentItemIdentity: "item-a",
-      decisions: { [`${FACET}/${REPLY}`]: "always" },
+      decisions: { "outlook/open_reply": "always_allow" },
     });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
     expect(mockOpenReplyForm).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-  });
-});
-
-describe("OutlookEratoEmailRenderer — confirmation-card item snapshot", () => {
-  // The card only surfaces on the auto-prompt path (clicks execute
-  // directly); its open-time snapshot still guards the allow click against
-  // an email switch while the card was showing.
-  it("aborts allow-once when the email changed while the card was open", async () => {
-    primeAutoCard();
-    const view = render(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
-    );
-
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-
-    mockUseOutlookMailItem.mockReturnValue({
-      mailItem: { isComposeMode: false },
-      itemIdentity: "item-b",
-    });
-    view.rerender(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
-    );
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-    });
-
-    expect(mockOpenReplyForm).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "written for a different email",
-    );
-    // The card closes; the inline alert is the failure feedback.
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-  });
-
-  it("aborts always-allow the same way (the persisted grant must not bypass the snapshot)", async () => {
-    primeAutoCard();
-    const view = render(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
-    );
-
-    mockUseOutlookMailItem.mockReturnValue({
-      mailItem: { isComposeMode: false },
-      itemIdentity: "item-b",
-    });
-    view.rerender(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
-    );
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "always-allow" }));
-    });
-
-    expect(mockOpenReplyForm).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "written for a different email",
-    );
-  });
-
-  it("executes a confirmed action when the item is unchanged", async () => {
-    primeAutoCard();
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-    });
-
-    expect(mockOpenReplyForm).toHaveBeenCalledWith(REPLY, "Draft body", false);
-  });
-
-  // The add-in half of the ERMAIN-470 message-queue hold: a pending card
-  // registers into the shared confirmation registry (keyed by chat) and
-  // deregisters when resolved, so the composer's auto-send drain waits.
-  it("registers the pending confirmation and deregisters it on resolve", async () => {
-    primeAutoCard();
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-    expect(mockRegisterConfirmation).toHaveBeenCalledWith(
-      "chat-1",
-      expect.any(String),
-    );
-    const registrationId = mockRegisterConfirmation.mock
-      .calls[0]?.[1] as string;
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "deny" }));
-    });
-
-    expect(mockUnregisterConfirmation).toHaveBeenCalledWith(
-      "chat-1",
-      registrationId,
-    );
-  });
-});
-
-describe("OutlookEratoEmailRenderer — auto-prompt one-shot", () => {
-  function makeAutoPromptArtifact(): TestArtifact {
-    return makeArtifact({
-      isFreshCompletion: true,
-      itemIdentity: "item-a",
-      clientActionPresentation: "auto_prompt",
-      proposedClientAction: REPLY,
-    });
-  }
-
-  it("auto-surfaces the confirmation card for a fresh matching proposal", () => {
-    prime({
-      artifact: makeAutoPromptArtifact(),
-      currentItemIdentity: "item-a",
-    });
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-  });
-
-  it("does not resurrect the auto-prompt when a denied action is later granted", () => {
-    prime({
-      artifact: makeAutoPromptArtifact(),
-      currentItemIdentity: "item-a",
-      decisions: { [`${FACET}/${REPLY}`]: "never" },
-    });
-    const view = render(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
-    );
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-
-    // The user flips the setting AFTER the completion has passed. The
-    // once-per-message slot was consumed on the first fresh render, so the
-    // grant must not pop a reply form now.
-    mockUsePersistedState.mockReturnValue([
-      { [`${FACET}/${REPLY}`]: "always" },
-      vi.fn(),
-    ]);
-    view.rerender(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
-    );
-
-    expect(mockOpenReplyForm).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-  });
-
-  it("does not auto-open for a message that is no longer the latest assistant message", () => {
-    const artifact = makeAutoPromptArtifact();
-    prime({
-      artifact,
-      currentItemIdentity: "item-a",
-      decisions: { [`${FACET}/${REPLY}`]: "always" },
-    });
-    mockUseChatContext.mockReturnValue({
-      messages: {
-        [artifact.messageId]: { id: artifact.messageId, role: "assistant" },
-        newer: { id: "newer", role: "assistant" },
-      },
-      messageOrder: [artifact.messageId, "newer"],
-    });
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    expect(mockOpenReplyForm).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-  });
-
-  it("does not auto-open when the user switched emails before the prompt could fire", () => {
-    prime({
-      artifact: makeAutoPromptArtifact(),
-      currentItemIdentity: "item-b",
-      decisions: { [`${FACET}/${REPLY}`]: "always" },
-    });
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    expect(mockOpenReplyForm).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-  });
-});
-
-describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
-  // No persistent resolved record: the card closes on every outcome, and
-  // success feedback is the ~2s "Opened!" swap on the action button (the
-  // add-in's standard transient idiom, like Copy's "Copied!").
-  it("closes the card after allow-once and shows the transient Opened! swap", async () => {
-    primeAutoCard();
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    expect(screen.getByRole("button", { name: "Reply" })).toBeDisabled();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-    });
-
-    expect(mockOpenReplyForm).toHaveBeenCalledWith(REPLY, "Draft body", false);
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
-    // Only the executed action swaps; the sibling keeps its label.
-    expect(
-      screen.getByRole("button", { name: "Reply All" }),
-    ).toBeInTheDocument();
-  });
-
-  it("swaps the reply-all button when that action was the one executed", async () => {
-    primeAutoCard({ proposedAction: "outlook.reply_all" });
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-    });
-
-    expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reply All" })).toBeNull();
-  });
-
-  it("closes the card on deny and re-enables the buttons", () => {
-    primeAutoCard();
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "deny" }));
-
-    expect(mockOpenReplyForm).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
   });
 
-  it("closes the card when the reply form fails; the inline alert is the feedback", async () => {
-    mockOpenReplyForm.mockRejectedValueOnce(new Error("boom"));
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    primeAutoCard();
+  it("hides an action the user set to Never and keeps the others", () => {
+    prime({
+      artifact: makeArtifact(),
+      currentItemIdentity: "item-a",
+      decisions: { "outlook/open_reply_all": "never_allow" },
+    });
+    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+
+    expect(screen.queryByRole("button", { name: "Reply All" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
+  });
+
+  it("shows Opened! only on the button that opened the form", async () => {
+    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
+      fireEvent.click(screen.getByRole("button", { name: "Reply All" }));
     });
 
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+    expect(mockOpenReplyForm).toHaveBeenCalledWith(
+      "outlook.reply_all",
+      "Draft body",
+      false,
+    );
+    expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
+  });
+});
+
+describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", () => {
+  const APPLY_ID = "call-propose.apply";
+  const proposed = (apply?: Record<string, unknown>) => [
+    { content_type: "text", text: "```erato-email\nDraft body\n```\n" },
+    {
+      content_type: "tool_use",
+      tool_call_id: "call-propose",
+      tool_name: "propose_client_action",
+      status: "success",
+      input: { action: REPLY },
+      output: {
+        apply: { call_id: APPLY_ID },
+        action: REPLY,
+        status: "proposed",
+      },
+    },
+    ...(apply
+      ? [
+          {
+            content_type: "tool_use",
+            tool_call_id: APPLY_ID,
+            tool_name: "open_reply",
+            input: {},
+            ...apply,
+          },
+        ]
+      : []),
+  ];
+  const show = (
+    content: unknown[],
+    block = "Draft body",
+    before?: (artifact: TestArtifact) => void,
+  ) => {
+    const artifact = makeArtifact({ proposedClientAction: REPLY });
+    before?.(artifact);
+    prime({ artifact, currentItemIdentity: "item-a", content });
+    render(<OutlookEratoEmailRenderer content={block} isHtml={false} />);
+  };
+
+  it("says the reply waits for the decision, which stays the one primary action", () => {
+    show(proposed());
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "secondary",
+    );
+  });
+
+  it("speaks only for the draft the proposal opens, and fills no button beside it", () => {
+    show(
+      [
+        { content_type: "text", text: "```text\nAn aside\n```\n" },
+        ...proposed(),
+      ],
+      "An aside",
+    );
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "secondary",
+    );
+  });
+
+  it("does not say no reply was opened when the draft's own button opened one", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "rejected", reason: "user_rejected" },
+      }),
+      "Draft body",
+      (artifact) => markOutlookFormOpened(artifact.messageId, REPLY),
+    );
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
+  });
+
+  it("says no reply was opened after the user denied it", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "rejected", reason: "user_rejected" },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Denied. No reply was opened.",
+    );
+    expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
+  });
+
+  it("says the reply opened once the server's call did", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "applied" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Reply opened in Outlook.",
+    );
+  });
+
+  it("names another open email as why no reply opened", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "unavailable", reason: "other_item" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "a different email is open now",
+    );
+  });
+
+  it("gives the way forward when the draft was too large to prefill", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "failed", reason: "too_large" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Draft is too large to prefill a reply. Use Copy and paste it into a reply instead.",
+    );
+  });
+
+  it("turns the draft's own reply buttons off while the server's call opens the reply", () => {
+    show(proposed({ status: "in_progress" }));
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Opening the reply…",
+    );
+    expect(screen.getByRole("button", { name: "Reply" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reply All" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    expect(mockOpenReplyForm).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
+  });
+
+  it("keeps the reply buttons of another draft in the answer usable meanwhile", () => {
+    show(
+      [
+        { content_type: "text", text: "```text\nAn aside\n```\n" },
+        ...proposed({ status: "in_progress" }),
+      ],
+      "An aside",
+    );
+
+    expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
+  });
+
+  it("opens one form when the server's call arrives while the draft's own button still opens it", async () => {
+    let finish!: () => void;
+    mockOpenReplyForm.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    let artifact!: TestArtifact;
+    show(proposed(), "Draft body", (shown) => {
+      artifact = shown;
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    expect(mockOpenReplyForm).toHaveBeenCalledTimes(1);
+
+    const execute = createOutlookProposalExecutor("open_reply", () => ({
+      itemIdentity: () => "item-a",
+      message: () => ({
+        content: proposed() as EratoLibrary.ContentPart[],
+        artifact,
+        sendItemIdentity: undefined,
+        latest: true,
+      }),
+    }));
+    const answer = await execute(
+      {
+        proposal_call_id: "call-propose",
+        action: REPLY,
+        item_identity: "item-a",
+      },
+      {
+        toolCallId: `${artifact.messageId}.apply`,
+        messageId: artifact.messageId,
+        chatId: "chat-1",
+      },
+    );
+
+    expect(answer).toMatchObject({
+      result: { status: "applied", reason: "already_applied" },
+    });
+    expect(mockOpenReplyForm).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+  });
+
+  it("lets the server's call open the reply after the draft's own button failed to", async () => {
+    mockOpenReplyForm.mockRejectedValueOnce(new Error("host"));
+    let artifact!: TestArtifact;
+    show(proposed(), "Draft body", (shown) => {
+      artifact = shown;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    });
+
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Failed to open the reply form",
+      "Failed to open the reply form.",
     );
-    // No success swap on a failed open.
-    expect(screen.queryByRole("button", { name: "Opened!" })).toBeNull();
-    warn.mockRestore();
+    expect(outlookFormOpened(artifact.messageId, REPLY)).toBe(false);
   });
 
-  it("keeps the card mounted and busy while the reply form is opening", async () => {
-    let resolveOpen!: () => void;
-    mockOpenReplyForm.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveOpen = resolve;
-        }),
-    );
-    primeAutoCard();
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-busy",
-      "true",
-    );
-
-    await act(async () => {
-      resolveOpen();
+  it("follows the newest proposal once a change was asked for on the card", () => {
+    const [draft, first, firstCall] = proposed({
+      status: "error",
+      output: { status: "change_requested" },
     });
+    show([
+      draft,
+      first,
+      firstCall,
+      {
+        content_type: "tool_use",
+        tool_call_id: "call-again",
+        tool_name: "propose_client_action",
+        status: "success",
+        input: { action: REPLY },
+        output: { apply: { call_id: "call-again.apply" }, action: REPLY },
+      },
+    ]);
 
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
   });
 
-  it("a NEW message's proposal opens a fresh card after a deny (once per message)", () => {
-    primeAutoCard();
-    const view = render(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
+  it("says Stop ended the call before any reply opened", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "cancelled", reason: "aborted" },
+      }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "deny" }));
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-
-    // Same message re-renders: the once-per-message slot is consumed.
-    view.rerender(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Stopped. No reply was opened.",
     );
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+  });
 
-    // A new completion (new messageId) primes a fresh card.
-    primeAutoCard();
-    view.rerender(
-      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
-    );
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "pending",
+  it("adds no line and keeps the proposed button primary without a call of the server", () => {
+    show([{ content_type: "text", text: "```erato-email\nDraft body\n```\n" }]);
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "primary",
     );
   });
 });
@@ -638,11 +586,7 @@ describe("OutlookEratoEmailRenderer — read-reply gate tracks the reactive item
       },
       messageOrder: [artifact.messageId],
     });
-    mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
-    mockGetReadModeRecipientSummary.mockReturnValue({
-      sender: "Alice Sender",
-      recipients: ["Bob"],
-    });
+    server.decisions = {};
   }
 
   it("offers Reply / Reply All in read mode", () => {

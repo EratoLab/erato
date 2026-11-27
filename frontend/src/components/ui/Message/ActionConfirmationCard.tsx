@@ -7,6 +7,7 @@ import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
 import { WarningIcon } from "../icons";
+import { useInDecisionPlace } from "./decisionPlace";
 
 import type { AllowOnceEmphasis } from "@/lib/toolCallGist/decision";
 import type React from "react";
@@ -27,8 +28,11 @@ interface ActionConfirmationCardProps {
    * nodes render as-is.
    */
   description?: ReactNode;
-  /** Allow the action this one time; the card will ask again next time. */
-  onAllowOnce: () => void;
+  /**
+   * Allow the action this one time; the card will ask again next time. Omit
+   * to hide the button, where the action cannot run from this device.
+   */
+  onAllowOnce?: () => void;
   /**
    * Allow this action and the like ones on the same scope, such as every read
    * of one document, until the scope changes. Omit to hide the button.
@@ -165,6 +169,8 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   "data-testid": dataTestId,
 }) => {
   const cardRef = useRef<HTMLElement | null>(null);
+  // In the decision place the place's own frame holds the decision.
+  const flush = useInDecisionPlace();
   const alwaysAllowReasonId = useId();
   const allowScopeHintId = useId();
   const lossHintId = useId();
@@ -248,7 +254,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   }, [announcementText]);
 
   const statesLoss = allowOnceEmphasis === "loss";
-  const allowOnceButton = (
+  const allowOnceButton = onAllowOnce && (
     <Button
       variant={allowOnceEmphasis === "filled" ? "primary" : "secondary"}
       size="sm"
@@ -396,13 +402,18 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
     <Card
       ref={cardRef}
       variant="surface"
-      size="sm"
+      bordered={!flush}
+      size={flush ? "none" : "sm"}
       // Programmatic focus target so keyboard focus never drops to <body>
       // when the trigger disables on open or the button row unmounts.
       tabIndex={-1}
       role={isPending ? "group" : undefined}
       aria-label={isPending ? resolvedTitle : undefined}
-      className={`focus-ring-tight ${standing ? "mt-4" : "mt-2"} min-w-0 ${className}`}
+      className={clsx(
+        "focus-ring-tight min-w-0",
+        standing ? "mt-4" : "mt-2",
+        className,
+      )}
       bodyClassName={
         isPending
           ? standing
@@ -432,7 +443,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
           {lossHint}
           {standing ? (
             <>
-              <div className="flex flex-wrap gap-2">
+              <div className="card-actions flex flex-wrap gap-2">
                 {allowOnceButton}
                 {allowScopeButton}
                 {denyButton}
@@ -447,18 +458,22 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
                 data-testid="action-confirmation-standing"
               >
                 <span id={standingLabelId}>{standingLabel}</span>
-                {alwaysAllowButton}
-                {alwaysAllowButton && neverAllowButton && (
-                  <span aria-hidden="true" className="text-theme-fg-muted">
-                    ·
-                  </span>
-                )}
-                {neverAllowButton}
+                {/* Kept together, so a wrap breaks after the label and opens
+                    no line with the dot unless the pair alone is too wide. */}
+                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {alwaysAllowButton}
+                  {alwaysAllowButton && neverAllowButton && (
+                    <span aria-hidden="true" className="text-theme-fg-muted">
+                      ·
+                    </span>
+                  )}
+                  {neverAllowButton}
+                </span>
               </div>
             </>
           ) : (
             <>
-              <div className="flex flex-wrap gap-2">
+              <div className="card-actions flex flex-wrap gap-2">
                 {allowOnceButton}
                 {allowScopeButton}
                 {alwaysAllowButton}

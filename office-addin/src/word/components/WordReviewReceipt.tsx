@@ -11,11 +11,6 @@ import { wordPlanOutcomeState } from "../utils/wordReviewState";
 
 import type { WordReviewState } from "../utils/wordReviewState";
 
-export const wordDeniedText = () =>
-  t({
-    id: "officeAddin.word.review.denied",
-    message: "Proposal declined. Nothing was written.",
-  });
 export const wordInsertedText = () =>
   t({
     id: "officeAddin.word.card.inserted",
@@ -32,11 +27,6 @@ export const wordReplaceUnchangedText = () =>
   t({
     id: "officeAddin.word.selection.unchanged",
     message: "The proposal matches the passage. Nothing was replaced.",
-  });
-export const wordAutomaticText = () =>
-  t({
-    id: "officeAddin.word.review.automatic",
-    message: "Automatic action under your Always allow setting.",
   });
 
 export function WordReviewReceipt({
@@ -71,37 +61,35 @@ export function WordReviewReceipt({
       data-testid="word-review-receipt"
     >
       <strong>
-        {review.status === "denied"
-          ? wordDeniedText()
-          : review.status === "reverted"
-            ? wholeDocument
-              ? t({
-                  id: "officeAddin.word.planReceipt.restoredDocument",
-                  message: "Restored the document",
+        {review.status === "reverted"
+          ? wholeDocument
+            ? t({
+                id: "officeAddin.word.planReceipt.restoredDocument",
+                message: "Restored the document",
+              })
+            : wordUndoneText(title)
+          : outcome === "adjusted"
+            ? wordPlanAdjustedHeadline()
+            : review.status !== "done"
+              ? // Only a card the pane applied says so; any other says what it proposed.
+                t({
+                  id: "officeAddin.word.receipt.proposed",
+                  message: `Proposed: ${title}`,
                 })
-              : wordUndoneText(title)
-            : outcome === "adjusted"
-              ? wordPlanAdjustedHeadline()
-              : review.status !== "done"
-                ? // Only a card the pane applied says so; any other says what it proposed.
-                  t({
-                    id: "officeAddin.word.receipt.proposed",
-                    message: `Proposed: ${title}`,
+              : kind === "plan"
+                ? t({
+                    id: "officeAddin.word.planReceipt.applied",
+                    message: `Applied: ${title}`,
                   })
-                : kind === "plan"
-                  ? t({
-                      id: "officeAddin.word.planReceipt.applied",
-                      message: `Applied: ${title}`,
-                    })
-                  : kind === "insert"
-                    ? wordInsertedText()
-                    : kind === "selection"
-                      ? review.selection?.status === "unchanged"
-                        ? wordReplaceUnchangedText()
-                        : wordReplacedText()
-                      : wordEditsAppliedText(
-                          wordEditCounts(review.outcomes).applied,
-                        )}
+                : kind === "insert"
+                  ? wordInsertedText()
+                  : kind === "selection"
+                    ? review.selection?.status === "unchanged"
+                      ? wordReplaceUnchangedText()
+                      : wordReplacedText()
+                    : wordEditsAppliedText(
+                        wordEditCounts(review.outcomes).applied,
+                      )}
       </strong>
       {outcome === "verified" && (
         <span className="word-review__hint">{wordPlanVerifiedText()}</span>
@@ -111,9 +99,6 @@ export function WordReviewReceipt({
         <span className="word-review__hint" data-testid="word-plan-adjustments">
           {note}
         </span>
-      )}
-      {review.automatic && review.status === "done" && (
-        <span className="word-review__hint">{wordAutomaticText()}</span>
       )}
       {warning && (
         <Alert

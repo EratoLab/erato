@@ -93,8 +93,6 @@ export interface WordClientActionEntry {
   action: WordClientAction;
   facetIds: readonly string[];
   fenceLanguage: string;
-  /** Use a separate scope per action: evaluation consumes the one-shot prompt even when denied. */
-  promptScope: string;
   /** Evaluate labels at render time so locale changes take effect. */
   displayLabel: () => string;
   execute: (context: WordClientActionContext) => Promise<WordClientActionRun>;
@@ -110,7 +108,6 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
       action: "word.apply_document_plan",
       facetIds: ["word_document_authoring"],
       fenceLanguage: WORD_PLAN_FENCE,
-      promptScope: "word-document-plan",
       displayLabel: () =>
         t({
           id: "officeAddin.word.authoring.apply",
@@ -149,7 +146,6 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
       action: "word.apply_edits",
       facetIds: ["word_document_review", "word_document_authoring"],
       fenceLanguage: WORD_EDITS_FENCE,
-      promptScope: "word-edits",
       displayLabel: () =>
         t({
           id: "officeAddin.word.clientActions.applyEdits",
@@ -178,7 +174,6 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
       action: "word.insert_at_cursor",
       facetIds: ["word_compose"],
       fenceLanguage: WORD_INSERT_FENCE,
-      promptScope: "word-insert",
       displayLabel: () =>
         t({
           id: "officeAddin.word.clientActions.insertAtCursor",
@@ -197,7 +192,6 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
       action: "word.replace_selection",
       facetIds: ["word_selection"],
       fenceLanguage: WORD_REPLACE_FENCE,
-      promptScope: "word-selection",
       displayLabel: () =>
         t({
           id: "officeAddin.word.clientActions.replaceSelection",
@@ -224,7 +218,6 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
     [
       [
         "word.add_comments",
-        "word-comments-add",
         () =>
           t({
             id: "officeAddin.word.clientActions.addComments",
@@ -233,7 +226,6 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
       ],
       [
         "word.respond_to_comments",
-        "word-comments-respond",
         () =>
           t({
             id: "officeAddin.word.clientActions.respondToComments",
@@ -242,7 +234,6 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
       ],
       [
         "word.modify_comments",
-        "word-comments-modify",
         () =>
           t({
             id: "officeAddin.word.clientActions.modifyComments",
@@ -250,50 +241,44 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
           }),
       ],
     ] as const
-  ).map(
-    ([action, promptScope, displayLabel]): [
-      WordClientAction,
-      WordClientActionEntry,
-    ] => [
+  ).map(([action, displayLabel]): [WordClientAction, WordClientActionEntry] => [
+    action,
+    {
       action,
-      {
-        action,
-        facetIds: [
-          WORD_COMMENT_THREAD_FACET_ID,
-          WORD_SELECTION_FACET_ID,
-          WORD_DOCUMENT_REVIEW_FACET_ID,
-          WORD_AUTHORING_FACET_ID,
-        ],
-        fenceLanguage: WORD_COMMENT_CARD_FENCES[action],
-        promptScope,
-        displayLabel,
-        // The draft accepted for this card, by draft_id; the model's arguments never reach here.
-        execute: async ({ fenceContent, capture, comments }) => {
-          const draft = wordCommentDraft(fenceContent);
-          if (
-            !draft ||
-            draft.action !== action ||
-            draft.identity !== capture.identity ||
-            !comments
-          )
-            return { ok: false, outcomes: [], snapshotOoxml: null };
-          const run = await executeWordCommentDraft(draft, {
-            ...comments,
-            reattribute: reattributeWordComments,
-          });
-          return {
-            ok: run.rows.some(
-              (row) =>
-                row.status === "applied" || row.status === "applied_as_user",
-            ),
-            outcomes: [],
-            snapshotOoxml: null,
-            commentResult: run,
-          };
-        },
+      facetIds: [
+        WORD_COMMENT_THREAD_FACET_ID,
+        WORD_SELECTION_FACET_ID,
+        WORD_DOCUMENT_REVIEW_FACET_ID,
+        WORD_AUTHORING_FACET_ID,
+      ],
+      fenceLanguage: WORD_COMMENT_CARD_FENCES[action],
+      displayLabel,
+      // The draft accepted for this card, by draft_id; the model's arguments never reach here.
+      execute: async ({ fenceContent, capture, comments }) => {
+        const draft = wordCommentDraft(fenceContent);
+        if (
+          !draft ||
+          draft.action !== action ||
+          draft.identity !== capture.identity ||
+          !comments
+        )
+          return { ok: false, outcomes: [], snapshotOoxml: null };
+        const run = await executeWordCommentDraft(draft, {
+          ...comments,
+          reattribute: reattributeWordComments,
+        });
+        return {
+          ok: run.rows.some(
+            (row) =>
+              row.status === "applied" || row.status === "applied_as_user",
+          ),
+          outcomes: [],
+          snapshotOoxml: null,
+          commentResult: run,
+        };
       },
-    ],
-  ),
+    },
+  ]),
 ]);
 
 const REGISTRY_ORDER = [...WORD_CLIENT_ACTIONS.keys()];
@@ -302,10 +287,6 @@ export function isImplementedClientAction(
   action: string,
 ): action is WordClientAction {
   return WORD_CLIENT_ACTIONS.has(action as WordClientAction);
-}
-
-export function clientActionDisplayLabel(action: WordClientAction): string {
-  return WORD_CLIENT_ACTIONS.get(action)!.displayLabel();
 }
 
 export function offerableWordClientActions(

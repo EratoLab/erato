@@ -216,11 +216,14 @@ describe("Word task pane composition", () => {
     );
   });
 
-  it("contributes exactly one registry slot, and no slot another host claims", async () => {
+  it("contributes its card slots, and no slot another host claims", async () => {
     renderPane();
     await screen.findByTestId("word-message-list");
 
-    expect(Object.keys(componentRegistry)).toEqual(["HostCardCodeBlock"]);
+    expect(Object.keys(componentRegistry)).toEqual([
+      "HostCardCodeBlock",
+      "ApprovalItemCard",
+    ]);
   });
 
   it("opens a new document on a new chat, never a chat shared across documents", async () => {

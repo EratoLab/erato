@@ -1,4 +1,5 @@
 import { WORDPROCESSING_NS as W } from "./wordBlockFormatting";
+import { WORD_MORE_CHANGES_ARGUMENT } from "./wordHistoryNames";
 import { wordTableCellScope } from "./wordTableCellScope";
 import {
   parseWordTableCellTextEdit,
@@ -59,7 +60,12 @@ export function expandWordTableCellSubmission(
     );
   const edit = input.table_cell;
   if (
-    !only(input, ["snapshot", "readToken", "table_cell"]) ||
+    !only(input, [
+      "snapshot",
+      "readToken",
+      "table_cell",
+      WORD_MORE_CHANGES_ARGUMENT,
+    ]) ||
     !object(edit) ||
     !only(edit, [
       "sourceRef",

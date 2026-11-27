@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   registry,
   addMenu,
+  approvalCard,
   appointmentRenderer,
   emailRenderer,
   registerSentWithDescriptors,
@@ -11,6 +12,7 @@ const {
   return {
     registry,
     addMenu: () => null,
+    approvalCard: () => null,
     appointmentRenderer: () => null,
     emailRenderer: () => null,
     registerSentWithDescriptors: vi.fn(),
@@ -26,6 +28,9 @@ vi.mock("../components/AddinChatAddMenuExtraContent", () => ({
 }));
 vi.mock("../components/OutlookEratoAppointmentRenderer", () => ({
   OutlookEratoAppointmentRenderer: appointmentRenderer,
+}));
+vi.mock("../components/OutlookApprovalItemCard", () => ({
+  OutlookApprovalItemCard: approvalCard,
 }));
 vi.mock("../components/OutlookEratoEmailRenderer", () => ({
   OutlookEratoEmailRenderer: emailRenderer,
@@ -43,6 +48,7 @@ describe("installOutlookComponentRegistrations", () => {
     installOutlookComponentRegistrations();
 
     expect(registry).toEqual({
+      ApprovalItemCard: approvalCard,
       ChatAddMenuExtraContent: addMenu,
       EratoAppointmentCodeBlock: appointmentRenderer,
       EratoEmailCodeBlock: emailRenderer,

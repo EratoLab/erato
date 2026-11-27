@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
+import { DecisionPlaceContext } from "./decisionPlace";
 
 vi.mock("../Controls/Button", () => ({
   Button: ({
@@ -30,6 +31,44 @@ describe("ActionConfirmationCard", () => {
       />,
     );
     expect(screen.getByRole("group")).toHaveClass("focus-ring-tight");
+  });
+
+  it("draws no frame of its own in the decision place, whose frame holds it", () => {
+    const card = (
+      <ActionConfirmationCard
+        onAllowOnce={vi.fn()}
+        onDeny={vi.fn()}
+        data-testid="decision"
+      />
+    );
+    const { unmount } = render(card);
+    expect(screen.getByTestId("decision")).toHaveClass("border");
+    unmount();
+
+    render(
+      <DecisionPlaceContext.Provider value>
+        {card}
+      </DecisionPlaceContext.Provider>,
+    );
+    expect(screen.getByTestId("decision")).not.toHaveClass("border");
+    expect(screen.getByTestId("decision")).toHaveClass("card-inset-none");
+  });
+
+  it("keeps the standing links together, so a wrap breaks after the label", () => {
+    render(
+      <ActionConfirmationCard
+        onAllowOnce={vi.fn()}
+        onAlwaysAllow={vi.fn()}
+        onDeny={vi.fn()}
+        onNeverAllow={vi.fn()}
+        standingLabel="This tool:"
+      />,
+    );
+    const always = screen.getByText("Always allow");
+    expect(always.parentElement).toBe(
+      screen.getByText("Never allow").parentElement,
+    );
+    expect(always.parentElement).not.toHaveTextContent("This tool:");
   });
 
   it("renders the generic frame with the once decisions, and standing ones on request", () => {

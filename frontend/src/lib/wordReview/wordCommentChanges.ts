@@ -195,7 +195,7 @@ export type WordCommentConsentState =
   | "dismissed"
   | "expired";
 
-export type WordCommentConsentKind = "click" | "standing_grant";
+export type WordCommentConsentKind = "click";
 
 export type WordCommentAuthorMode = "user" | "assistant";
 
@@ -306,6 +306,22 @@ export function isAcceptedWordCommentSubmission(part: ContentPart): boolean {
     output.result.draft_id === part.tool_call_id &&
     isWordCommentAction(output.result.action)
   );
+}
+
+/** Every accepted comment submission of a message, in call order. */
+export function acceptedWordCommentSubmissions(
+  content: readonly ContentPart[] | undefined,
+): { toolCallId: string; action: WordCommentAction }[] {
+  return (content ?? []).filter(isAcceptedWordCommentSubmission).map((part) => {
+    const accepted = part as ContentPart & {
+      tool_call_id: string;
+      output: { result: { action: WordCommentAction } };
+    };
+    return {
+      toolCallId: accepted.tool_call_id,
+      action: accepted.output.result.action,
+    };
+  });
 }
 
 /** The one accepted submission of a message, if exactly one. */

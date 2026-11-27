@@ -1,5 +1,4 @@
 import {
-  ActionConfirmationCard,
   Alert,
   Button,
   Card,
@@ -8,6 +7,7 @@ import {
   useConversationMessage,
   useHostArtifact,
   useProfile,
+  submittedCardsOf,
   WordReviewCard,
   WordReviewGenerating,
   WordReviewHeader,
@@ -18,14 +18,23 @@ import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import {
+  WordDecisionChoices,
+  wordCommentsStandingLabel,
+} from "./WordDecisionChoices";
+import {
   wordBlockedReasonText,
   wordCommentTaintText,
 } from "./WordReviewCardParts";
-import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
+import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
+import { useWordChainedApply } from "../hooks/useWordChainedApply";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
-import { useWordWrite } from "../providers/WordWriteProvider";
-import { isActionDenied } from "../utils/clientActionPolicy";
+import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
+import { wordCommentChangesTitle } from "../utils/wordApprovalPreview";
+import { wordChainedApplyText } from "../utils/wordChainedApply";
+import {
+  runWordCommentApply,
+  wordDraftCapture,
+} from "../utils/wordCommentApply";
 import {
   recordWordCommentOutcome,
   wordCommentAlwaysBlock,
@@ -43,13 +52,10 @@ import {
 import { wordCommentDraft } from "../utils/wordCommentSubmission";
 import { revertWordCommentRows } from "../utils/wordCommentWrites";
 import { readWordTrackingMode } from "../utils/wordReviewLocation";
-import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
-import type {
-  WordClientAction,
-  WordClientActionEntry,
-} from "../utils/wordClientActions";
+import type { WordCardDecision } from "./WordDecisionChoices";
+import type { WordClientActionEntry } from "../utils/wordClientActions";
 import type {
   WordCommentAlwaysBlock,
   WordCommentUserModeReason,
@@ -72,26 +78,7 @@ const EXCERPT = 80;
 const excerpt = (text: string) =>
   text.length > EXCERPT ? `${text.slice(0, EXCERPT - 1)}…` : text;
 
-function titleOf(draft: WordCommentDraft): string {
-  const n = draft.rows.length;
-  switch (draft.action) {
-    case "word.add_comments":
-      return t({
-        id: "officeAddin.word.comments.title.add",
-        message: plural(n, { one: "Add a comment", other: "Add # comments" }),
-      });
-    case "word.respond_to_comments":
-      return t({
-        id: "officeAddin.word.comments.title.respond",
-        message: "Reply to, resolve or reopen comments",
-      });
-    case "word.modify_comments":
-      return t({
-        id: "officeAddin.word.comments.title.modify",
-        message: "Edit or delete comments",
-      });
-  }
-}
+const titleOf = wordCommentChangesTitle;
 
 function verbOf(row: WordCommentDraftRow): string {
   switch (row.op) {
@@ -183,9 +170,7 @@ function userModeText(reason: WordCommentUserModeReason): string {
   }
 }
 
-function alwaysBlockText(
-  block: WordCommentAlwaysBlock | "organization",
-): string {
+function alwaysBlockText(block: WordCommentAlwaysBlock): string {
   switch (block) {
     case "tainted":
       return wordCommentTaintText();
@@ -193,12 +178,6 @@ function alwaysBlockText(
       return t({
         id: "officeAddin.word.comments.always.emptyLabel",
         message: "Comments carry no AI label here, so Erato asks each time.",
-      });
-    case "organization":
-      return t({
-        id: "officeAddin.word.card.alwaysAllowLocked",
-        message:
-          "Your organization requires confirmation each time this action runs automatically.",
       });
   }
 }
@@ -378,15 +357,17 @@ const isOwn = (email: string | null, principal: string | null) =>
 export function WordCommentChangesCard({
   entry,
   content,
+  decision,
 }: {
   entry: WordClientActionEntry;
   content: string;
+  /** Drawn in the decision place: Apply approves the server's call, which writes. */
+  decision?: WordCardDecision;
 }) {
   const artifact = useHostArtifact();
   const {
     documentIdentity,
     capturesByAssistantMessageId,
-    reviews,
     updateReview,
     operationInProgress,
     beginOperation,
@@ -394,27 +375,33 @@ export function WordCommentChangesCard({
     holdOperationUntil,
     restoreRequest,
   } = useWordWrite();
-  // O-25: a deployment may keep "Always" for adds to this pane session and document.
-  const { decisions, grantAlways, grantScope } = useWordClientActionDecisions(
-    entry.action,
-  );
   const { profile } = useProfile();
   const { getTranscript } = useChatSession();
-  const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
   const message = useConversationMessage(messageId);
-  const isGenerating = message?.status === "sending";
+  const chainedState = useWordChainedApply(
+    decision ? undefined : messageId,
+    content,
+  );
+  // The decision place shows a parked call, and an answer goes on after a change it applied.
+  const isGenerating =
+    message?.status === "sending" && !decision && !chainedState;
+  // Without a server call for this change, the card applies it on the user's own click.
+  const ownApply = !decision && !chainedState;
   const draft = wordCommentDraft(content);
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
-  const review = reviews.get(batchKey) ?? EMPTY_WORD_REVIEW;
+  const review = useWordReview(batchKey);
   const cardRef = useWordReviewFocus(review.status);
   const detailsId = useId();
   const capture: WordCommentsCapture | undefined =
     (messageId ? capturesByAssistantMessageId.get(messageId) : undefined) ??
-    review.capture;
+    review.capture ??
+    (decision && draft ? wordDraftCapture(draft.identity) : undefined);
   const gate = resolveWordWriteGate({
     capture,
-    expectedIdentity: artifact?.itemIdentity,
+    // A parked answer's artifact may not name its document yet; the checked draft does.
+    expectedIdentity:
+      artifact?.itemIdentity ?? (decision ? draft?.identity : undefined),
     currentIdentity: documentIdentity,
   });
   const [tracking, setTracking] = useState<WordTrackingMode>("unknown");
@@ -447,14 +434,6 @@ export function WordCommentChangesCard({
   const tainted =
     !!capture?.commentTaint || wordCommentTaintedMessage(messageId);
   const alwaysBlock = draft ? wordCommentAlwaysBlock(draft, tainted) : null;
-  const configuredAsk = useMemo(
-    () => artifact?.alwaysAskClientActions ?? [],
-    [artifact],
-  );
-  const enforcedAskActions = useMemo(
-    () => (alwaysBlock ? [...configuredAsk, entry.action] : configuredAsk),
-    [alwaysBlock, configuredAsk, entry.action],
-  );
   const cardState = useMemo<WordCommentCardState>(
     () =>
       review.comments ?? {
@@ -464,25 +443,16 @@ export function WordCommentChangesCard({
     [review.comments, draft],
   );
   const mode = draft ? wordCommentCardMode(draft) : "copy";
+  const neverAllowed = useNeverAllowedActions("word");
   const offered =
     !!draft &&
     mode === "post" &&
     (artifact?.allowedClientActions ?? []).includes(entry.action) &&
-    !isActionDenied({
-      facetId,
-      action: entry.action,
-      decisions,
-      enforcedAskActions,
-    });
-  const proposedAction =
-    offered && artifact?.proposedClientAction === entry.action
-      ? entry.action
-      : undefined;
+    !neverAllowed.has(entry.action);
   const idle =
     review.status === "idle" ||
     review.status === "no-capture" ||
     review.status === "identity-mismatch";
-  const applying = review.status === "applying";
 
   const recordOf = useCallback(
     (state: WordCommentCardState) => {
@@ -528,63 +498,23 @@ export function WordCommentChangesCard({
         return false;
       }
       if (isGenerating || !offered || !beginOperation()) return false;
-      let held = false;
-      updateReview(batchKey, { status: "applying", capture: live.capture });
-      try {
-        const run = await entry.execute({
-          fenceContent: content,
-          capture: live.capture,
-          comments: {
-            selected: new Set(rows),
-            assistantAuthor: userModeOnly ? null : plan.authorName,
-            userModeRows: new Set(plan.userModeRows.keys()),
-          },
-        });
-        const result = run.commentResult;
-        if (result?.timedOut) {
-          // Word may still be writing: every card waits until the run has really ended.
-          holdOperationUntil(result.settled, batchKey);
-          held = true;
-        }
-        if (!result) {
-          updateReview(batchKey, { status: "no-capture", comments: lapse() });
-          return false;
-        }
-        const touched = new Map(
-          result.rows
-            .filter((row) => rows.includes(row.i))
-            .map((row) => [row.i, row]),
-        );
-        const merged = draft.rows.map(
-          (row) =>
-            touched.get(row.i) ??
-            cardState.rows.find((r) => r.i === row.i) ?? {
-              i: row.i,
-              op: row.op,
-              ...(row.ref ? { ref: row.ref } : {}),
-              status: "refused" as const,
-              code: "DESELECTED",
-            },
-        );
-        const state: WordCommentCardState = {
-          ...cardState,
-          rows: merged,
-          consent: "approved",
-          consentKind: cardState.consentKind ?? consentKind,
-        };
-        updateReview(batchKey, {
-          status: "done",
-          comments: state,
-          automatic: consentKind === "standing_grant",
-        });
-        recordOf(state);
-        return run.ok;
-      } catch {
-        updateReview(batchKey, { status: "write-failed" });
-        return false;
-      } finally {
-        if (!held) endOperation();
-      }
+      const outcome = await runWordCommentApply({
+        key: batchKey,
+        draft,
+        entry,
+        fenceContent: content,
+        capture: live.capture,
+        reviewCapture: live.capture,
+        rows,
+        assistantAuthor: userModeOnly ? null : plan.authorName,
+        userModeRows: new Set(plan.userModeRows.keys()),
+        previous: cardState,
+        consentKind,
+        host: { updateReview, holdOperationUntil, endOperation },
+      });
+      if (outcome.kind === "no-result")
+        updateReview(batchKey, { status: "no-capture", comments: lapse() });
+      return outcome.kind === "ran" && outcome.ok;
     },
     [
       capture,
@@ -605,35 +535,6 @@ export function WordCommentChangesCard({
       endOperation,
     ],
   );
-
-  const execute = useCallback(
-    (_action: WordClientAction, itemIdentityAtOpen?: string | null) =>
-      runRows(
-        cardState.selected,
-        itemIdentityAtOpen === undefined ? "standing_grant" : "click",
-      ),
-    [runRows, cardState.selected],
-  );
-  const buildSummary = useCallback(
-    () => (idle && !isGenerating && draft ? draft : null),
-    [idle, isGenerating, draft],
-  );
-  const { confirmCard, isConfirmPending, allowCard, denyCard } =
-    useClientActionConfirmFlow<WordCommentDraft, WordClientAction>({
-      promptScope: entry.promptScope,
-      facetId: artifact?.facetId,
-      decisions,
-      enforcedAskActions,
-      buildSummary,
-      execute,
-      itemIdentity: documentIdentity,
-      presentation: artifact?.clientActionPresentation,
-      messageId,
-      isFreshCompletion: !!artifact?.isFreshCompletion,
-      proposedAction,
-      expectedItemIdentity: artifact?.itemIdentity,
-      currentItemIdentity: documentIdentity,
-    });
 
   const toggle = (i: number) =>
     updateReview(batchKey, {
@@ -739,7 +640,17 @@ export function WordCommentChangesCard({
       />
     );
   // Only this message's accepted submission is its card; a fence naming another draft is not.
-  if (artifact?.submittedCard?.toolCallId !== content) return null;
+  if (
+    !decision &&
+    !submittedCardsOf(artifact).some((card) => card.toolCallId === content)
+  )
+    return null;
+  if (chainedState && review.status === "idle")
+    return (
+      <p className="word-review__hint" data-testid="word-chained-status">
+        {wordChainedApplyText(chainedState)}
+      </p>
+    );
   if (!draft)
     return (
       <Alert type="info" role="status">
@@ -795,10 +706,6 @@ export function WordCommentChangesCard({
       row.code !== "DESELECTED" &&
       row.code !== "AUTHOR_MODE_UNAVAILABLE",
   );
-  const locked = enforcedAskActions.includes(entry.action);
-  const lockedReason =
-    alwaysBlock ??
-    (configuredAsk.includes(entry.action) ? "organization" : null);
 
   return (
     <WordReviewCard
@@ -812,7 +719,7 @@ export function WordCommentChangesCard({
           <Alert
             type="info"
             role="status"
-            className="m-3 [overflow-wrap:anywhere]"
+            className="word-review__aside my-3 [overflow-wrap:anywhere]"
           >
             {note}
           </Alert>
@@ -837,75 +744,28 @@ export function WordCommentChangesCard({
               })}
             </p>
           )}
-          {!ran && idle && offered && !confirmCard && (
+          {decision && !ran && idle && (
+            <WordDecisionChoices
+              decision={decision}
+              title={titleOf(draft)}
+              applyLabel={applyLabel}
+              canApply={offered && gate.allowed && count > 0}
+              standingLabel={wordCommentsStandingLabel()}
+              alwaysLockedReason={
+                alwaysBlock ? alwaysBlockText(alwaysBlock) : undefined
+              }
+              confirmation={{ selected: cardState.selected }}
+            />
+          )}
+          {ownApply && !ran && idle && offered && (
             <Button
               type="button"
               variant="primary"
-              busy={applying}
-              disabled={
-                operationInProgress ||
-                isConfirmPending ||
-                !gate.allowed ||
-                count === 0
-              }
+              disabled={operationInProgress || !gate.allowed || count === 0}
               onClick={() => void runRows(cardState.selected, "click")}
             >
               {applyLabel}
             </Button>
-          )}
-          {confirmCard && (
-            <ActionConfirmationCard
-              key={confirmCard.requestId}
-              title={titleOf(draft)}
-              allowOnceLabel={applyLabel}
-              description={
-                grantScope === "session_document" && !locked
-                  ? t({
-                      id: "officeAddin.word.comments.always.session",
-                      message:
-                        "Always allow lasts for this document until the add-in closes.",
-                    })
-                  : undefined
-              }
-              denyLabel={t({
-                id: "officeAddin.word.review.cancel",
-                message: "Cancel",
-              })}
-              onAllowOnce={() => {
-                if (gate.allowed && !operationInProgress && count > 0)
-                  allowCard(confirmCard);
-              }}
-              onAlwaysAllow={() => {
-                if (
-                  !gate.allowed ||
-                  operationInProgress ||
-                  locked ||
-                  count === 0
-                )
-                  return;
-                grantAlways();
-                allowCard(confirmCard);
-              }}
-              alwaysAllowDisabledReason={
-                lockedReason ? alwaysBlockText(lockedReason) : undefined
-              }
-              onDeny={() => {
-                denyCard(confirmCard);
-                const state = {
-                  ...cardState,
-                  consent: "declined" as const,
-                  consentKind: "click" as const,
-                };
-                updateReview(batchKey, {
-                  status: "denied",
-                  capture,
-                  comments: state,
-                });
-                recordOf(state);
-              }}
-              isBusy={operationInProgress || !gate.allowed}
-              scrollIntoViewOnMount={confirmCard.autoTriggered}
-            />
           )}
           {ran && (
             <div className="word-review__actions">
@@ -1005,14 +865,6 @@ export function WordCommentChangesCard({
               })}
             </p>
           )}
-          {review.status === "denied" && (
-            <p className="word-review__hint" role="status">
-              {t({
-                id: "officeAddin.word.comments.declined",
-                message: "Declined. Nothing was written.",
-              })}
-            </p>
-          )}
         </>
       }
     >
@@ -1055,7 +907,9 @@ export function WordCommentChangesCard({
                     type="checkbox"
                     className="mt-1 size-4 accent-[var(--theme-fg-accent)]"
                     checked={cardState.selected.includes(row.i)}
-                    disabled={ran || !idle || mode === "copy"}
+                    disabled={
+                      ran || !idle || mode === "copy" || !(decision || ownApply)
+                    }
                     onChange={() => toggle(row.i)}
                   />
                   <span>

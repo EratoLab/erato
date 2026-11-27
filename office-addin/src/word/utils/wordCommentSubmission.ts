@@ -3,6 +3,8 @@ import {
   WORD_SUBMIT_COMMENT_CHANGES_TOOL,
 } from "@erato/frontend/word-review";
 
+import { wordAcceptedChangeDeclined } from "./wordAcceptedSubmissions";
+import { wordCommentApprovalPreview } from "./wordApprovalPreview";
 import {
   parseWordCommentChanges,
   validateWordCommentChanges,
@@ -12,7 +14,10 @@ import {
   wordCommentDeploymentSettings,
   wordCommentRowCap,
 } from "./wordCommentPolicy";
-import { wordCommentReadSession } from "./wordCommentReadTool";
+import {
+  wordCommentReadSession,
+  wordCommentTaintedMessage,
+} from "./wordCommentReadTool";
 import { wordCommentRefRegistry } from "./wordCommentRefs";
 import { wordHostPlatform } from "./wordHostPlatform";
 import { wordParagraphId } from "./wordParagraphIds";
@@ -66,6 +71,13 @@ export const wordCommentDraft = (
 export function forgetWordCommentDrafts(): void {
   drafts.clear();
   state = null;
+}
+
+/** Once the server applied a proposal, the same request may propose the next change. */
+export function wordCommentProposalApplied(draftId: string): void {
+  if (state?.accepted !== draftId) return;
+  state.accepted = null;
+  state.rejected = 0;
 }
 
 export interface WordCommentSubmissionDeps {
@@ -184,6 +196,13 @@ export function createWordCommentSubmissionExecutor(
       current.answers.set(context.toolCallId, { serialized, result });
       return result;
     };
+    if (
+      current.accepted &&
+      wordAcceptedChangeDeclined(context.messageId, current.accepted)
+    ) {
+      current.accepted = null;
+      current.rejected = 0;
+    }
     if (current.accepted)
       return remember(
         terminalFail(
@@ -256,6 +275,10 @@ export function createWordCommentSubmissionExecutor(
         rows: validated.draft.rows.length,
         status: "awaiting_user",
         note: WORD_COMMENT_NOTHING_WRITTEN,
+        approval_preview: wordCommentApprovalPreview(
+          validated.draft,
+          wordCommentTaintedMessage(context.messageId),
+        ),
       },
     });
   };

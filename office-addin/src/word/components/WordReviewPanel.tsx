@@ -32,7 +32,7 @@ import {
   wordEditExceptionsText,
   wordRevertedLabel,
 } from "./WordEditReport";
-import { wordAutomaticText, wordUndoneText } from "./WordReviewReceipt";
+import { wordUndoneText } from "./WordReviewReceipt";
 
 import type {
   WordLocationResult,
@@ -227,9 +227,6 @@ export function WordReviewPanel({
           <p className="word-review__hint" role="status">
             {totals}
           </p>
-        )}
-        {review.automatic && historical && (
-          <p className="word-review__hint">{wordAutomaticText()}</p>
         )}
         {capture ? (
           (complete < documentTotal || capture.partialOrdinal !== null) && (

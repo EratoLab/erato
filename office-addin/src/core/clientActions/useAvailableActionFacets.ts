@@ -25,14 +25,10 @@ export interface ActionFacetClientActionInfo {
   displayName: string;
   /** Server-allowed client actions for this facet. */
   clientActions: string[];
-  /** `render_buttons` (default) or `auto_prompt`; from `GET /me/facets`. */
-  presentation: string | undefined;
   /**
-   * Actions the deployment enforces a per-use confirmation for — "always
-   * allow" must be greyed out and stored grants ignored for these.
+   * Per action: `device` (default) or `session_document`; from `GET /me/facets`. Read only to carry
+   * the pane's old decisions over to the server.
    */
-  alwaysAskActions: string[];
-  /** Per action: `device` (default) or `session_document`; from `GET /me/facets`. */
   grantScope: Record<string, string>;
 }
 
@@ -59,8 +55,6 @@ export function useActionFacetClientActions(): Map<
                   {
                     displayName: facet.display_name,
                     clientActions: facet.client_actions,
-                    presentation: facet.presentation,
-                    alwaysAskActions: facet.client_actions_always_ask ?? [],
                     grantScope: facet.grant_scope ?? {},
                   },
                 ] as const,

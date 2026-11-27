@@ -29,6 +29,10 @@ export type Env = {
   frontendPublicBasePath: string;
   commonPublicBasePath: string;
   themeCustomerName: string | null;
+  /** Languages the theme has a catalog for; null when the server does not say. */
+  themeTranslationLocales: string[] | null;
+  /** Languages with a runtime translation override; null when the server does not say. */
+  translationOverrideLocales: string[] | null;
   faviconPath: string;
   themePath: string | null;
   themeConfigPath: string | null;
@@ -66,6 +70,7 @@ export type Env = {
   userPreferencesEnabled: boolean;
   userPreferencesDataTabEnabled: boolean;
   disclaimersTabEnabled?: boolean;
+  budgetTabEnabled?: boolean;
   mcpServersTabEnabled: boolean;
   mcpServersInChatInputEnabled?: boolean;
   mcpServersInAssistantEditorEnabled?: boolean;
@@ -159,6 +164,9 @@ declare global {
     FRONTEND_PUBLIC_BASE_PATH?: string;
     COMMON_PUBLIC_BASE_PATH?: string;
     THEME_CUSTOMER_NAME?: string;
+    THEME_TRANSLATION_LOCALES?: unknown;
+    TRANSLATION_OVERRIDE_LOCALES?: unknown;
+    THEME_START_COLORS?: unknown;
     FAVICON_PATH?: string;
     THEME_PATH?: string;
     THEME_CONFIG_PATH?: string;
@@ -196,6 +204,7 @@ declare global {
     USER_PREFERENCES_ENABLED?: boolean;
     USER_PREFERENCES_DATA_TAB_ENABLED?: boolean;
     DISCLAIMERS_TAB_ENABLED?: boolean;
+    BUDGET_TAB_ENABLED?: boolean;
     MCP_SERVERS_TAB_ENABLED?: boolean;
     MCP_SERVERS_IN_CHAT_INPUT_ENABLED?: boolean;
     MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED?: boolean;
@@ -267,6 +276,13 @@ const COMMON_PUBLIC_BASE_PATH = "/public/common";
 const OFFICE_ADDIN_PUBLIC_BASE_PATH = "/public/platform-office-addin";
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const DESKTOP_UI_PUBLIC_BASE_PATH = "/public/platform-desktop-ui";
+
+function asLocaleList(value: unknown): string[] | null {
+  return Array.isArray(value) &&
+    value.every((entry): entry is string => typeof entry === "string")
+    ? value
+    : null;
+}
 
 function asFrontendPlatform(value: string | undefined): FrontendPlatform {
   return value === "platform-office-addin" || value === "platform-desktop-ui"
@@ -660,6 +676,10 @@ export const env = (): Env => {
     frontendPublicBasePath,
     commonPublicBasePath,
     themeCustomerName: customerName,
+    themeTranslationLocales: asLocaleList(window.THEME_TRANSLATION_LOCALES),
+    translationOverrideLocales: asLocaleList(
+      window.TRANSLATION_OVERRIDE_LOCALES,
+    ),
     themePath,
     themeConfigPath,
     themeLogoPath,
@@ -710,6 +730,7 @@ export const env = (): Env => {
     userPreferencesEnabled,
     userPreferencesDataTabEnabled,
     disclaimersTabEnabled: window.DISCLAIMERS_TAB_ENABLED ?? false,
+    budgetTabEnabled: window.BUDGET_TAB_ENABLED ?? false,
     mcpServersTabEnabled,
     mcpServersInChatInputEnabled,
     mcpServersInAssistantEditorEnabled,

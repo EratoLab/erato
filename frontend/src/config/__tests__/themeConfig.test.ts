@@ -18,6 +18,7 @@ import {
   loadResolvedThemeConfig,
   resolveIconPaths,
 } from "../themeConfig";
+import themeLookupOrder from "./theme-lookup-order.json";
 
 import type { Env } from "@/app/env";
 import type { CustomThemeConfig } from "@/utils/themeUtils";
@@ -33,6 +34,8 @@ describe("themeConfig", () => {
     frontendPublicBasePath: "/public/common",
     commonPublicBasePath: "/public/common",
     themeCustomerName: null,
+    themeTranslationLocales: null,
+    translationOverrideLocales: null,
     faviconPath: "/favicon.svg",
     themePath: null,
     themeConfigPath: null,
@@ -463,6 +466,22 @@ describe("themeConfig", () => {
         "/public/common/custom-theme/theme.json",
       ]);
     });
+  });
+
+  describe("getThemePaths shared with the server", () => {
+    // The server paints the start colour from the first of these that exists
+    // (`web_theme_json_candidates` in branding.rs reads the same cases).
+    it.each(themeLookupOrder)(
+      "tries theme $theme and theme path $themePath in the server's order",
+      ({ theme, themePath, paths }) => {
+        mockEnv.mockReturnValue(
+          createMockEnv({ themeCustomerName: theme, themePath }),
+        );
+        expect(defaultThemeConfig.getThemePaths().filter(Boolean)).toEqual(
+          paths,
+        );
+      },
+    );
   });
 
   describe("stylesheet path resolution", () => {

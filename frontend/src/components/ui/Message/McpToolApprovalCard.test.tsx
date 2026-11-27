@@ -294,6 +294,20 @@ describe("McpToolApprovalCard", () => {
     expect(screen.getByText(/"release"/)).toBeInTheDocument();
   });
 
+  it("draws one frame: the decision inside it has none of its own", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={approvalRequest}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-tool-approval-card")).not.toHaveClass(
+      "border",
+    );
+  });
+
   it("asks in the reader's language, on the card and to a screen reader", async () => {
     for (const [locale, messages, title] of [
       ["en", enMessages, "Run this action in mock_mcp_approval?"],

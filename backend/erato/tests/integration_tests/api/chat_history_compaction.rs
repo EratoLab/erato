@@ -36,7 +36,7 @@ async fn setup(
     mocks.mock(move |when, then| {
         when.post().path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(&["Compact the conversation"], &[])).matcher(recorded);
-        then.status(StatusCode::OK).json(json!({"id":"compaction","object":"chat.completion","created":1,"model":"mock-model","choices":[{"index":0,"message":{"role":"assistant","content":result},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120}}));
+        then.status(StatusCode::OK).json(json!({"id":"compaction","object":"chat.completion","created":1,"model":"mock-model","choices":[{"index":0,"message":{"role":"assistant","content":result},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"prompt_tokens_details":{"cached_tokens":30}}}));
     });
     let recorded = recorder.clone();
     mocks.mock(move |when, then| {
@@ -60,6 +60,17 @@ async fn setup(
         .insert("compaction-provider".into(), provider);
     config.chat_history_compaction.enabled = true;
     config.chat_history_compaction.chat_provider_id = Some("compaction-provider".into());
+    config.budget.enabled = true;
+    config.budget.max_budget = Some(1000.0);
+    config.budget.budget_period_days = 30;
+    config.budget.model_rates.insert(
+        "compaction-provider".into(),
+        erato::config::BudgetModelRate {
+            cost_input_tokens_per_1m: 1_000_000.0,
+            cost_output_tokens_per_1m: 2_000_000.0,
+            cost_cached_input_tokens_per_1m: Some(0.0),
+        },
+    );
     let state = test_app_state(config, pool).await;
     let app = erato::server::router::router(state.clone())
         .split_for_parts()
@@ -138,9 +149,15 @@ async fn compact_checkpoint_is_idempotent_and_next_provider_request_uses_only_re
         "compaction-provider"
     );
     assert_eq!(
-        row.generation_metadata.as_ref().unwrap()["used_total_tokens"],
-        120
+        row.generation_metadata.as_ref().unwrap()["budget_usage"]["compaction-provider"],
+        json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120, "cached_input_tokens": 30})
     );
+    let budget = server
+        .get("/api/v1beta/me/budget")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    budget.assert_status_ok();
+    assert_eq!(budget.json::<Value>()["current_spending"], 110.0);
     let snapshot = row.generation_input_messages.unwrap().to_string();
     assert!(snapshot.contains("DURABLE-SUMMARY"));
     assert!(!snapshot.contains("ORIGINAL-USER"));

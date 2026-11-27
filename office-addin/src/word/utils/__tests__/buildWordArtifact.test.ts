@@ -1,6 +1,8 @@
+import { wordPlanContentJson } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import { CLIENT_ACTION_TOOL_NAME } from "../../../core/clientActions/proposedClientAction";
+import { examplePlan } from "../../../test/mocks/word/authoringFixtures";
 import { buildWordArtifact } from "../buildWordArtifact";
 
 import type { ContentPart } from "@erato/frontend/library";
@@ -14,11 +16,7 @@ const capture: WordDocumentCapture = {
   partialOrdinal: null,
 };
 
-const reviewInfo = {
-  clientActions: ["word.apply_edits"],
-  alwaysAskActions: [],
-  presentation: "auto_prompt",
-};
+const reviewInfo = { clientActions: ["word.apply_edits"] };
 
 const proposal = (action: string): ContentPart[] =>
   [
@@ -66,21 +64,15 @@ describe("buildWordArtifact", () => {
     expect(artifact).not.toHaveProperty("driftedEmailFenceTags");
   });
 
-  it("carries the policy fields straight from GET /me/facets", () => {
+  it("carries the allowed actions straight from GET /me/facets", () => {
     const artifact = buildWordArtifact({
       facetId: "word_document_review",
-      clientActionInfo: {
-        clientActions: ["word.apply_edits"],
-        alwaysAskActions: ["word.apply_edits"],
-        presentation: "auto_prompt",
-      },
+      clientActionInfo: { clientActions: ["word.apply_edits"] },
       content: undefined,
       messageId: "m1",
       capture,
     });
 
-    expect(artifact?.clientActionPresentation).toBe("auto_prompt");
-    expect(artifact?.alwaysAskClientActions).toEqual(["word.apply_edits"]);
     expect(artifact?.allowedClientActions).toEqual(["word.apply_edits"]);
   });
 
@@ -149,7 +141,6 @@ describe("buildWordArtifact", () => {
       facetId: "word_document_authoring",
       clientActionInfo: {
         clientActions: ["word.apply_document_plan"],
-        alwaysAskActions: [],
       },
       content: [sectionPlan],
       messageId: "m1",
@@ -185,7 +176,6 @@ describe("buildWordArtifact", () => {
         facetId: "word_document_authoring",
         clientActionInfo: {
           clientActions: ["word.apply_document_plan"],
-          alwaysAskActions: [],
         },
         content: [writing],
         messageId: "m1",
@@ -207,7 +197,6 @@ describe("buildWordArtifact", () => {
         facetId: "word_document_review",
         clientActionInfo: {
           clientActions: ["word.replace_selection"],
-          alwaysAskActions: [],
         },
         content: undefined,
         messageId: "m1",
@@ -264,11 +253,7 @@ describe("buildWordArtifact", () => {
           },
         },
       ] as unknown as ContentPart[];
-    const selectionInfo = (actions: string[]) => ({
-      clientActions: actions,
-      alwaysAskActions: [],
-      presentation: "auto_prompt",
-    });
+    const selectionInfo = (actions: string[]) => ({ clientActions: actions });
 
     it("renders an accepted submission as its action's card, proposed for consent", () => {
       const artifact = buildWordArtifact({
@@ -285,22 +270,6 @@ describe("buildWordArtifact", () => {
           language: "erato-word-comments-add",
         },
         proposedClientAction: "word.add_comments",
-      });
-    });
-
-    it("passes how far Always reaches per action", () => {
-      const artifact = buildWordArtifact({
-        facetId: "word_selection",
-        clientActionInfo: {
-          ...selectionInfo(["word.add_comments"]),
-          grantScope: { "word.add_comments": "session_document" },
-        },
-        content: accepted("word.add_comments"),
-        messageId: "m1",
-        capture,
-      });
-      expect(artifact?.clientActionGrantScopes).toEqual({
-        "word.add_comments": "session_document",
       });
     });
 
@@ -346,5 +315,62 @@ describe("buildWordArtifact", () => {
       expect(artifact?.submittedCard).toBeUndefined();
       expect(artifact?.proposedClientAction).toBeUndefined();
     });
+  });
+});
+
+describe("an answer whose changes the server applied", () => {
+  const plan = (id: string, _text: string) => ({
+    ...examplePlan(`snap-${id}`),
+    readToken: `read-${id}`,
+  });
+  const accepted = (id: string, text: string, chained: boolean) =>
+    ({
+      content_type: "tool_use",
+      tool_call_id: id,
+      tool_name: "submit_document_plan",
+      status: "success",
+      input: plan(id, text),
+      output: {
+        status: "success",
+        submission: { status: "accepted" },
+        result: {
+          draft_id: id,
+          snapshot: `snap-${id}`,
+          action: "word.apply_document_plan",
+        },
+        ...(chained ? { apply: { call_id: `${id}.apply` } } : {}),
+      },
+    }) as unknown as ContentPart;
+  const build = (content: ContentPart[]) =>
+    buildWordArtifact({
+      facetId: "word_document_authoring",
+      clientActionInfo: {
+        clientActions: ["word.apply_document_plan"],
+      },
+      content,
+      messageId: "m1",
+      capture,
+    });
+
+  it("gives every applied change its own card, in call order", () => {
+    const artifact = build([
+      accepted("call-1", "First step.", true),
+      accepted("call-2", "Second step.", true),
+    ]);
+    expect(artifact?.submittedCards?.map((card) => card.toolCallId)).toEqual([
+      "call-1",
+      "call-2",
+    ]);
+    expect(artifact?.submittedCards?.[1]).toMatchObject({
+      language: "erato-word-document-plan",
+      content: wordPlanContentJson(plan("call-2", "Second step.")),
+    });
+    expect(artifact?.submittedCard).toBeUndefined();
+  });
+
+  it("keeps today's one card when the server applied none", () => {
+    const artifact = build([accepted("call-1", "Only step.", false)]);
+    expect(artifact?.submittedCards).toBeUndefined();
+    expect(artifact?.submittedCard).toMatchObject({ toolCallId: "call-1" });
   });
 });

@@ -2321,7 +2321,7 @@ impl AppConfig {
                 }
             }
             for (action, scope) in &action_facet.grant_scope {
-                // Only the Word add-in's cards honour a scope; elsewhere a stored grant would still apply.
+                // Only the Word add-in ever kept an "always allow" for one session and document.
                 if !action.starts_with("word.") {
                     panic!(
                         "Action facet '{}' sets grant_scope for '{}'; grant_scope applies to Word add-in actions (word.*) only.",
@@ -2341,6 +2341,30 @@ impl AppConfig {
                         scope,
                         action,
                         ACTION_FACET_GRANT_SCOPES.join(", ")
+                    );
+                }
+            }
+            for (language, action) in &action_facet.draft_block_actions {
+                if language.is_empty() || language.contains(char::is_whitespace) {
+                    panic!(
+                        "Action facet '{}' has an empty block language or one with spaces in draft_block_actions.",
+                        id
+                    );
+                }
+                if !action_facet.client_actions.contains(action) {
+                    panic!(
+                        "Action facet '{}' maps block '{}' to '{}', which is not in client_actions.",
+                        id, language, action
+                    );
+                }
+                if !config.client_tools.tools.values().any(|tool| {
+                    tool.called_by == ClientToolCalledBy::Server
+                        && tool.follows_tool.is_none()
+                        && tool.client_actions.contains(action)
+                }) {
+                    panic!(
+                        "Action facet '{}' maps block '{}' to '{}', which no server-called client tool without follows_tool carries out.",
+                        id, language, action
                     );
                 }
             }
@@ -7245,6 +7269,13 @@ pub struct AssistantHubConfig {
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub force_whole_organization_audience: bool,
 
+    // Whether assistant hub versions must use increasing MAJOR.MINOR.PATCH numbers.
+    // Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::stability(level = "stable"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub validate_version_semver_format: bool,
+
     // Configured reviewer rules.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
@@ -7281,6 +7312,7 @@ impl Default for AssistantHubConfig {
             default_share_with_whole_organization:
                 default_assistant_hub_share_with_whole_organization(),
             force_whole_organization_audience: false,
+            validate_version_semver_format: false,
             reviewers: AssistantHubReviewerPermissionsConfig::default(),
             action_permissions: AssistantHubActionPermissionsConfig::default(),
             categories: HashMap::new(),
@@ -7330,6 +7362,27 @@ pub enum AssistantHubActionRole {
 #[cfg(test)]
 mod assistant_hub_config_tests {
     use super::{AssistantHubActionPermissionsConfig, AssistantHubActionRole, AssistantHubConfig};
+
+    #[test]
+    fn version_validation_is_opt_in() {
+        assert!(!AssistantHubConfig::default().validate_version_semver_format);
+
+        for (value, expected) in [
+            (serde_json::json!({}), false),
+            (
+                serde_json::json!({"validate_version_semver_format": false}),
+                false,
+            ),
+            (
+                serde_json::json!({"validate_version_semver_format": true}),
+                true,
+            ),
+        ] {
+            let config: AssistantHubConfig =
+                serde_json::from_value(value).expect("config should deserialize");
+            assert_eq!(config.validate_version_semver_format, expected);
+        }
+    }
 
     #[test]
     fn categories_are_enabled_by_default() {
@@ -7950,6 +8003,7 @@ impl ActionFacetsConfig {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 grant_scope: HashMap::new(),
+                draft_block_actions: HashMap::new(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             });
@@ -7969,6 +8023,7 @@ impl ActionFacetsConfig {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 grant_scope: HashMap::new(),
+                draft_block_actions: HashMap::new(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             });
@@ -8071,36 +8126,42 @@ pub struct ActionFacetConfig {
 
     // Fixed identifiers of client-side actions (e.g. "outlook.reply") the
     // model may propose via the `propose_client_action` tool when this facet
-    // is active. The client application validates the proposal and performs
-    // the action only after user confirmation.
+    // is active. A proposed action that a server-called client tool lists in
+    // its `client_actions` is carried out through that tool after the user's
+    // decision (Ask, Always or Never). Where the client shows an action's
+    // button, a click on it runs the action directly.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
     pub client_actions: Vec<String>,
 
-    // How the client should surface a proposed client action:
-    // - "render_buttons" (default): show action buttons; the user clicks.
-    // - "auto_prompt": the client may immediately surface the proposed action
-    //   after a fresh assistant completion, subject to the user's local
-    //   approval preferences.
-    // Only meaningful when `client_actions` is non-empty.
+    // No longer read: a proposed action follows the user's decision for its
+    // tool whatever this says. Still accepted ("render_buttons",
+    // "auto_prompt") so existing configurations load.
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
     pub presentation: Option<String>,
 
     // Subset of `client_actions` for which the deployment ENFORCES a
-    // per-use confirmation: the client must always ask and must not offer
-    // (or honor) a persistent "always allow" for these actions. Users may
-    // still deny them entirely.
+    // per-use confirmation: in this facet the server asks every time for a
+    // call that carries out one of these actions and offers no "always
+    // allow" for it. A user's Never still refuses them.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
     pub client_actions_always_ask: Vec<String>,
 
-    // How far a user's persistent "always allow" reaches, per action in
-    // `client_actions`: "device" (default) keeps it on the device until the
-    // user changes it; "session_document" keeps it only for the open add-in
-    // session and the document it was given on.
+    // Read only by the add-in's one-time carry-over of the decisions it kept
+    // on the device before they moved to the server: an "always allow" for an
+    // action set to "session_document" is not carried over, as it held only
+    // for one session and document; "device" (default) is carried over.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub grant_scope: HashMap<String, String>,
+
+    // Fenced code block languages mapped to one of `client_actions`: when an
+    // answer holds exactly one such block and the model proposed nothing, the
+    // server proposes the mapped action.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub draft_block_actions: HashMap<String, String>,
 
     // Allowlist of tools the model may call when this action facet is active,
     // using the same `namespace/*` / `server/tool` pattern syntax as regular
@@ -8307,7 +8368,9 @@ pub struct ClientToolConfig {
 
     /// Who calls the tool. `server`: never offered to a model; the server
     /// calls it after the submission named in `follows_tool` was accepted, so
-    /// the change the client checked is the change it applies. Requires
+    /// the change the client checked is the change it applies, or, without
+    /// `follows_tool`, after the model proposed one of its `client_actions`
+    /// through `propose_client_action`. Requires
     /// `requires_client_registration`. Default: `model`.
     #[serde(default, skip_serializing_if = "ClientToolCalledBy::is_model")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
@@ -9041,9 +9104,9 @@ fn validate_submission_parts(
 }
 
 /// Panics unless every server-called tool follows a submission that no other
-/// tool follows and can be dispatched like one, the follower's settings are
-/// usable, and each facet action id belongs to at most one server-called
-/// tool.
+/// tool follows, or follows none and lists client actions, and can be
+/// dispatched like one, the follower's settings are usable, and each facet
+/// action id belongs to at most one server-called tool.
 fn validate_server_called_tools(tools: &HashMap<String, ClientToolConfig>) {
     let mut followers: HashMap<&str, String> = HashMap::new();
     for tool in tools.values() {
@@ -9154,8 +9217,12 @@ fn validate_server_called_tools(tools: &HashMap<String, ClientToolConfig>) {
         if let Some(refusal) = refusal {
             panic!("Client tool '{qualified}' sets called_by = \"server\" and {refusal}.");
         }
-        if tool.follows_tool.is_none() {
-            panic!("Client tool '{qualified}' sets called_by = \"server\" and needs follows_tool.");
+        // Without follows_tool it carries out the client actions a facet lets
+        // the model propose, and `propose_client_action` is its caller.
+        if tool.follows_tool.is_none() && tool.client_actions.is_empty() {
+            panic!(
+                "Client tool '{qualified}' sets called_by = \"server\" and needs follows_tool or the client_actions it carries out."
+            );
         }
         for action in &tool.client_actions {
             if let Some(previous) = action_owners.insert(action, qualified.clone()) {
@@ -13167,13 +13234,15 @@ pub struct ModelCapabilities {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub supports_strict_tool_calling: bool,
     // Price per 1 million input tokens (unit-less)
-    #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
-    pub cost_input_tokens_per_1m: f64,
+    pub cost_input_tokens_per_1m: Option<f64>,
+    /// Optional price per 1 million cache-read input tokens in the budget currency.
+    #[serde(default, deserialize_with = "deserialize_cached_input_rate")]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub cost_cached_input_tokens_per_1m: Option<f64>,
     // Price per 1 million output tokens (unit-less)
-    #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
-    pub cost_output_tokens_per_1m: f64,
+    pub cost_output_tokens_per_1m: Option<f64>,
 }
 
 fn default_context_size_tokens() -> usize {
@@ -13199,8 +13268,9 @@ impl Default for ModelCapabilities {
             supports_encrypted_reasoning_content: default_supports_encrypted_reasoning_content(),
             supports_verbosity: false,
             supports_strict_tool_calling: false,
-            cost_input_tokens_per_1m: 0.0,
-            cost_output_tokens_per_1m: 0.0,
+            cost_input_tokens_per_1m: None,
+            cost_cached_input_tokens_per_1m: None,
+            cost_output_tokens_per_1m: None,
         }
     }
 }
@@ -13290,11 +13360,42 @@ pub struct BudgetConfig {
     #[serde(default = "default_warn_threshold")]
     pub warn_threshold: f64,
 
-    // Number of days that counts as one budget period.
+    // Number of 24-hour days in the rolling budget window.
     // Only has an effect if `enabled` is `true`.
     // Defaults to `30`.
     #[serde(default = "default_budget_period_days")]
     pub budget_period_days: u32,
+
+    /// Settings for the read-only Budget tab in web Settings.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub frontend_tab: BudgetFrontendTabConfig,
+
+    /// Prices keyed by the exact model or deployment identifier used for budget accounting.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub model_rates: HashMap<String, BudgetModelRate>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
+pub struct BudgetFrontendTabConfig {
+    /// Show the Budget tab when budget tracking is enabled. Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct BudgetModelRate {
+    /// Price per 1 million prompt tokens in the budget currency.
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub cost_input_tokens_per_1m: f64,
+    /// Optional price per 1 million cache-read input tokens in the budget currency.
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub cost_cached_input_tokens_per_1m: Option<f64>,
+    /// Price per 1 million completion tokens in the budget currency.
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub cost_output_tokens_per_1m: f64,
 }
 
 #[derive(
@@ -13317,7 +13418,24 @@ fn default_budget_period_days() -> u32 {
     30
 }
 
+fn deserialize_cached_input_rate<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let rate = Option::<f64>::deserialize(deserializer)?;
+    if rate.is_some_and(|cost| !cost.is_finite() || cost < 0.0) {
+        return Err(de::Error::custom(
+            "cost_cached_input_tokens_per_1m must be finite and nonnegative",
+        ));
+    }
+    Ok(rate)
+}
+
 impl BudgetConfig {
+    pub fn frontend_tab_enabled(&self) -> bool {
+        self.enabled && self.frontend_tab.enabled
+    }
+
     /// Validates the budget configuration.
     pub fn validate(&self) -> Result<(), Report> {
         if self.enabled {
@@ -13326,10 +13444,10 @@ impl BudgetConfig {
             }
 
             if let Some(max_budget) = self.max_budget
-                && max_budget <= 0.0
+                && (!max_budget.is_finite() || max_budget <= 0.0)
             {
                 return Err(eyre!(
-                    "max_budget must be greater than 0, got: {}",
+                    "max_budget must be finite and greater than 0, got: {}",
                     max_budget
                 ));
             }
@@ -13348,7 +13466,102 @@ impl BudgetConfig {
                 ));
             }
         }
+        for (identifier, rate) in &self.model_rates {
+            if [
+                rate.cost_input_tokens_per_1m,
+                rate.cost_output_tokens_per_1m,
+            ]
+            .into_iter()
+            .chain(rate.cost_cached_input_tokens_per_1m)
+            .any(|cost| !cost.is_finite() || cost < 0.0)
+            {
+                return Err(eyre!(
+                    "Budget rates for '{identifier}' must be finite and nonnegative"
+                ));
+            }
+        }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod budget_config_tests {
+    use super::*;
+
+    #[test]
+    fn frontend_tab_is_opt_in_and_requires_budget_tracking() {
+        for (toml, expected) in [
+            ("enabled = true", false),
+            ("enabled = true\n[frontend_tab]", false),
+            ("enabled = true\n[frontend_tab]\nenabled = false", false),
+            ("enabled = true\n[frontend_tab]\nenabled = true", true),
+            ("[frontend_tab]\nenabled = true", false),
+        ] {
+            let config: BudgetConfig = Config::builder()
+                .add_source(File::from_str(toml, FileFormat::Toml))
+                .build()
+                .unwrap()
+                .try_deserialize()
+                .unwrap();
+            assert_eq!(config.frontend_tab_enabled(), expected, "{toml}");
+        }
+    }
+
+    #[test]
+    fn model_rates_use_the_exact_reported_identifier() {
+        let config: BudgetConfig = Config::builder()
+            .add_source(File::from_str(
+                r#"
+                [model_rates."Deployment/v1.2"]
+                cost_input_tokens_per_1m = 1.0
+                cost_cached_input_tokens_per_1m = 0.0
+                cost_output_tokens_per_1m = 2.0
+                "#,
+                FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+        assert_eq!(
+            config.model_rates["Deployment/v1.2"].cost_output_tokens_per_1m,
+            2.0
+        );
+        assert_eq!(
+            config.model_rates["Deployment/v1.2"].cost_cached_input_tokens_per_1m,
+            Some(0.0)
+        );
+        config.validate().unwrap();
+    }
+
+    #[test]
+    fn invalid_cached_input_rates_are_rejected() {
+        for cost in [-1.0, f64::INFINITY, f64::NAN] {
+            let config = BudgetConfig {
+                model_rates: HashMap::from([(
+                    "deployment".into(),
+                    BudgetModelRate {
+                        cost_input_tokens_per_1m: 1.0,
+                        cost_output_tokens_per_1m: 2.0,
+                        cost_cached_input_tokens_per_1m: Some(cost),
+                    },
+                )]),
+                ..Default::default()
+            };
+            assert!(config.validate().is_err());
+        }
+
+        for literal in ["-1.0", "inf", "nan"] {
+            let config = Config::builder()
+                .add_source(File::from_str(
+                    &format!("cost_cached_input_tokens_per_1m = {literal}"),
+                    FileFormat::Toml,
+                ))
+                .build()
+                .unwrap();
+            let error = config.try_deserialize::<ModelCapabilities>().unwrap_err();
+            assert!(error.to_string().contains("finite and nonnegative"));
+        }
     }
 }
 

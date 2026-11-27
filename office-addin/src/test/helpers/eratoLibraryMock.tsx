@@ -200,6 +200,27 @@ export const DEFAULT_STUBS = {
     subscribe: () => noop,
   },
   useMcpBrowserAuthorization: () => noop,
+  // The wide layout: every tab is a tab panel, as before the narrow pages.
+  useSettingsPages: <T extends string>({
+    activeTab,
+    title,
+  }: {
+    activeTab: T;
+    title: string;
+  }) => ({
+    isNarrow: false,
+    showList: false,
+    shownTab: activeTab,
+    modalProps: { title, placement: "center" as const },
+    listProps: { pages: [], onOpen: noop, label: title, listRef: null },
+    panelProps: (tab: T, ids: { tabId: string; panelId: string }) => ({
+      id: ids.panelId,
+      hidden: tab !== activeTab,
+      role: "tabpanel" as const,
+      "aria-labelledby": ids.tabId,
+    }),
+  }),
+  SettingsPageList: StubNothing,
   ActionBar: StubPassthrough,
   ComponentSlot: StubNothing,
   ListGroupHeading: StubPassthrough,
@@ -214,6 +235,7 @@ export const DEFAULT_STUBS = {
   StarterPromptsSection: StubNothing,
   AssistantWelcomeUpper: StubNothing,
   splitFilenameForDisplay: () => ({ stem: "", extension: "" }),
+  isEmailDraftHtml: () => false,
   isImageFileResource: () => false,
   getFilePreviewUrl: () => undefined,
   FileAttachmentsPreview: StubNothing,
@@ -423,6 +445,7 @@ export const DEFAULT_STUBS = {
   componentRegistry: {},
   createBrowserClientInfo: (info: unknown) => info,
   dynamicActivate: async () => {},
+  clientToolAvailabilityChanged: noop,
   extractTextFromContent: () => "",
   findCapabilityByExtension: () => null,
   getSupportedFileTypes: () => [],
@@ -580,6 +603,20 @@ export const DEFAULT_STUBS = {
   usePersistedState: <T,>(_key: string, initialValue: T) =>
     useState(initialValue),
   useProfile: () => ({ profile: undefined }),
+  useApprovalTools: () => [],
+  approvalToolRows: () => [],
+  ClientToolDecisionList: () => null,
+  addUnsetClientToolDecisions: async () => [],
+  alwaysAllowLockedLine: () => "",
+  HostArtifactProvider: ({ children }: { children?: ReactNode }) => children,
+  submittedCardsOf: (
+    artifact:
+      | { submittedCard?: unknown; submittedCards?: readonly unknown[] }
+      | null
+      | undefined,
+  ) =>
+    artifact?.submittedCards ??
+    (artifact?.submittedCard ? [artifact.submittedCard] : []),
   useStandardMessageActions: () => noop,
   useUnarchiveChat: () => async () => undefined,
   useChatInputControls: () => ({

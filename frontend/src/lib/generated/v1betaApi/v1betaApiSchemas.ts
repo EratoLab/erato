@@ -25,14 +25,16 @@ export type ActionFacetInfo = {
   /**
    * Fixed identifiers of client-side actions the model may propose via the
    * `propose_client_action` tool when this facet is active. The client
-   * must only execute actions from this list, after user confirmation.
+   * must only execute actions from this list: through the server's call
+   * of the action's tool once the user decided, or on a click on the
+   * action's button.
    */
   client_actions?: string[];
   /**
    * Subset of `client_actions` the deployment enforces a per-use
-   * confirmation for: the client must always ask and must not offer or
-   * honor a persistent "always allow" for these actions. Users may still
-   * deny them entirely.
+   * confirmation for: in this facet the server asks every time for a call
+   * that carries out one of these actions and offers no "always allow"
+   * for it. Users may still deny them entirely.
    */
   client_actions_always_ask?: string[];
   /**
@@ -40,9 +42,11 @@ export type ActionFacetInfo = {
    */
   display_name: string;
   /**
-   * How far a persistent "always allow" reaches per action: `device`
-   * (the default for actions not listed) or `session_document`, which the
-   * client keeps only for its session and the document it was given on.
+   * Per action: `device` (the default for actions not listed) or
+   * `session_document`. Read only to carry the client's old on-device
+   * decisions over to the server once: an "always allow" for a
+   * `session_document` action held for one session and document and is
+   * not carried over.
    */
   grant_scope?: {
     [key: string]: string;
@@ -50,11 +54,10 @@ export type ActionFacetInfo = {
   id: string;
   platform?: string;
   /**
-   * How the client should surface a proposed client action:
-   * `render_buttons` (show buttons, user clicks) or `auto_prompt` (the
-   * client may surface the proposal immediately after a fresh assistant
-   * completion, subject to the user's local approval preferences). Present
-   * only when `client_actions` is non-empty; defaults to `render_buttons`.
+   * The facet's configured `presentation`, `render_buttons` when unset.
+   * Kept for older clients; current clients do not read it, as a proposed
+   * action follows the user's decision for its tool. Present only when
+   * `client_actions` is non-empty.
    */
   presentation?: string;
 };
@@ -165,6 +168,13 @@ export type ApprovalDecisionItem = {
    * is what tells its questions apart.
    */
   child_tool_call_id?: string;
+  /**
+   * What the user chose on a host's own card, such as a tick, for
+   * `approve` or `approve_always` of an item with `follows` set. Opaque to
+   * the server, at most 4 KiB of JSON; the operation carries it to the
+   * client as `confirmation`.
+   */
+  client_confirmation?: Record<string, any>;
   decision: ToolApprovalDecision;
   /**
    * The host's position at the click, for `approve_context` on a scope the
@@ -217,6 +227,7 @@ export type ApprovalItem = {
   called_as?: string;
   child?: null | ChildApprovalRef;
   display?: null | ToolDisplayMetadata;
+  follows?: ChainedApprovalRef;
   input: Value;
   /**
    * The item of an earlier stop on the same message this one replaces: the
@@ -332,6 +343,33 @@ export type ApprovalSpeechStyleSource = "deployment" | "audience" | "user";
  * How a spoken card is worded.
  */
 export type ApprovalSpeechWording = "precise" | "natural";
+
+/**
+ * A server-called tool whose calls the user decides on.
+ */
+export type ApprovalToolInfo = {
+  /**
+   * `user_decision` (Ask, Always or Never) or `every_call`, which asks
+   * every time and offers no Always.
+   */
+  approval: string;
+  /**
+   * The action facet action ids the tool carries out, such as
+   * `outlook.reply`: a client's own decisions for these actions now follow
+   * the tool's decision.
+   */
+  client_actions?: string[];
+  label?: ToolCallLabel;
+  /**
+   * `namespace/name`, the key of its stored decision.
+   */
+  qualified_name: string;
+  /**
+   * What the tool does, in the package's words. A client that can name the
+   * change from `label` in the user's language shows that instead.
+   */
+  title: string;
+};
 
 export type ApprovalVoiceCommand = {
   /**
@@ -686,6 +724,7 @@ export type AssistantHubConfigResponse = {
   enabled: boolean;
   force_whole_organization_audience: boolean;
   rating_mode: string;
+  validate_version_semver_format: boolean;
 };
 
 export type AssistantHubCreator = {
@@ -821,6 +860,18 @@ export type AssistantHubVersion = {
    * @format date-time
    */
   withdrawn_at?: string | null | undefined;
+};
+
+export type AssistantHubVersionErrorCode =
+  | "invalid_version_format"
+  | "version_not_increasing";
+
+export type AssistantHubVersionErrorResponse = {
+  code: AssistantHubVersionErrorCode;
+  /**
+   * The highest comparable version already submitted for this assistant.
+   */
+  current_version?: string;
 };
 
 export type AssistantHubVersionResponse = {
@@ -1003,6 +1054,18 @@ export type AudioTranscriptionMetadata = {
 
 export type BudgetCurrency = "EUR" | "USD";
 
+export type BudgetModelSpending = {
+  identifier: string;
+  label: string;
+  pricing_complete: boolean;
+  /**
+   * Known spending. Null when none of this model's usage could be priced.
+   *
+   * @format double
+   */
+  spending: number | null;
+};
+
 /**
  * Budget status information for the current user
  */
@@ -1015,14 +1078,14 @@ export type BudgetStatusResponse = {
    */
   budget_limit?: number;
   /**
-   * Number of days in the current budget period
+   * Number of days in the rolling budget window
    *
    * @format int32
    * @minimum 0
    */
   budget_period_days?: number;
   /**
-   * Current spending in the budget period for the user (unit-less)
+   * Known spending in the rolling window for the user (unit-less)
    *
    * @format double
    */
@@ -1031,12 +1094,64 @@ export type BudgetStatusResponse = {
    * Whether the budget feature is enabled
    */
   enabled: boolean;
+  user_settings?: BudgetUserSettings;
   /**
    * The warning threshold (0.0 to 1.0)
    *
    * @format double
    */
   warn_threshold?: number;
+};
+
+export type BudgetTokenUsage = {
+  /**
+   * Reported cache reads included in `prompt_tokens`. Omitted when unreported.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  cached_input_tokens?: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  completion_tokens: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  prompt_tokens: number;
+  /**
+   * Breakdown of the completion tokens.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  reasoning_tokens?: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  total_tokens: number;
+};
+
+export type BudgetUserSettings = {
+  /**
+   * Extra allowance that becomes spendable in the next 24 hours with no new spend.
+   *
+   * @format double
+   */
+  allowance_freed_next_24h: number | null;
+  /**
+   * @format date-time
+   */
+  as_of: string;
+  models: BudgetModelSpending[];
+  pricing_complete: boolean;
+  /**
+   * @format date-time
+   */
+  window_start: string;
 };
 
 /**
@@ -1084,6 +1199,24 @@ export type CardChangedError = {
    * Always `card_changed`.
    */
   code: string;
+};
+
+/**
+ * The accepted proposal a server-called operation follows.
+ */
+export type ChainedApprovalRef = {
+  /**
+   * The user decides on screen: the card needs a tick or a row choice, so
+   * it offers no Always and takes no decision by voice.
+   */
+  decide_on_screen: boolean;
+  proposal_call_id: string;
+  /**
+   * The host's short code for why it asks again after it found, while
+   * writing, that the user must confirm something, such as
+   * `whole_document`.
+   */
+  reason?: string;
 };
 
 /**
@@ -2530,6 +2663,12 @@ export type FacetInfo = {
 
 export type FacetsResponse = {
   action_facets?: ActionFacetInfo[];
+  /**
+   * The tools the server calls to apply a change the user approves, which
+   * the listed facets can reach. Clients list them in the user's tool
+   * settings, and offer the server's decision flow where one is listed.
+   */
+  approval_tools?: ApprovalToolInfo[];
   facets: FacetInfo[];
   global_facet_settings: GlobalFacetSettings;
 };
@@ -6067,6 +6206,14 @@ export type ToolUse = {
    * @default null
    */
   allowed_by?: ToolAllowedBy;
+  /**
+   * Token usage reported by this call.
+   *
+   * @default null
+   */
+  budget_usage?: {
+    [key: string]: BudgetTokenUsage;
+  };
   /**
    * @default null
    */

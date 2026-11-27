@@ -1,5 +1,6 @@
 import { MAX_PLAN_BYTES } from "@erato/frontend/word-review";
 
+import { wordAcceptedChangeDeclined } from "./wordAcceptedSubmissions";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
 import {
   assembleWordParts,
@@ -98,6 +99,9 @@ function partExecutor(
       if (!(error instanceof WordDraftRepairError)) throw error;
       return refusal(error.path, error.code, error.message);
     }
+    session.drafts.releaseDeclined((callId) =>
+      wordAcceptedChangeDeclined(context.messageId, callId),
+    );
     if (session.drafts.accepted)
       result = refusal(
         "",

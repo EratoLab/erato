@@ -54,7 +54,10 @@ const READY = TITLES.map(() => "ready" as const);
 
 const LABEL = "Document changes in parts";
 
-/** The card in the 360 px pane, Apply on top once Erato finished. */
+/**
+ * The card in the 360 px pane, Apply on top once Erato finished: in the chat's decision place, or
+ * in the answer where the server makes no apply call.
+ */
 function PartsCard({
   value,
   planning = false,
@@ -104,7 +107,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A large Word change written in parts, in the 360 px pane: one line while Erato plans it, then one heading, the intent, how many sections are ready and each section's title marked writing or ready; after the finish, the same heading and intent, Apply on top, one line for what stays as it was and only the sections that change.",
+          "A large Word change written in parts, in the 360 px pane: one line while Erato plans it, then one heading, the intent, how many sections are ready and each section's title marked writing or ready; after the finish, the same heading and intent, Apply on top, one line for what stays as it was and only the sections that change. Apply sits on the card in the chat's decision place; the card in the answer has it only where the server makes no apply call.",
       },
     },
   },
@@ -152,7 +155,7 @@ function FoldedCards() {
   const cards = [
     { id: "older", line: "Proposed: Changes in 6 sections" },
     { id: "applied", line: "Applied: Change 3 paragraphs" },
-    { id: "declined", line: "Proposal declined. Nothing was written." },
+    { id: "undone", line: "Undone: Change 3 paragraphs" },
   ];
   return (
     <div style={{ width: 360, display: "grid", gap: 12 }}>

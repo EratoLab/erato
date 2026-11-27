@@ -1370,6 +1370,16 @@ msgstr "Add a version number before submitting."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.validation.versionFormat"
+msgstr "Enter a version in MAJOR.MINOR.PATCH format."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.validation.versionNotIncreasing"
+msgstr "Enter a version greater than {version}."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Version comment"
 
@@ -1377,6 +1387,11 @@ msgstr "Version comment"
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionCommentHelp"
 msgstr "Explain what changed in this version for users browsing the Assistant Hub."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionFormatHelp"
+msgstr "Use MAJOR.MINOR.PATCH format, for example 1.0.0, with no leading zeros."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -1742,6 +1757,16 @@ msgstr "Deny"
 #: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 msgid "builtinToolApproval.title"
 msgstr "Allow “{name}”?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.elsewhere"
+msgstr "Open the Erato pane where this change was prepared to apply it."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.title"
+msgstr "Allow this change?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatUsageAdvisory.tsx
@@ -3296,8 +3321,18 @@ msgstr "You have reached or exceeded your personal budget limit of {formattedLim
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid "chat.warning.budget.period_suffix"
-msgstr " This is for your {days}-day budget period."
+#~ msgid "chat.warning.budget.period_suffix"
+#~ msgstr " This is for your {days}-day budget period."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.rolling_window"
+msgstr "{days, plural, one {This covers spending over the last day.} other {This covers spending over the last # days.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.stale"
+msgstr "Could not refresh your budget. These figures may be out of date."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -4674,8 +4709,8 @@ msgstr "Upload Files"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
-msgid "home.redirecting"
-msgstr "Redirecting to chat..."
+#~ msgid "home.redirecting"
+#~ msgstr "Redirecting to chat..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/InfoTooltip.tsx
@@ -5956,6 +5991,97 @@ msgid "parkedTaskNotice.text"
 msgstr "This task is waiting for your decision in its own chat."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.error"
+msgstr "Could not load your budget."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.freeingUp"
+msgstr "Budget freeing up in the next 24 hours"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.incompletePricing"
+msgstr "Some usage has no configured price."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.limit"
+msgstr "Limit"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.loading"
+msgstr "Loading budget…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.model"
+msgstr "Model or deployment"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.modelBreakdown"
+msgstr "Spending by model"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.noNewSpend"
+msgstr "Assumes no new spending."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.noUsage"
+msgstr "No usage in this window."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.partial"
+msgstr "Partial"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.remaining"
+msgstr "Remaining allowance"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.retry"
+msgstr "Retry"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.spent"
+msgstr "Spent"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.stale"
+msgstr "Could not refresh your budget. These figures may be out of date."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.unavailable"
+msgstr "Unavailable"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.used"
+msgstr "Budget used"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.window"
+msgstr "{days, plural, one {Spending over the last day} other {Spending over the last # days}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.windowDates"
+msgstr "{start} to {end}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.actions.cancel"
 msgstr "Cancel"
@@ -6484,6 +6610,11 @@ msgstr "How it sounds"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.backToList"
+msgstr "Back to Preferences"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 #: src/pages/AssistantsPage.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archiving..."
@@ -6624,7 +6755,7 @@ msgid "preferences.dialog.desktopSidecar.tools.heading"
 msgstr "Available tools"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/SidecarToolDecisions.tsx
+#: src/components/ui/Settings/ClientToolDecisionList.tsx
 msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
 msgstr "Could not save this choice. Try again."
 
@@ -7166,6 +7297,26 @@ msgid "preferences.dialog.mcpServers.tools.permissions.heading"
 msgstr "Tool permissions"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.caption"
+msgstr "Built into the Office apps · every device"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.intro"
+msgstr "Choose whether Erato asks before it changes something in an Office app, such as the open document. Your choice applies wherever you use Erato."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.name"
+msgstr "Office apps"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.tools.heading"
+msgstr "Changes"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
@@ -7265,6 +7416,11 @@ msgstr "Appearance"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.audio"
 msgstr "Audio"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.budget"
+msgstr "Budget"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

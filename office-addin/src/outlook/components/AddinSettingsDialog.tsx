@@ -1,21 +1,33 @@
-import { EntityRow, MailIcon } from "@erato/frontend/library";
+import {
+  approvalToolRows,
+  ClientToolDecisionList,
+  EntityRow,
+  MailIcon,
+  useApprovalTools,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
+import { useMemo } from "react";
 
 import { BehaviorTabContent } from "./BehaviorTabContent";
 import {
   AddinSettingsDialogCore,
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
-import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import { carryOverMappingsFor } from "../../core/clientActions/proposalApply";
 import { useOffice } from "../../providers/OfficeProvider";
-import { outlookClientActionDecisionStore } from "../utils/clientActionPolicy";
-import {
-  clientActionDisplayLabel,
-  offerableClientActions,
-} from "../utils/outlookClientActions";
 
 export function AddinSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
+  const approvalTools = useApprovalTools();
+  // Kept with the account, so every device has the same choice.
+  const outlookTools = useMemo(() => {
+    const keys = new Set(
+      carryOverMappingsFor(approvalTools, "outlook").map(
+        (mapping) => mapping.serverKey,
+      ),
+    );
+    return approvalTools.filter((tool) => keys.has(tool.qualified_name));
+  }, [approvalTools]);
   return (
     <AddinSettingsDialogCore
       {...props}
@@ -48,38 +60,32 @@ export function AddinSettingsDialog(props: AddinSettingsDialogCoreProps) {
             })}
           </p>
         ),
-        serversToolsEntities: (
-          <EntityRow
-            icon={<MailIcon className="size-4 text-theme-fg-secondary" />}
-            name={t({
-              id: "officeAddin.settings.serversTools.outlookActions",
-              message: "Outlook actions",
-            })}
-            caption={t({
-              id: "officeAddin.settings.serversTools.outlookActions.caption",
-              message: "Built into Outlook · this device",
-            })}
-            data-testid="servers-tools-outlook-actions-row"
-          >
-            <ClientActionsSettings
-              store={outlookClientActionDecisionStore}
-              offerableActions={offerableClientActions}
-              displayLabel={clientActionDisplayLabel}
-              copy={{
-                intro: t({
-                  id: "officeAddin.settings.addin.clientActions.intro",
-                  message:
-                    "Your decisions from the in-chat confirmation are stored here and can be changed any time. Nothing is sent until you press Send in Outlook.",
-                }),
-                alwaysAllowHelper: t({
-                  id: "officeAddin.settings.addin.clientActions.always.helper",
-                  message:
-                    "Performs the action without asking. Nothing is sent until you press Send in Outlook.",
-                }),
-              }}
-            />
-          </EntityRow>
-        ),
+        // Without an Outlook tool on the server, the tab has nothing of Outlook's to show.
+        serversToolsEntities:
+          outlookTools.length > 0 ? (
+            <EntityRow
+              icon={<MailIcon className="size-4 text-theme-fg-secondary" />}
+              name={t({
+                id: "officeAddin.settings.serversTools.outlookActions",
+                message: "Outlook actions",
+              })}
+              caption={t({
+                id: "officeAddin.settings.serversTools.outlookActions.everyDevice",
+                message: "Built into Outlook · every device",
+              })}
+              data-testid="servers-tools-outlook-actions-row"
+            >
+              <ClientToolDecisionList
+                tools={approvalToolRows(outlookTools)}
+                defaultDecision="ask"
+                heading={t({
+                  id: "officeAddin.outlook.settings.serverActions",
+                  message: "Actions",
+                })}
+                data-testid="outlook-server-tool-decisions"
+              />
+            </EntityRow>
+          ) : undefined,
         content: (
           <BehaviorTabContent
             emptyStateText={t({

@@ -29,7 +29,11 @@ import {
   wordCommentPositions,
   wordCommentSelection,
 } from "./wordCommentPositions";
-import { plural, readWordComments } from "./wordCommentReader";
+import {
+  plural,
+  readWordComments,
+  wordCommentInventoryFromCapture,
+} from "./wordCommentReader";
 import {
   wordCommentIdKeys,
   wordCommentIdKeysByRef,
@@ -752,6 +756,34 @@ export class WordCommentReadSession {
     session.ownerMessageId = request.messageId;
     session.chatId = request.chatId;
     return true;
+  }
+
+  /**
+   * A change of this request rewrote the body: paragraph numbers follow the copy the document's
+   * next read takes, and until then each comment read lists the body itself.
+   */
+  followDocument(
+    owner: WordCommentReadRequest,
+    ordinalMap: WordCommentSendCapture["ordinalMap"] | null,
+  ): void {
+    const session = this.session;
+    if (
+      !session ||
+      session.ownerMessageId !== owner.messageId ||
+      session.chatId !== owner.chatId
+    )
+      return;
+    const { activation } = session;
+    session.activation = {
+      ...activation,
+      inventory: ordinalMap
+        ? wordCommentInventoryFromCapture(ordinalMap)
+        : undefined,
+      capture: activation.capture && {
+        ...activation.capture,
+        ordinalMap: ordinalMap ?? new Map(),
+      },
+    };
   }
 
   clear(): void {

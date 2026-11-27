@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -11,8 +12,14 @@ vi.mock("@/app/env", () => ({
   env: vi.fn(),
 }));
 
+const mockSystemTextScale = vi.fn<() => number | null>(() => null);
+vi.mock("@/lib/systemTextSize", () => ({
+  systemTextScale: () => mockSystemTextScale(),
+}));
+
 import { env } from "@/app/env";
 import { Logo } from "@/components/ui/Logo";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 
 import {
   __resetThemeAssetProbeCache,
@@ -33,6 +40,8 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   frontendPublicBasePath: "/public/common",
   commonPublicBasePath: "/public/common",
   themeCustomerName: null,
+  themeTranslationLocales: null,
+  translationOverrideLocales: null,
   faviconPath: "/favicon.svg",
   themePath: null,
   themeConfigPath: null,
@@ -357,6 +366,173 @@ describe("ThemeProvider", () => {
     expect(document.querySelector('link[data-theme-fonts="true"]')).toBeNull();
     expect(document.querySelector('link[data-theme-styles="true"]')).toBeNull();
     expect(document.querySelector('style[data-theme-vars="true"]')).toBeNull();
+  });
+
+  it("is ready only once the theme's style sheets have loaded", async () => {
+    mockEnv.mockReturnValue(
+      createMockEnv({ themeConfigPath: "/custom/brand/theme.json" }),
+    );
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockTheme,
+    });
+    const Ready = () => (
+      <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>
+    );
+
+    render(
+      <ThemeProvider>
+        <Ready />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('link[data-theme-styles="true"]'),
+      ).not.toBeNull();
+    });
+    expect(screen.getByText("waiting")).toBeInTheDocument();
+
+    fireEvent.load(document.querySelector('link[data-theme-fonts="true"]')!);
+    expect(screen.getByText("waiting")).toBeInTheDocument();
+    fireEvent.error(document.querySelector('link[data-theme-styles="true"]')!);
+    expect(await screen.findByText("ready")).toBeInTheDocument();
+  });
+
+  it("is ready only once the theme's text fonts have loaded", async () => {
+    const pending: Array<(value: FontFace[]) => void> = [];
+    const load = vi.fn(
+      (_font: string) =>
+        new Promise<FontFace[]>((resolve) => pending.push(resolve)),
+    );
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { load },
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 404,
+    });
+    const Ready = () => (
+      <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>
+    );
+
+    try {
+      render(
+        <ThemeProvider>
+          <Ready />
+        </ThemeProvider>,
+      );
+
+      await waitFor(() => expect(load).toHaveBeenCalled());
+      expect(load.mock.calls.map(([font]) => font)).toEqual([
+        "400 1em Geist Variable",
+        "600 1em Geist Variable",
+      ]);
+      expect(screen.getByText("waiting")).toBeInTheDocument();
+      pending.forEach((resolve) => resolve([]));
+      expect(await screen.findByText("ready")).toBeInTheDocument();
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
+    }
+  });
+
+  it("shows the page after three seconds when the theme never answers, without the start colour", () => {
+    vi.useFakeTimers();
+    const start = document.createElement("style");
+    start.id = "erato-start-colors";
+    document.head.appendChild(start);
+    try {
+      (global.fetch as ReturnType<typeof vi.fn>).mockReturnValue(
+        new Promise(() => {}),
+      );
+      const Ready = () => (
+        <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>
+      );
+      render(
+        <ThemeProvider>
+          <Ready />
+        </ThemeProvider>,
+      );
+
+      act(() => vi.advanceTimersByTime(2900));
+      expect(screen.getByText("waiting")).toBeInTheDocument();
+      expect(start.isConnected).toBe(true);
+      act(() => vi.advanceTimersByTime(100));
+      expect(screen.getByText("ready")).toBeInTheDocument();
+      expect(start.isConnected).toBe(false);
+    } finally {
+      start.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits for slow theme fonts no longer than its font budget", async () => {
+    const load = vi.fn(() => new Promise<FontFace[]>(() => {}));
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { load },
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 404,
+    });
+    const Ready = () => (
+      <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>
+    );
+
+    try {
+      render(
+        <ThemeProvider>
+          <Ready />
+        </ThemeProvider>,
+      );
+      await waitFor(() => expect(load).toHaveBeenCalled());
+      const fontsAskedAt = Date.now();
+      expect(screen.getByText("waiting")).toBeInTheDocument();
+
+      expect(
+        await screen.findByText("ready", undefined, { timeout: 1500 }),
+      ).toBeInTheDocument();
+      expect(Date.now() - fontsAskedAt).toBeLessThan(1000);
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
+    }
+  });
+
+  it("keeps the page's start colour until the loaded theme replaces it", async () => {
+    const start = document.createElement("style");
+    start.id = "erato-start-colors";
+    document.head.appendChild(start);
+    let answer: (value: unknown) => void = () => {};
+    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise((resolve) => (answer = resolve)),
+    );
+
+    render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+    await waitFor(() => {
+      expect(
+        document.querySelector('style[data-theme-vars="true"]'),
+      ).not.toBeNull();
+    });
+    expect(start.isConnected).toBe(true);
+
+    answer({
+      ok: true,
+      json: async () => ({
+        name: "Brand",
+        theme: { light: { colors: { shell: { page: "#123456" } } } },
+      }),
+    });
+
+    await waitFor(() => expect(start.isConnected).toBe(false));
+    expect(
+      document.querySelector('style[data-theme-vars="true"]')?.textContent,
+    ).toContain("--theme-shell-page: #123456;");
   });
 
   it("derives stylesheet paths from the theme.json path that actually loaded after fallback", async () => {
@@ -730,6 +906,64 @@ describe("ThemeProvider", () => {
     );
 
     expect(document.documentElement).toHaveAttribute("data-text-size", "large");
+  });
+
+  it("follows the device's text size inside an app, whatever size was chosen", () => {
+    localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, "large");
+    installHostShell({});
+    mockSystemTextScale.mockReturnValue(21 / 17);
+    const Probe = () => {
+      const { followsSystemTextSize } = useTheme();
+      return <span>{followsSystemTextSize ? "follows" : "own"}</span>;
+    };
+
+    try {
+      const { unmount } = render(
+        <ThemeProvider>
+          <Probe />
+        </ThemeProvider>,
+      );
+      const root = document.documentElement;
+      expect(screen.getByText("follows")).toBeInTheDocument();
+      expect(root).toHaveAttribute("data-text-size", "system");
+      expect(root.style.getPropertyValue("--system-text-scale")).toBe(
+        String(21 / 17),
+      );
+
+      // Changed in the device's settings while the app was in the background.
+      mockSystemTextScale.mockReturnValue(19 / 17);
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(root.style.getPropertyValue("--system-text-scale")).toBe(
+        String(19 / 17),
+      );
+
+      unmount();
+      expect(root).not.toHaveAttribute("data-text-size");
+      expect(root.style.getPropertyValue("--system-text-scale")).toBe("");
+    } finally {
+      removeHostShell();
+      mockSystemTextScale.mockReturnValue(null);
+    }
+  });
+
+  it("keeps Erato's own text size in an app whose engine cannot report the device's", () => {
+    localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, "large");
+    installHostShell({});
+    try {
+      render(
+        <ThemeProvider>
+          <div>content</div>
+        </ThemeProvider>,
+      );
+      expect(document.documentElement).toHaveAttribute(
+        "data-text-size",
+        "large",
+      );
+    } finally {
+      removeHostShell();
+    }
   });
 
   it("sets no text-size attribute for the default or an unknown stored size", () => {

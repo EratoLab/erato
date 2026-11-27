@@ -98,6 +98,27 @@ describe("handleClientToolCall", () => {
     });
   });
 
+  it("takes the same call again after it asked for a decision on screen", async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        result: { status: "needs_decision", reason: "whole_document" },
+      })
+      .mockResolvedValueOnce({ ok: true, result: { status: "applied" } });
+    registerClientToolExecutor("fetch_availability", execute);
+
+    await handleClientToolCall(makeEvent(), deps);
+    expect(hasClientToolCallBeenAnswered("call-1")).toBe(false);
+    await handleClientToolCall(makeEvent(), deps);
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(lastPostBody(fetchMock)).toMatchObject({
+      result: { status: "applied" },
+    });
+    expect(hasClientToolCallBeenAnswered("call-1")).toBe(true);
+  });
+
   describe("a result the proxy turns away as signed out", () => {
     // 2026-11-19 10:14:06 UTC: the pane answered a Word read within a second, the proxy answered
     // its result with the 403 sign-in page, and the server timed the read out 30 s later.

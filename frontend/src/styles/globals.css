@@ -601,6 +601,20 @@ body {
     border-radius: var(--theme-radius-control);
   }
 
+  /* A card's own row of buttons in a slim pane takes the compact size, under a
+     mouse only: a finger keeps the full target. The buttons stay size "sm" so
+     a theme's data-geometry rules still reach them; two classes outrank the
+     button's own geometry and type scale. */
+  @media (max-width: 639.98px) and (hover: hover) and (pointer: fine) {
+    .card-actions .btn-geometry-sm {
+      padding-block: 0.25rem;
+      min-height: 0;
+      min-width: 0;
+      font-size: var(--theme-font-size-xs);
+      line-height: var(--theme-line-height-xs);
+    }
+  }
+
   /* The capsule/circle dialect. A capsule is a text label plus inline padding
      and reads the pill token; a circle is an intrinsic square with no label
      and declares 50%, so a theme softening the pill radius — which is what
@@ -1264,6 +1278,31 @@ body {
   .progress-geometry[data-size="sm"] {
     block-size: 0.25rem;
   }
+
+  /* The page beside the sidebar and the scrim that dims it. On a narrow
+     screen the open sidebar pushes both aside by its own width, and the part
+     of the page still in view becomes a card; [data-sidebar-moving] keeps
+     that shape while they follow a finger or slide back. */
+  .sidebar-page-geometry[data-sidebar-pushed],
+  .sidebar-page-geometry[data-sidebar-moving] {
+    overflow: clip;
+    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+  }
+
+  /* The pushed page reaches past the screen's right edge. Clipped there, it
+     gives a scrollIntoView inside it nothing to scroll sideways. */
+  :has(
+    > .sidebar-page-geometry[data-sidebar-pushed],
+    > .sidebar-page-geometry[data-sidebar-moving]
+  ) {
+    overflow-x: clip;
+  }
+
+  .sidebar-page-geometry[data-sidebar-pushed] {
+    transform: translateX(
+      var(--sidebar-width-override, var(--theme-layout-sidebar-width))
+    );
+  }
 }
 
 .theme-transition {
@@ -1460,6 +1499,14 @@ body:has(.app-viewport) {
     max(var(--modal-overlay-gutter), var(--safe-area-left));
 }
 
+/* A full-screen dialog is the page: what shows around it inside the safe
+   areas (under the status bar, beside the home bar) is the dialog's own
+   paint, not a dimmed and blurred chat. */
+.modal-overlay-skin[data-placement="fullscreen"] {
+  background-color: var(--theme-shell-modal);
+  backdrop-filter: none;
+}
+
 /* Scrim beside a drawer: the add-in's history drawer and the host sidebar
    on a narrow screen. Deliberately NOT the modal overlay skin: its backdrop
    blur re-filters the region behind the scrim on every frame while the panel
@@ -1473,6 +1520,11 @@ body:has(.app-viewport) {
   background-color: var(--theme-shell-modal);
   border-radius: var(--theme-radius-modal);
   box-shadow: var(--theme-elevation-modal);
+}
+
+.modal-shell-skin[data-placement="fullscreen"] {
+  border-radius: 0px;
+  box-shadow: none;
 }
 
 /* The card surface. This is the only rule in the family that sets a final
@@ -2235,6 +2287,17 @@ body:has(.app-viewport) {
 
 :root[data-text-size="x-large"] {
   font-size: 125%;
+}
+
+/* Inside an app the device's text size setting decides (ThemeProvider). */
+:root[data-text-size="system"] {
+  font-size: calc(100% * var(--system-text-scale, 1));
+}
+
+/* A smaller device text size would take the composer's field below 16px,
+   where iOS zooms the page into a field that gets focus. */
+:root[data-text-size="system"] [data-ui="chat-input-shell"] textarea {
+  font-size: max(16px, 1rem);
 }
 
 /* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).

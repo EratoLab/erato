@@ -15,7 +15,11 @@ import {
 } from "./wordApplyDiagnostics";
 import { wordApplyPolicy } from "./wordApplyPolicy";
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
-import { beginWordOwnWrite, markWordOwnImport } from "./wordChangeJournal";
+import {
+  beginWordOwnWrite,
+  markWordOwnImport,
+  wordChangePosition,
+} from "./wordChangeJournal";
 import {
   unlockWordContentControlsForImport,
   restoreWordContentControlLocks,
@@ -91,6 +95,7 @@ import type {
   WordCommentThreadState,
   WordPlanCommentCheck,
 } from "./wordPlanCommentCheck";
+import type { WordVerifiedBody } from "./wordRequestCapture";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -151,6 +156,8 @@ export interface WordDocumentApplyResult {
   afterFingerprint?: string;
   diagnostic?: WordDocumentDiagnostic;
   outcome?: WordApplyOutcome;
+  /** The body route's verify read of what it wrote, which the next read may stand on. */
+  verifiedBody?: WordVerifiedBody;
 }
 export interface WordDocumentRevertResult {
   status: "reverted" | "stale" | "interrupted";
@@ -487,7 +494,7 @@ async function applyPlan(
         status: "blocked",
         diagnostic: diagnostic("compile", "compile-failed"),
       };
-    // Asked of every route and caller, Always and auto-prompt included: only the tick consents.
+    // Asked of every route and caller, the user's Always included: only the tick consents.
     const comments = wordPlanCommentConsequences(snapshot, compiled, prepared);
     if (
       comments.removals.length &&
@@ -688,6 +695,11 @@ async function applyPlan(
         before,
         afterFingerprint,
         outcome: outcome("body", verification, checked),
+        verifiedBody: {
+          ooxml: after.value,
+          tracking: String(context.document.changeTrackingMode),
+          position: wordChangePosition(),
+        },
       };
     });
   } catch (error) {

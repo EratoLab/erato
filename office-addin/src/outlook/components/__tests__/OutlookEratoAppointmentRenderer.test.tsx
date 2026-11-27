@@ -12,75 +12,36 @@ import { OutlookEratoAppointmentRenderer } from "../OutlookEratoAppointmentRende
 
 // Mocked at the same seams as the email renderer's suite: the artifact + chat
 // snapshot (what AddinChat stamps), the current Outlook item identity, the
-// persisted decisions, and the Office.js form module — the tests only assert
+// user's server decisions, and the Office.js form module — the tests only assert
 // WHETHER the appointment form is reached, never how. The fence PARSER runs
 // for real: the payload contract is part of what's under test.
 const mockUseOutlookMailItem = vi.fn();
 const mockUseOutlookArtifact = vi.fn();
 const mockUseChatContext = vi.fn();
-const mockUsePersistedState = vi.fn();
+const server = vi.hoisted(() => ({
+  decisions: {},
+}));
 const mockOpenNewAppointmentForm = vi.fn();
 const mockIsCreateAppointmentSupported = vi.fn();
 
 vi.mock("@erato/frontend/library", async () => ({
-  ActionConfirmationCard: (props: {
-    description?: unknown;
-    onAllowOnce: () => void;
-    onAlwaysAllow: () => void;
-    onDeny: () => void;
-    status?: string;
-    resolvedLabel?: string;
-    isBusy?: boolean;
-  }) => (
-    <div
-      data-testid="confirmation-card"
-      data-status={props.status ?? "pending"}
-      data-busy={props.isBusy ? "true" : "false"}
-    >
-      <div data-testid="confirmation-description">
-        {props.description as never}
-      </div>
-      {(props.status ?? "pending") === "pending" ? (
-        <>
-          <button
-            type="button"
-            disabled={props.isBusy}
-            onClick={props.onAllowOnce}
-          >
-            allow-once
-          </button>
-          <button
-            type="button"
-            disabled={props.isBusy}
-            onClick={props.onAlwaysAllow}
-          >
-            always-allow
-          </button>
-          <button type="button" disabled={props.isBusy} onClick={props.onDeny}>
-            deny
-          </button>
-        </>
-      ) : (
-        <span data-testid="resolved-label">{props.resolvedLabel}</span>
-      )}
-    </div>
+  Button: ({ icon: _icon, ...props }: Record<string, unknown>) => (
+    <button type="button" {...props} />
   ),
   useChatContext: () => mockUseChatContext(),
   ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
     () => mockUseChatContext(),
   ),
   useOutlookArtifact: () => mockUseOutlookArtifact(),
-  usePersistedState: () => mockUsePersistedState(),
-  useConfirmationRegistryStore: (
-    selector: (state: {
-      registerConfirmation: () => void;
-      unregisterConfirmation: () => void;
-    }) => unknown,
-  ) =>
-    selector({
-      registerConfirmation: () => {},
-      unregisterConfirmation: () => {},
-    }),
+  useApprovalTools: () => [
+    {
+      qualified_name: "outlook/open_appointment",
+      client_actions: ["outlook.create_appointment"],
+    },
+  ],
+  useProfile: () => ({
+    profile: { client_tool_decisions: server.decisions },
+  }),
 }));
 
 vi.mock("../../providers/OutlookMailItemProvider", () => ({
@@ -111,15 +72,11 @@ interface TestArtifact {
   renderMode: "body" | "suggestions";
   messageId: string;
   allowedClientActions: string[];
-  alwaysAskClientActions?: string[];
-  clientActionPresentation: string;
   isFreshCompletion?: boolean;
   itemIdentity?: string;
   proposedClientAction?: string;
 }
 
-// Unique per test: the once-per-message auto-prompt slot is module-level
-// state that intentionally survives remounts (and thus tests).
 let nextMessageId = 0;
 
 function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
@@ -129,8 +86,6 @@ function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
     renderMode: "body",
     messageId: `appt-msg-${nextMessageId}`,
     allowedClientActions: [CREATE],
-    alwaysAskClientActions: [CREATE],
-    clientActionPresentation: "render_buttons",
     ...overrides,
   };
 }
@@ -138,8 +93,11 @@ function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
 function prime(options: {
   artifact: TestArtifact | null;
   currentItemIdentity: string | null;
+  /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
   supported?: boolean;
+  /** The stored answer's parts. */
+  content?: unknown[];
 }) {
   mockUseOutlookArtifact.mockReturnValue(options.artifact);
   mockUseOutlookMailItem.mockReturnValue({
@@ -148,10 +106,16 @@ function prime(options: {
   });
   const messageId = options.artifact?.messageId ?? "unrelated";
   mockUseChatContext.mockReturnValue({
-    messages: { [messageId]: { id: messageId, role: "assistant" } },
+    messages: {
+      [messageId]: {
+        id: messageId,
+        role: "assistant",
+        content: options.content,
+      },
+    },
     messageOrder: [messageId],
   });
-  mockUsePersistedState.mockReturnValue([options.decisions ?? {}, vi.fn()]);
+  server.decisions = options.decisions ?? {};
   mockIsCreateAppointmentSupported.mockReturnValue(options.supported ?? true);
   mockOpenNewAppointmentForm.mockResolvedValue(undefined);
 }
@@ -216,24 +180,9 @@ describe("OutlookEratoAppointmentRenderer — summary card", () => {
   });
 });
 
-function makeAutoPromptArtifact(
-  overrides: Partial<TestArtifact> = {},
-): TestArtifact {
-  return makeArtifact({
-    isFreshCompletion: true,
-    itemIdentity: "item-a",
-    clientActionPresentation: "auto_prompt",
-    proposedClientAction: CREATE,
-    ...overrides,
-  });
-}
-
 describe("OutlookEratoAppointmentRenderer — click semantics", () => {
   it("executes directly on click — the fully-described button IS the consent", async () => {
-    prime({
-      artifact: makeArtifact({ alwaysAskClientActions: [] }),
-      currentItemIdentity: null,
-    });
+    prime({ artifact: makeArtifact(), currentItemIdentity: null });
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
 
     await act(async () => {
@@ -241,27 +190,93 @@ describe("OutlookEratoAppointmentRenderer — click semantics", () => {
     });
 
     expect(mockOpenNewAppointmentForm).toHaveBeenCalledWith(DETAILS);
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
   });
 
-  it("executes directly on click even under org-enforced always-ask — enforcement gates assistant-initiated runs, not clicks on a fully-disclosed payload", async () => {
-    // The summary above the button already shows the whole payload, so the
-    // click is the consent; client_actions_always_ask only clamps the
-    // auto-prompt path (see the auto-prompt suite).
+  it("opens nothing on its own for a proposal, whatever the user decided for Erato", () => {
     prime({
-      artifact: makeArtifact(),
-      currentItemIdentity: null,
-      decisions: { [`${FACET}/${CREATE}`]: "always" },
+      artifact: makeArtifact({
+        isFreshCompletion: true,
+        itemIdentity: "item-a",
+        proposedClientAction: CREATE,
+      }),
+      currentItemIdentity: "item-a",
+      decisions: { "outlook/open_appointment": "always_allow" },
     });
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
-    });
+    expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Open appointment" }),
+    ).toBeEnabled();
+  });
 
-    expect(mockOpenNewAppointmentForm).toHaveBeenCalledWith(DETAILS);
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+  it("says the appointment waits for the decision and then that it was denied, keeping its own button", () => {
+    const proposal = {
+      content_type: "tool_use",
+      tool_call_id: "call-propose",
+      tool_name: "propose_client_action",
+      status: "success",
+      input: { action: CREATE },
+      output: { apply: { call_id: "call-propose.apply" }, action: CREATE },
+    };
+    const fence = {
+      content_type: "text",
+      text: "```erato-appointment\n" + FENCE + "\n```\n",
+    };
+    const artifact = makeArtifact({ proposedClientAction: CREATE });
+    prime({
+      artifact,
+      currentItemIdentity: "item-a",
+      content: [fence, proposal],
+    });
+    const { rerender } = render(
+      <OutlookEratoAppointmentRenderer content={FENCE} />,
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+    expect(
+      screen.getByRole("button", { name: "Open appointment" }),
+    ).toHaveAttribute("variant", "secondary");
+
+    prime({
+      artifact,
+      currentItemIdentity: "item-a",
+      content: [
+        fence,
+        proposal,
+        {
+          content_type: "tool_use",
+          tool_call_id: "call-propose.apply",
+          tool_name: "open_appointment",
+          status: "error",
+          input: {},
+          output: { status: "rejected" },
+        },
+      ],
+    });
+    rerender(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Denied. No appointment was opened.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Open appointment" }),
+    ).toBeEnabled();
+  });
+
+  it("offers no button for an action the user set to Never", () => {
+    prime({
+      artifact: makeArtifact(),
+      currentItemIdentity: null,
+      decisions: { "outlook/open_appointment": "never_allow" },
+    });
+    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
+    expect(screen.getByText("Projekt-Sync")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("shows the inline alert when a click-launched open fails", async () => {
@@ -278,133 +293,5 @@ describe("OutlookEratoAppointmentRenderer — click semantics", () => {
     );
     // No success swap on a failed open.
     expect(screen.queryByRole("button", { name: "Opened!" })).toBeNull();
-  });
-});
-
-describe("OutlookEratoAppointmentRenderer — confirmation card (auto-surfaced)", () => {
-  it("allow-once opens the prefilled form; the card shows the time + attendees summary", async () => {
-    prime({
-      artifact: makeAutoPromptArtifact(),
-      currentItemIdentity: "item-a",
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    const description = screen.getByTestId("confirmation-description");
-    expect(description).toHaveTextContent("alice@example.com");
-    expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-    });
-
-    expect(mockOpenNewAppointmentForm).toHaveBeenCalledWith(DETAILS);
-    // No persistent record: the card closes and the button shows the
-    // transient "Opened!" swap (the add-in's standard success idiom).
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
-  });
-
-  it("closes the card on deny without opening anything", () => {
-    prime({
-      artifact: makeAutoPromptArtifact(),
-      currentItemIdentity: "item-a",
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "deny" }));
-
-    expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Open appointment" }),
-    ).toBeEnabled();
-  });
-
-  it("closes the card when the form fails; the inline alert is the feedback", async () => {
-    prime({
-      artifact: makeAutoPromptArtifact(),
-      currentItemIdentity: "item-a",
-    });
-    mockOpenNewAppointmentForm.mockRejectedValue(new Error("host says no"));
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-    });
-
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Failed to open the appointment form",
-    );
-    // No success swap on a failed open.
-    expect(screen.queryByRole("button", { name: "Opened!" })).toBeNull();
-  });
-});
-
-describe("OutlookEratoAppointmentRenderer — auto-prompt", () => {
-  it("auto-surfaces the confirmation card for a fresh matching proposal", () => {
-    prime({
-      artifact: makeAutoPromptArtifact(),
-      currentItemIdentity: "item-a",
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-    expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
-  });
-
-  it("still cards under a stored grant when the deployment enforces always-ask — enforcement clamps the assistant-initiated path", () => {
-    prime({
-      artifact: makeAutoPromptArtifact(),
-      currentItemIdentity: "item-a",
-      decisions: { [`${FACET}/${CREATE}`]: "always" },
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-    expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
-  });
-
-  it("auto-surfaces for a NEUTRAL-context send (no item open, sentinel identity)", () => {
-    // The scheduling facet's flagship context: pinned pane, nothing selected.
-    // The send recorded the no-item sentinel; at prompt time there is still
-    // no item — that must count as a match, not as a failed capture.
-    prime({
-      artifact: makeAutoPromptArtifact({ itemIdentity: "no-item" }),
-      currentItemIdentity: null,
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-  });
-
-  it("auto-surfaces when the live item drifted from the send-time identity", () => {
-    // create_appointment is item-independent: a mid-stream re-resolve that
-    // re-mints an unsaved-compose identity (or a navigation to another item)
-    // must not suppress the auto-prompt for a payload that lives in the fence.
-    prime({
-      artifact: makeAutoPromptArtifact({ itemIdentity: "compose:abc" }),
-      currentItemIdentity: "compose:xyz",
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-  });
-
-  it("never auto-surfaces for history messages", () => {
-    prime({
-      artifact: makeAutoPromptArtifact({
-        isFreshCompletion: undefined,
-        itemIdentity: undefined,
-      }),
-      currentItemIdentity: null,
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-    // The button remains as the manual path.
-    expect(
-      screen.getByRole("button", { name: "Open appointment" }),
-    ).toBeInTheDocument();
   });
 });

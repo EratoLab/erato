@@ -28,9 +28,11 @@ import type {
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 let mockedFiltersEnabled = true;
+let mockedPinnedChatsEnabled = false;
 vi.mock("@/providers/FeatureConfigProvider", () => ({
   useOptionalFeatureConfig: () => ({
     sidebar: { chatHistoryFiltersEnabled: mockedFiltersEnabled },
+    pinnedChats: { enabled: mockedPinnedChatsEnabled, maxItems: 5 },
   }),
 }));
 
@@ -394,6 +396,24 @@ describe("recent-chats filter wiring", () => {
       }),
       undefined,
     );
+  });
+
+  it("asks for the sidebar's lists when called without options", () => {
+    mockedPinnedChatsEnabled = true;
+    try {
+      renderHook(() => useChatHistory());
+      renderHook(() =>
+        useChatHistory({ pinnedChatsEnabled: true, pinnedChatsLimit: 5 }),
+      );
+    } finally {
+      mockedPinnedChatsEnabled = false;
+    }
+
+    const keys = mockUseInfiniteQuery.mock.calls.map(
+      ([options]) => (options as { queryKey: unknown }).queryKey,
+    );
+    expect(keys[0]).toEqual(keys[2]);
+    expect(keys[1]).toEqual(keys[3]);
   });
 
   it("keeps the pinned query unfiltered", () => {

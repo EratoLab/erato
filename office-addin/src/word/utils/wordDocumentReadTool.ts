@@ -11,7 +11,7 @@ import {
 } from "@erato/frontend/word-review";
 
 import { checkWordApprovalScope } from "./wordApprovalScope";
-import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
+import { wordAuthoringContract } from "./wordAuthoringContract";
 import {
   wordReadableSourceBlock,
   wordReadableStyles,
@@ -33,6 +33,7 @@ import {
   wordReadRecord,
 } from "./wordReadFragments";
 import { wordReadFreshness } from "./wordReadFreshness";
+import { captureWordDocumentForRequest } from "./wordRequestCapture";
 import { readWordSection } from "./wordSectionRead";
 import { readWordTableCell } from "./wordTableCellRead";
 import { readWordTargets } from "./wordTargetRead";
@@ -45,11 +46,19 @@ import type {
   WordReadOutcome,
 } from "./wordReadFreshness";
 import type {
+  WordRequestCapture,
+  WordVerifiedBody,
+} from "./wordRequestCapture";
+import type {
   ClientToolCallContext,
   ClientToolExecutionResult,
   ClientToolExecutor,
 } from "@erato/frontend/library";
-import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentCapture,
+  WordImageAssetCapture,
+} from "@erato/frontend/word-review";
 
 export { WORD_READ_TOOL };
 export type { WordReadAccess };
@@ -77,6 +86,48 @@ export type WordDocumentReadRequest = Pick<
 export const WORD_NO_REQUEST_SESSION_MESSAGE =
   "The Word pane was reloaded, a newer request replaced this one, or this message wasn't sent with the document; send your request again from the Word pane.";
 
+/** The complete-read budget check of a capture, kept for the captures an answer takes after it. */
+export type WordReadBudgetFor = (
+  snapshot: WordAuthoringSnapshot,
+) => () => Promise<string | undefined>;
+
+/** The copy an applied change leaves for the rest of its answer: reserved, read on first use. */
+interface WordSuccessor {
+  token: string;
+  chatId: string;
+  messageId: string;
+  identity: string;
+  access: WordReadAccess;
+  requestText?: string;
+  verified?: WordVerifiedBody;
+  assets?: WordAuthoringSnapshot["assets"];
+  imageAssetIssues?: WordAuthoringSnapshot["imageAssetIssues"];
+  /** Takes the request's image assets with the copy, when no earlier copy of the answer had them. */
+  captureImages?: () => Promise<WordImageAssetCapture | null>;
+  budgetFor?: WordReadBudgetFor;
+}
+
+/** The paragraphs a request's copy numbers now; null until a changed document is read again. */
+export type WordCopyFollower = (
+  owner: { chatId: string; messageId: string },
+  ordinalMap: NonNullable<WordReadCapture["ordinalMap"]> | null,
+) => void;
+
+export const WORD_SNAPSHOT_REPLACED = "snapshot-replaced";
+
+/** A read of a copy an applied change used: not final, the answer reads the new copy instead. */
+export const snapshotReplaced = (token: string): ClientToolExecutionResult => ({
+  ok: false,
+  error: `This copy was used by an applied change. Read again with snapshot ${token}.`,
+  validationErrors: [
+    {
+      path: "/snapshot",
+      code: WORD_SNAPSHOT_REPLACED,
+      message: `This copy was used by an applied change. Read again with snapshot ${token}.`,
+    },
+  ],
+});
+
 /** A lost capture is final: a new request must capture the document again (contract §6). */
 export const captureUnavailable = (): ClientToolExecutionResult => ({
   ok: false,
@@ -98,7 +149,216 @@ export class WordDocumentReadSession {
   private requestText?: string;
   private completeBudgetCheck?: () => Promise<string | undefined>;
   private completeBudget?: Promise<string | undefined>;
+  private budgetFor?: WordReadBudgetFor;
+  private successor: WordSuccessor | null = null;
+  private successorCapture?: Promise<boolean>;
+  /** Copies of this answer an applied change used, by token, with the message they belong to. */
+  private replaced = new Map<string, string>();
+  private readonly listeners = new Set<() => void>();
+  private readonly followers = new Set<WordCopyFollower>();
+  private readonly liveCaptures = new WeakMap<
+    WordAuthoringSnapshot,
+    WordDocumentCapture
+  >();
   readonly drafts = new WordDocumentDraftStore();
+  constructor(
+    private readonly captureForRequest: (
+      identity: string,
+      verified?: WordVerifiedBody,
+    ) => Promise<WordRequestCapture | null> = captureWordDocumentForRequest,
+  ) {}
+  /** Cards redraw when the copy a plan was made on comes or goes. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  private notify(): void {
+    for (const listener of [...this.listeners]) listener();
+  }
+  /** Comment reads and adds number paragraphs as the request's current copy does. */
+  followCopies(follower: WordCopyFollower): () => void {
+    this.followers.add(follower);
+    return () => this.followers.delete(follower);
+  }
+  private tellFollowers(...args: Parameters<WordCopyFollower>): void {
+    for (const follower of [...this.followers]) follower(...args);
+  }
+  /** The live copy with this token, as a card's capture; none once a later copy replaced it. */
+  liveCapture(token: string | undefined): WordDocumentCapture | undefined {
+    const session = this.session;
+    if (!token || !session || session.snapshot.token !== token)
+      return undefined;
+    const { snapshot } = session;
+    let capture = this.liveCaptures.get(snapshot);
+    if (!capture) {
+      capture = {
+        identity: snapshot.identity,
+        authoring: snapshot,
+        ordinalMap: this.readCapture?.ordinalMap ?? new Map(),
+        paragraphsSent: 0,
+        renderedOrdinals: new Set(),
+        partialOrdinal: null,
+      };
+      this.liveCaptures.set(snapshot, capture);
+    }
+    return capture;
+  }
+  /** The read setting and request this answer's copy was taken with, for a successor. */
+  get readAccess(): WordReadAccess {
+    return this.access;
+  }
+  /**
+   * After an apply: the copy it used is void, and the next read of this answer takes a new one.
+   * Nothing is read from Word now; an answer that ends here never reads again. Image assets and
+   * the budget check come from this answer's earlier copy, else from what the caller rebuilt.
+   */
+  reserveSuccessor(request: {
+    chatId: string;
+    messageId: string;
+    identity: string;
+    access?: WordReadAccess;
+    requestText?: string;
+    verified?: WordVerifiedBody;
+    captureImages?: () => Promise<WordImageAssetCapture | null>;
+    budgetFor?: WordReadBudgetFor;
+  }): string {
+    const token = globalThis.crypto.randomUUID();
+    const session = this.session;
+    const own =
+      session &&
+      session.snapshot.ownerMessageId === request.messageId &&
+      session.chatId === request.chatId
+        ? session.snapshot
+        : undefined;
+    const earlier =
+      this.successor?.messageId === request.messageId &&
+      this.successor.chatId === request.chatId
+        ? this.successor
+        : undefined;
+    if (own) {
+      this.replaced.set(own.token, request.messageId);
+      // A comment change leaves the body's text alone but not its comments: no plan on this copy.
+      own.used = true;
+    }
+    if (earlier) this.replaced.set(earlier.token, request.messageId);
+    this.drafts.clear();
+    const assetsFrom = own ?? earlier;
+    this.successor = {
+      token,
+      chatId: request.chatId,
+      messageId: request.messageId,
+      identity: request.identity,
+      access: request.access ?? this.access,
+      requestText: request.requestText ?? this.requestText,
+      verified: request.verified,
+      ...(assetsFrom?.assets || assetsFrom?.imageAssetIssues
+        ? {
+            assets: assetsFrom.assets,
+            imageAssetIssues: assetsFrom.imageAssetIssues,
+          }
+        : { captureImages: earlier?.captureImages ?? request.captureImages }),
+      budgetFor:
+        (own ? this.budgetFor : undefined) ??
+        earlier?.budgetFor ??
+        request.budgetFor,
+    };
+    this.successorCapture = undefined;
+    this.notify();
+    this.tellFollowers(
+      { chatId: request.chatId, messageId: request.messageId },
+      null,
+    );
+    return token;
+  }
+  /** This answer was sent with the document, and its copy has not been lost since. */
+  holdsCopyFor(request: { chatId: string; messageId: string }): boolean {
+    const session = this.session;
+    return (
+      (session?.snapshot.ownerMessageId === request.messageId &&
+        session.chatId === request.chatId) ||
+      (this.successor?.messageId === request.messageId &&
+        this.successor.chatId === request.chatId)
+    );
+  }
+  /** Takes the reserved copy for a read of its answer; false when it cannot be read. */
+  private takeSuccessor(
+    context: ClientToolCallContext | undefined,
+    request?: { chatId: string; messageId: string },
+  ): Promise<boolean> | undefined {
+    const successor = this.successor;
+    const owner = request ?? context;
+    if (
+      !successor ||
+      !owner ||
+      owner.chatId !== successor.chatId ||
+      owner.messageId !== successor.messageId
+    )
+      return undefined;
+    this.successorCapture ??= this.captureSuccessor(successor);
+    return this.successorCapture;
+  }
+  private async captureSuccessor(successor: WordSuccessor): Promise<boolean> {
+    const images = successor.captureImages?.().catch(() => null);
+    const taken = await this.captureForRequest(
+      successor.identity,
+      successor.verified,
+    ).catch(() => null);
+    const captured = images && (await images);
+    if (this.successor !== successor) return false;
+    if (!taken) {
+      this.successor = null;
+      this.successorCapture = undefined;
+      return false;
+    }
+    const { snapshot, capture } = taken;
+    snapshot.token = successor.token;
+    if (!snapshot.issue) {
+      snapshot.assets ??= successor.assets ?? captured?.assets;
+      snapshot.imageAssetIssues ??=
+        successor.imageAssetIssues ?? captured?.unavailable;
+    }
+    const replaced = this.replaced;
+    const { budgetFor } = successor;
+    this.activate(
+      snapshot,
+      { chatId: successor.chatId, messageId: successor.messageId },
+      // Without the answer's model, as after a reload of a message that names none: scoped reads only.
+      budgetFor?.(snapshot) ?? (async () => "budget-unavailable"),
+      {
+        access: successor.access,
+        capture,
+        request: successor.requestText,
+        budgetFor,
+      },
+    );
+    this.replaced = replaced;
+    this.tellFollowers(
+      { chatId: successor.chatId, messageId: successor.messageId },
+      capture.ordinalMap ?? null,
+    );
+    return true;
+  }
+  /** A read naming a copy of this answer that an applied change used. */
+  private replacedRead(
+    input: unknown,
+    messageId: string | undefined,
+  ): ClientToolExecutionResult | undefined {
+    const { call } = wordReplayRecordRead(input);
+    const token =
+      call && typeof call === "object" && !Array.isArray(call)
+        ? (call as Record<string, unknown>).snapshot
+        : undefined;
+    const current = this.session?.snapshot.token ?? this.successor?.token;
+    if (
+      typeof token !== "string" ||
+      !current ||
+      token === current ||
+      !messageId ||
+      this.replaced.get(token) !== messageId
+    )
+      return undefined;
+    return snapshotReplaced(current);
+  }
   /** The host binds ownership; model arguments cannot transfer a snapshot to another turn. */
   bindRequest(token: string, request: WordDocumentReadRequest): boolean {
     const session = this.session;
@@ -151,9 +411,14 @@ export class WordDocumentReadSession {
     this.requestText = undefined;
     this.completeBudgetCheck = undefined;
     this.completeBudget = undefined;
+    this.budgetFor = undefined;
+    this.successor = null;
+    this.successorCapture = undefined;
+    this.replaced = new Map();
     this.drafts.clear();
     if (this.session) this.session.snapshot.revoked = true;
     this.session = null;
+    this.notify();
   }
   activate(
     snapshot?: WordAuthoringSnapshot,
@@ -163,10 +428,13 @@ export class WordDocumentReadSession {
       access?: WordReadAccess;
       capture?: WordReadCapture;
       request?: string;
+      /** Checks the budget of the copies an applied change leaves for this answer. */
+      budgetFor?: WordReadBudgetFor;
     },
   ): void {
     this.clear();
     if (!snapshot || isWordHistorySnapshot(snapshot)) return;
+    this.budgetFor = options?.budgetFor;
     this.access = options?.access ?? "write";
     this.readCapture = options?.capture;
     this.requestText = options?.request;
@@ -231,6 +499,7 @@ export class WordDocumentReadSession {
       chatId: null,
     };
     if (request) this.bindRequest(snapshot.token, request);
+    this.notify();
   }
 
   execute: ClientToolExecutor = (input, context) =>
@@ -247,6 +516,11 @@ export class WordDocumentReadSession {
    */
   executeChildRead: ClientToolExecutor = async (input, context) => {
     const grant = context?.hostGrant;
+    if (grant)
+      await this.takeSuccessor(undefined, {
+        chatId: grant.ownerChatId,
+        messageId: grant.ownerMessageId,
+      });
     const session = this.session;
     if (
       !grant ||
@@ -256,7 +530,10 @@ export class WordDocumentReadSession {
       grant.requestingMessageId !== context.messageId ||
       session.snapshot.revoked ||
       session.snapshot.used ||
-      grant.contextRef !== session.snapshot.token ||
+      // A task granted an earlier copy of the same answer reads the copy that replaced it.
+      (grant.contextRef !== session.snapshot.token &&
+        (!grant.contextRef ||
+          this.replaced.get(grant.contextRef) !== grant.ownerMessageId)) ||
       !session.snapshot.ownerMessageId ||
       grant.ownerMessageId !== session.snapshot.ownerMessageId ||
       grant.ownerChatId !== session.chatId
@@ -291,6 +568,22 @@ export class WordDocumentReadSession {
     context: ClientToolCallContext | undefined,
     sessionAccess: WordReadAccess,
   ): Promise<ClientToolExecutionResult> {
+    const pending = this.takeSuccessor(context);
+    if (pending && !(await pending))
+      return {
+        ok: false,
+        error: WORD_NO_REQUEST_SESSION_MESSAGE,
+        validationErrors: [
+          {
+            path: "/snapshot",
+            code: "read-unavailable",
+            message: WORD_NO_REQUEST_SESSION_MESSAGE,
+          },
+        ],
+        submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+      };
+    const replaced = this.replacedRead(input, context?.messageId);
+    if (replaced) return replaced;
     const { call, replayRecord } = wordReplayRecordRead(input);
     const access =
       call && typeof call === "object" && "section" in call
@@ -531,7 +824,7 @@ export class WordDocumentReadSession {
                   "content-control",
                   "native-edit",
                 ],
-                contract: WORD_AUTHORING_CONTRACT,
+                contract: wordAuthoringContract(),
                 fullDocument: !!snapshot.fullDocument,
                 assets: (snapshot.assets ?? []).map(wordImageAssetMetadata),
                 imageAssetIssues: (snapshot.imageAssetIssues ?? []).map(

@@ -15,7 +15,7 @@ import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSc
  * item count, and the per-item cards space their rows out themselves.
  */
 export const APPROVAL_CARD_SHELL_CLASS =
-  "my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3";
+  "my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3";
 
 /**
  * What a row says once it has been answered but not yet sent.
@@ -85,25 +85,30 @@ export const ApprovalBulkActions = ({
   onDecideAll,
   isBusy,
   testId,
+  allowsAll = true,
 }: {
   itemCount: number;
   onDecideAll: (decision: ToolApprovalDecision) => void;
   isBusy: boolean;
   testId: string;
+  /** Some open item can still be allowed without its own card. */
+  allowsAll?: boolean;
 }) => (
   <div className="space-y-1" data-testid={testId}>
-    <div className="flex flex-wrap gap-2">
+    <div className="card-actions flex flex-wrap gap-2">
       {itemCount > 1 && (
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={isBusy}
-            onClick={() => onDecideAll("approve")}
-            data-testid="tool-approval-allow-all"
-          >
-            {t({ id: "toolApproval.allowAll", message: "Allow all" })}
-          </Button>
+          {allowsAll && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isBusy}
+              onClick={() => onDecideAll("approve")}
+              data-testid="tool-approval-allow-all"
+            >
+              {t({ id: "toolApproval.allowAll", message: "Allow all" })}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"

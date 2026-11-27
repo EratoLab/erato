@@ -151,4 +151,24 @@ describe("Checkbox", () => {
     );
     expect(ref.current).toBe(screen.getByRole("checkbox", { name: "A" }));
   });
+
+  it("draws a switch that trails its label and still toggles", () => {
+    const onCheckedChange = vi.fn();
+    render(
+      <Checkbox
+        checked={false}
+        onCheckedChange={onCheckedChange}
+        label="Show in chat"
+        appearance="switch"
+      />,
+    );
+    const toggle = screen.getByRole("switch", { name: "Show in chat" });
+    expect(toggle).toHaveAttribute("switch", "");
+    expect(toggle).toHaveAttribute("type", "checkbox");
+    expect(toggle).not.toHaveClass("size-4");
+    expect(toggle.previousElementSibling).toHaveTextContent("Show in chat");
+
+    fireEvent.click(toggle);
+    expect(onCheckedChange).toHaveBeenCalledWith(true, expect.anything());
+  });
 });

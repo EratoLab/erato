@@ -3,6 +3,7 @@ import { skipToken, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useTheme } from "@/components/providers/ThemeProvider";
 import {
   chatDetailQuery,
   fetchUpdateProfilePreferences,
@@ -30,8 +31,14 @@ import {
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
 
+import { BudgetPane } from "./BudgetPane";
 import { DisclaimersPane } from "./DisclaimersPane";
+import {
+  OfficeAppsToolDecisions,
+  useApprovalTools,
+} from "./OfficeAppsToolDecisions";
 import { ServersToolsPane } from "./ServersToolsPane";
+import { SettingsPageList, useSettingsPages } from "./SettingsPages";
 import {
   StartingAssistantSetting,
   type StartingAssistantOption,
@@ -74,6 +81,7 @@ type PreferencesTab =
   | "appearance"
   | "audio"
   | "serversTools"
+  | "budget"
   | "data"
   | "disclaimers";
 
@@ -93,10 +101,12 @@ export function UserPreferencesDialog({
   userProfile,
 }: UserPreferencesDialogProps) {
   const navigate = useNavigate();
+  const { followsSystemTextSize } = useTheme();
   const tabGroupId = useId();
   const queryClient = useQueryClient();
   const {
     enabled: personalizationEnabled,
+    budgetTabEnabled,
     dataTabEnabled,
     disclaimersTabEnabled,
     desktopSidecarTabEnabled,
@@ -195,10 +205,81 @@ export function UserPreferencesDialog({
         description: assistant.description,
       }));
   }, [assistantsResponse, hubAssistantsResponse?.versions]);
+  // Decisions for changes in Office apps follow the user to this app too.
+  const approvalTools = useApprovalTools(isOpen);
+  const hasApprovalTools = approvalTools.length > 0;
+
+  const visibleTabs = useMemo(
+    () =>
+      [
+        ...(personalizationEnabled ? (["personalization"] as const) : []),
+        "appearance",
+        ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
+        ...(desktopSidecarTabEnabled || mcpServersTabEnabled || hasApprovalTools
+          ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
+            (["serversTools"] as const)
+          : []),
+        ...(budgetTabEnabled ? (["budget"] as const) : []),
+        ...(dataTabEnabled ? (["data"] as const) : []),
+        ...(disclaimersTabEnabled ? (["disclaimers"] as const) : []),
+      ] satisfies PreferencesTab[],
+    [
+      audioInputSettingsEnabled,
+      budgetTabEnabled,
+      dataTabEnabled,
+      desktopSidecarTabEnabled,
+      disclaimersTabEnabled,
+      hasApprovalTools,
+      mcpServersTabEnabled,
+      personalizationEnabled,
+    ],
+  );
+  const tabLabels = {
+    personalization: t({
+      id: "preferences.dialog.tabs.personalization",
+      message: "Personalization",
+    }),
+    appearance: t({
+      id: "preferences.dialog.tabs.appearance",
+      message: "Appearance",
+    }),
+    audio: t({
+      id: "preferences.dialog.tabs.audio",
+      message: "Audio",
+    }),
+    serversTools: t({
+      id: "preferences.dialog.tabs.serversTools",
+      message: "MCP & Apps",
+    }),
+    budget: t({ id: "preferences.dialog.tabs.budget", message: "Budget" }),
+    data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
+    disclaimers: t({
+      id: "preferences.dialog.tabs.disclaimers",
+      message: "Disclaimers",
+    }),
+  } satisfies Record<PreferencesTab, string>;
+
+  const requestedDefaultTab =
+    initialTab && visibleTabs.includes(initialTab) ? initialTab : defaultTab;
+  const pages = useSettingsPages({
+    isOpen,
+    tabs: visibleTabs.map((tab) => ({ value: tab, label: tabLabels[tab] })),
+    activeTab,
+    onActiveTabChange: setActiveTab,
+    requestedTab:
+      requestedDefaultTab === initialTab ? requestedDefaultTab : undefined,
+    title: t({ id: "preferences.dialog.title", message: "Preferences" }),
+    backLabel: t({
+      id: "preferences.dialog.backToList",
+      message: "Back to Preferences",
+    }),
+  });
+  const { shownTab } = pages;
+
   // The pane owns rendering the server list; this instance shares its query
   // key and exists so the OAuth callback/disconnect flows can refetch.
   const { refetch: refetchMcpServers } = useListMcpServers(
-    isOpen && activeTab === "serversTools" && mcpServersTabEnabled
+    isOpen && shownTab === "serversTools" && mcpServersTabEnabled
       ? {}
       : skipToken,
     {
@@ -207,31 +288,6 @@ export function UserPreferencesDialog({
       staleTime: 0,
     },
   );
-
-  const visibleTabs = useMemo(
-    () =>
-      [
-        ...(personalizationEnabled ? (["personalization"] as const) : []),
-        "appearance",
-        ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
-        ...(desktopSidecarTabEnabled || mcpServersTabEnabled
-          ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
-            (["serversTools"] as const)
-          : []),
-        ...(dataTabEnabled ? (["data"] as const) : []),
-        ...(disclaimersTabEnabled ? (["disclaimers"] as const) : []),
-      ] satisfies PreferencesTab[],
-    [
-      audioInputSettingsEnabled,
-      dataTabEnabled,
-      desktopSidecarTabEnabled,
-      disclaimersTabEnabled,
-      mcpServersTabEnabled,
-      personalizationEnabled,
-    ],
-  );
-  const requestedDefaultTab =
-    initialTab && visibleTabs.includes(initialTab) ? initialTab : defaultTab;
 
   useEffect(() => {
     if (isOpen) {
@@ -362,35 +418,12 @@ export function UserPreferencesDialog({
     return normalized.length > 0 ? normalized : null;
   };
 
-  const tabLabels = {
-    personalization: t({
-      id: "preferences.dialog.tabs.personalization",
-      message: "Personalization",
-    }),
-    appearance: t({
-      id: "preferences.dialog.tabs.appearance",
-      message: "Appearance",
-    }),
-    audio: t({
-      id: "preferences.dialog.tabs.audio",
-      message: "Audio",
-    }),
-    serversTools: t({
-      id: "preferences.dialog.tabs.serversTools",
-      message: "MCP & Apps",
-    }),
-    data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
-    disclaimers: t({
-      id: "preferences.dialog.tabs.disclaimers",
-      message: "Disclaimers",
-    }),
-  } satisfies Record<PreferencesTab, string>;
-
   const tabIcons = {
     personalization: <MenuScaleIcon className="size-4" />,
     appearance: <MediaImageIcon className="size-4" />,
     audio: <VoiceIcon className="size-4" />,
     serversTools: <ResolvedIcon iconId="tools" className="size-4" />,
+    budget: <ResolvedIcon iconId="wallet" className="size-4" />,
     data: <LockIcon className="size-4" />,
     disclaimers: <DocumentIcon className="size-4" />,
   } satisfies Record<PreferencesTab, ReactNode>;
@@ -401,6 +434,7 @@ export function UserPreferencesDialog({
     appearance: `${tabGroupId}-tab-appearance`,
     audio: `${tabGroupId}-tab-audio`,
     serversTools: `${tabGroupId}-tab-servers-tools`,
+    budget: `${tabGroupId}-tab-budget`,
     data: `${tabGroupId}-tab-data`,
     disclaimers: `${tabGroupId}-tab-disclaimers`,
   } satisfies Record<PreferencesTab, string>;
@@ -410,6 +444,7 @@ export function UserPreferencesDialog({
     appearance: `${tabGroupId}-panel-appearance`,
     audio: `${tabGroupId}-panel-audio`,
     serversTools: `${tabGroupId}-panel-servers-tools`,
+    budget: `${tabGroupId}-panel-budget`,
     data: `${tabGroupId}-panel-data`,
     disclaimers: `${tabGroupId}-panel-disclaimers`,
   } satisfies Record<PreferencesTab, string>;
@@ -546,46 +581,54 @@ export function UserPreferencesDialog({
     <ModalBase
       isOpen={isOpen}
       onClose={handleClose}
-      title={t({ id: "preferences.dialog.title", message: "Preferences" })}
-      contentClassName="h-[80vh] max-h-[700px] max-w-4xl"
+      {...pages.modalProps}
+      contentClassName={
+        pages.isNarrow ? undefined : "h-[80vh] max-h-[700px] max-w-4xl"
+      }
     >
       <div className="flex h-full flex-col gap-4 md:flex-row md:gap-5">
-        <aside className="shrink-0 border-b border-theme-border pb-3 md:w-48 md:border-b-0 md:border-r md:pb-0 md:pr-4">
-          <TabRail
-            variant="rail"
-            orientation="vertical"
-            // The rail announces itself as vertical but lays out as a
-            // horizontal strip below `md`, so both arrow pairs have to work.
-            arrowKeys="both"
-            aria-label={t({
-              id: "preferences.dialog.title",
-              message: "Preferences",
-            })}
-            className="overflow-x-auto md:flex-col md:overflow-x-visible"
-            tabClassName="text-left md:w-full"
-            options={visibleTabs.map((tab) => ({
-              value: tab,
-              label: tabLabels[tab],
-              icon: tabIcons[tab],
-              id: tabIds[tab],
-              panelId: panelIds[tab],
-            }))}
-            value={activeTab}
-            onChange={setActiveTab}
-          />
-        </aside>
+        {pages.isNarrow ? null : (
+          <aside className="shrink-0 border-b border-theme-border pb-3 md:w-48 md:border-b-0 md:border-r md:pb-0 md:pr-4">
+            <TabRail
+              variant="rail"
+              orientation="vertical"
+              // The rail announces itself as vertical but lays out as a
+              // horizontal strip below `md`, so both arrow pairs have to work.
+              arrowKeys="both"
+              aria-label={t({
+                id: "preferences.dialog.title",
+                message: "Preferences",
+              })}
+              className="overflow-x-auto md:flex-col md:overflow-x-visible"
+              tabClassName="text-left md:w-full"
+              options={visibleTabs.map((tab) => ({
+                value: tab,
+                label: tabLabels[tab],
+                icon: tabIcons[tab],
+                id: tabIds[tab],
+                panelId: panelIds[tab],
+              }))}
+              value={activeTab}
+              onChange={setActiveTab}
+            />
+          </aside>
+        )}
+
+        {pages.showList ? <SettingsPageList {...pages.listProps} /> : null}
 
         <section
-          className="flex min-h-0 min-w-0 flex-1 flex-col"
+          className={
+            pages.showList ? "hidden" : "flex min-h-0 min-w-0 flex-1 flex-col"
+          }
           data-testid="user-preferences-dialog"
         >
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
             {personalizationEnabled ? (
               <section
-                id={panelIds.personalization}
-                role="tabpanel"
-                aria-labelledby={tabIds.personalization}
-                hidden={activeTab !== "personalization"}
+                {...pages.panelProps("personalization", {
+                  tabId: tabIds.personalization,
+                  panelId: panelIds.personalization,
+                })}
                 className="space-y-4"
               >
                 {availableModels.length > 0 ? (
@@ -707,10 +750,10 @@ export function UserPreferencesDialog({
             ) : null}
 
             <section
-              id={panelIds.appearance}
-              role="tabpanel"
-              aria-labelledby={tabIds.appearance}
-              hidden={activeTab !== "appearance"}
+              {...pages.panelProps("appearance", {
+                tabId: tabIds.appearance,
+                panelId: panelIds.appearance,
+              })}
               className="space-y-4"
             >
               <div className="space-y-1">
@@ -730,15 +773,15 @@ export function UserPreferencesDialog({
 
               <AppearanceTabContent />
 
-              <TextSizeSetting />
+              {followsSystemTextSize ? null : <TextSizeSetting />}
             </section>
 
             {audioInputSettingsEnabled ? (
               <section
-                id={panelIds.audio}
-                role="tabpanel"
-                aria-labelledby={tabIds.audio}
-                hidden={activeTab !== "audio"}
+                {...pages.panelProps("audio", {
+                  tabId: tabIds.audio,
+                  panelId: panelIds.audio,
+                })}
                 className="space-y-4"
               >
                 {/* What a person hears comes first: it is what they come to
@@ -766,25 +809,29 @@ export function UserPreferencesDialog({
                   </p>
                 </div>
                 <AudioInputTabContent
-                  isActive={isOpen && activeTab === "audio"}
+                  isActive={isOpen && shownTab === "audio"}
                 />
               </section>
             ) : null}
 
             <section
-              id={panelIds.serversTools}
-              role="tabpanel"
-              aria-labelledby={tabIds.serversTools}
-              hidden={activeTab !== "serversTools"}
+              // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
+              {...pages.panelProps("serversTools", {
+                tabId: tabIds.serversTools,
+                panelId: panelIds.serversTools,
+              })}
               className="space-y-4"
             >
               <div className="space-y-1">
-                <h2 className="text-sm font-medium text-theme-fg-primary">
-                  {t({
-                    id: "preferences.dialog.serversTools.heading",
-                    message: "MCP & Apps",
-                  })}
-                </h2>
+                {/* On a narrow screen the page title already says it. */}
+                {pages.isNarrow ? null : (
+                  <h2 className="text-sm font-medium text-theme-fg-primary">
+                    {t({
+                      id: "preferences.dialog.serversTools.heading",
+                      message: "MCP & Apps",
+                    })}
+                  </h2>
+                )}
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
                     id: "preferences.dialog.serversTools.description",
@@ -794,7 +841,7 @@ export function UserPreferencesDialog({
                 </p>
               </div>
 
-              {activeTab === "serversTools" ? (
+              {shownTab === "serversTools" ? (
                 <ServersToolsPane
                   isActive={isOpen}
                   mcp={
@@ -812,15 +859,32 @@ export function UserPreferencesDialog({
                       : null
                   }
                   showDesktopSidecar={desktopSidecarTabEnabled}
-                />
+                >
+                  <OfficeAppsToolDecisions tools={approvalTools} />
+                </ServersToolsPane>
               ) : null}
             </section>
 
+            {budgetTabEnabled ? (
+              <section
+                {...pages.panelProps("budget", {
+                  tabId: tabIds.budget,
+                  panelId: panelIds.budget,
+                })}
+                // A tab panel on a wide screen (its role comes from
+                // panelProps); either way it has to be reachable by keyboard.
+                // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+                tabIndex={0}
+              >
+                {isOpen && shownTab === "budget" ? <BudgetPane /> : null}
+              </section>
+            ) : null}
+
             <section
-              id={panelIds.data}
-              role="tabpanel"
-              aria-labelledby={tabIds.data}
-              hidden={activeTab !== "data"}
+              {...pages.panelProps("data", {
+                tabId: tabIds.data,
+                panelId: panelIds.data,
+              })}
               className="space-y-4"
             >
               {archiveError ? <Alert type="error">{archiveError}</Alert> : null}
@@ -862,20 +926,24 @@ export function UserPreferencesDialog({
             </section>
             {disclaimersTabEnabled ? (
               <section
-                id={panelIds.disclaimers}
-                role="tabpanel"
-                aria-labelledby={tabIds.disclaimers}
-                hidden={activeTab !== "disclaimers"}
+                {...pages.panelProps("disclaimers", {
+                  tabId: tabIds.disclaimers,
+                  panelId: panelIds.disclaimers,
+                })}
+                // A tab panel on a wide screen (its role comes from
+                // panelProps); either way the long text has to be reachable
+                // by keyboard to scroll.
+                // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
                 tabIndex={0}
               >
-                {isOpen && activeTab === "disclaimers" ? (
+                {isOpen && shownTab === "disclaimers" ? (
                   <DisclaimersPane />
                 ) : null}
               </section>
             ) : null}
           </div>
 
-          {personalizationEnabled && activeTab === "personalization" ? (
+          {personalizationEnabled && shownTab === "personalization" ? (
             <div className="mt-3 flex justify-end gap-2 border-t border-theme-border pt-3">
               <Button
                 variant="secondary"
