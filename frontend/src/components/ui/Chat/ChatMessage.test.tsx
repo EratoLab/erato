@@ -152,7 +152,10 @@ describe("ChatMessage", () => {
       gap: "var(--theme-spacing-message-gap)",
     });
     expect(messageContentMock).toHaveBeenCalledWith(
-      expect.objectContaining({ preserveSoftLineBreaks: false }),
+      expect.objectContaining({
+        preserveSoftLineBreaks: false,
+        previewInlineImages: true,
+      }),
     );
     expect(screen.getByTestId("message-controls-probe")).toBeInTheDocument();
   });
@@ -190,7 +193,10 @@ describe("ChatMessage", () => {
     );
 
     expect(messageContentMock).toHaveBeenCalledWith(
-      expect.objectContaining({ preserveSoftLineBreaks: true }),
+      expect.objectContaining({
+        preserveSoftLineBreaks: true,
+        previewInlineImages: false,
+      }),
     );
   });
 

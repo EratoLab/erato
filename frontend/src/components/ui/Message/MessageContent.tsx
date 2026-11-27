@@ -143,6 +143,7 @@ interface MessageContentProps {
   isStreaming?: boolean;
   showRaw?: boolean;
   onImageClick?: (image: UiImagePart) => void;
+  previewInlineImages?: boolean;
   /** Map of file IDs to their metadata for erato-file:// link resolution */
   filesById?: Record<string, FileUploadItem>;
   onFileLinkPreview?: (file: FileUploadItem) => void;
@@ -990,6 +991,7 @@ interface MarkdownMessageContextValue {
   resolveEratoFileLink: (url: string) => ResolvedEratoFileLink | null;
   onFileLinkPreview?: (file: FileUploadItem) => void;
   onImageClick?: (image: UiImagePart) => void;
+  previewInlineImages: boolean;
   imageAdvisory: string | null;
   generatedImageFileIds: ReadonlySet<string>;
   filesById: Record<string, FileUploadItem>;
@@ -1004,12 +1006,15 @@ const MarkdownMessageContext = React.createContext<MarkdownMessageContextValue>(
   {
     isStreaming: false,
     resolveEratoFileLink: () => null,
+    previewInlineImages: false,
     imageAdvisory: null,
     generatedImageFileIds: new Set(),
     filesById: {},
     chippedFileIds: new Set(),
   },
 );
+
+const MarkdownLinkContext = React.createContext(false);
 
 /**
  * Whether a Markdown element holds an image that shows as a file chip, as an
@@ -1103,7 +1108,9 @@ function MarkdownLink({
         "data-footnote-ref" in props ? true : undefined
       }
     >
-      {children}
+      <MarkdownLinkContext.Provider value={true}>
+        {children}
+      </MarkdownLinkContext.Provider>
     </a>
   );
 }
@@ -1118,11 +1125,14 @@ function MarkdownImage({
     resolveEratoFileLink,
     onFileLinkPreview,
     onImageClick,
+    previewInlineImages,
     imageAdvisory,
     generatedImageFileIds,
     filesById,
     chippedFileIds,
   } = React.useContext(MarkdownMessageContext);
+  const isInsideLink = React.useContext(MarkdownLinkContext);
+  const imageId = React.useId();
   const fileId = src ? getEratoFileIdFromUrl(src) : null;
   if (fileId && chippedFileIds.has(fileId)) {
     // The call's view already shows what the image holds: the same chip as
@@ -1193,13 +1203,44 @@ function MarkdownImage({
       );
     }
 
+    const imageElement = (
+      <img src={resolvedSrc} alt={alt ?? ""} loading="lazy" {...props} />
+    );
+
+    if (
+      !previewInlineImages ||
+      !onImageClick ||
+      isInsideLink ||
+      !resolvedSrc.trim()
+    ) {
+      return imageElement;
+    }
+
+    const imageLabel = alt?.trim();
     return (
-      <img
-        src={resolvedSrc}
-        alt={typeof alt === "string" ? alt : ""}
-        loading="lazy"
-        {...props}
-      />
+      <button
+        type="button"
+        className="focus-ring-tight inline-block max-w-full cursor-zoom-in border-0 bg-transparent p-0 align-middle"
+        aria-label={
+          imageLabel
+            ? t({
+                id: "ui.imagePreview.openWithAlt",
+                message: `Open image preview: ${imageLabel}`,
+              })
+            : t({
+                id: "ui.imagePreview.open",
+                message: "Open image preview",
+              })
+        }
+        onClick={(event) => {
+          // ModalBase restores focus to the opener, even in browsers that
+          // leave buttons unfocused on mouse clicks.
+          event.currentTarget.focus({ preventScroll: true });
+          onImageClick({ type: "image", src: resolvedSrc, id: imageId });
+        }}
+      >
+        {imageElement}
+      </button>
     );
   }
 
@@ -1231,7 +1272,7 @@ function MarkdownImage({
     </span>
   ) : null;
 
-  if (onImageClick) {
+  if (onImageClick && !isInsideLink) {
     return (
       <>
         <button
@@ -1525,6 +1566,7 @@ export const MessageContent = memo(function MessageContent({
   isStreaming = false,
   showRaw = false,
   onImageClick,
+  previewInlineImages = false,
   filesById = NO_FILES,
   onFileLinkPreview,
   preserveSoftLineBreaks = false,
@@ -1895,6 +1937,7 @@ export const MessageContent = memo(function MessageContent({
       resolveEratoFileLink,
       onFileLinkPreview,
       onImageClick,
+      previewInlineImages,
       imageAdvisory,
       generatedImageFileIds,
       filesById,
@@ -1907,6 +1950,7 @@ export const MessageContent = memo(function MessageContent({
       resolveEratoFileLink,
       onFileLinkPreview,
       onImageClick,
+      previewInlineImages,
       imageAdvisory,
       generatedImageFileIds,
       filesById,

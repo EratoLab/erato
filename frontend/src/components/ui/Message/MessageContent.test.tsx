@@ -912,6 +912,141 @@ describe("MessageContent", () => {
     );
   });
 
+  it("previews each Markdown or HTML image with its own source", () => {
+    const onImageClick = vi.fn();
+    const markdownSrc = "https://images.intranet.example/map.png?size=full";
+    const htmlSrc = "./diagram.png?revision=2";
+
+    renderWithTheme(
+      <MessageContent
+        content={textContent(
+          `Before ![Map](${markdownSrc}) after\n\n| Figure |\n| --- |\n| <img src="${htmlSrc}" alt="Diagram" width="48" height="32"> |`,
+        )}
+        previewInlineImages
+        onImageClick={onImageClick}
+      />,
+    );
+
+    const map = screen.getByRole("button", { name: "Open image preview: Map" });
+    const diagram = screen.getByRole("button", {
+      name: "Open image preview: Diagram",
+    });
+    const thumbnail = screen.getByRole("img", { name: "Diagram" });
+    expect(map.closest("p")).toHaveTextContent("Before after");
+    expect(screen.getByRole("cell")).toContainElement(diagram);
+    expect(thumbnail).toHaveAttribute("width", "48");
+    expect(thumbnail).toHaveAttribute("height", "32");
+    expect(thumbnail).toHaveAttribute("loading", "lazy");
+
+    fireEvent.click(map);
+    fireEvent.click(diagram);
+
+    expect(onImageClick).toHaveBeenCalledTimes(2);
+    expect(onImageClick).toHaveBeenNthCalledWith(1, {
+      type: "image",
+      src: markdownSrc,
+      id: expect.any(String),
+    });
+    expect(onImageClick).toHaveBeenNthCalledWith(2, {
+      type: "image",
+      src: htmlSrc,
+      id: expect.any(String),
+    });
+    expect(onImageClick.mock.calls[0][0].id).not.toBe(
+      onImageClick.mock.calls[1][0].id,
+    );
+  });
+
+  it("names the preview button for an image with empty alt text", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent("![](/diagram.png)")}
+        previewInlineImages
+        onImageClick={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Open image preview" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    "[![Linked image](/map.png)](/destination)",
+    "[**![Linked image](/map.png)**](/destination)",
+    '<a href="/destination"><em><img src="/map.png" alt="Linked image"></em></a>',
+  ])("keeps linked images navigable in %s", (text) => {
+    const onImageClick = vi.fn();
+    renderWithTheme(
+      <MessageContent
+        content={textContent(text)}
+        previewInlineImages
+        onImageClick={onImageClick}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Linked image" });
+    expect(link).toHaveAttribute("href", "/destination");
+    expect(link).toContainElement(
+      screen.getByRole("img", { name: "Linked image" }),
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    '<img alt="Unavailable">',
+    '<img src=" " alt="Unavailable">',
+    "![Unavailable](javascript:alert%281%29)",
+    '<img src="data:image/png;base64,AAAA" alt="Unavailable">',
+  ])("keeps the image fallback without a preview button in %s", (text) => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent(text)}
+        previewInlineImages
+        onImageClick={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", { name: "Unavailable" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { previewInlineImages: false, onImageClick: vi.fn() },
+    { previewInlineImages: true },
+  ])("keeps ordinary images static with %o", (previewProps) => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent("![Map](/map.png)")}
+        {...previewProps}
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "Map" })).toHaveAttribute(
+      "src",
+      "/map.png",
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("keeps image syntax in the raw Markdown view", () => {
+    const text = "![Map](/map.png)";
+    renderWithTheme(
+      <MessageContent
+        content={textContent(text)}
+        previewInlineImages
+        onImageClick={vi.fn()}
+        showRaw
+      />,
+    );
+
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
   it("renders inline markdown image links that point to erato-file URLs", () => {
     const onImageClick = vi.fn();
     const imageFile = makeFile({
