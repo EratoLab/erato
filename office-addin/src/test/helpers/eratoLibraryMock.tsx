@@ -189,8 +189,8 @@ const EMPTY_CHAT_SESSION = {
 export const DEFAULT_STUBS = {
   holdComposeReload: () => () => {},
   installAudioCaptureAccessPolicy: () => () => {},
-  saveComposeReloadState: () => {},
-  restoreComposeReloadState: () => {},
+  saveComposeDraftForReload: () => {},
+  installComposeDraftReloadKeeper: () => () => {},
   useMessagingStore: {
     getState: () => ({
       activeStreamKey: "__new_chat__",

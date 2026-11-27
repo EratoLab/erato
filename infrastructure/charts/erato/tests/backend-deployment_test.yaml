@@ -390,22 +390,22 @@ tests:
   - it: should support extraInitContainers for preparing extra volumes
     set:
       backend.extraInitContainers:
-        - name: copy-component-kit-trilux
-          image: registry.example.com/component-kit-trilux:v1
+        - name: copy-component-kit-example
+          image: registry.example.com/component-kit-example:v1
           command:
             - /bin/sh
             - -c
           args:
-            - cp -a /app/component-kits/trilux/. /component-kit/
+            - cp -a /app/component-kits/example/. /component-kit/
           volumeMounts:
-            - name: component-kit-trilux
+            - name: component-kit-example
               mountPath: /component-kit
       backend.extraVolumes:
-        - name: component-kit-trilux
+        - name: component-kit-example
           emptyDir: {}
       backend.extraVolumeMounts:
-        - name: component-kit-trilux
-          mountPath: /app/component-kits/trilux
+        - name: component-kit-example
+          mountPath: /app/component-kits/example
           readOnly: true
     template: backend-deployment.yaml
     asserts:
@@ -415,26 +415,26 @@ tests:
       - contains:
           path: spec.template.spec.initContainers
           content:
-            name: copy-component-kit-trilux
-            image: registry.example.com/component-kit-trilux:v1
+            name: copy-component-kit-example
+            image: registry.example.com/component-kit-example:v1
             command:
               - /bin/sh
               - -c
             args:
-              - cp -a /app/component-kits/trilux/. /component-kit/
+              - cp -a /app/component-kits/example/. /component-kit/
             volumeMounts:
-              - name: component-kit-trilux
+              - name: component-kit-example
                 mountPath: /component-kit
       - contains:
           path: spec.template.spec.volumes
           content:
-            name: component-kit-trilux
+            name: component-kit-example
             emptyDir: {}
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
-            name: component-kit-trilux
-            mountPath: /app/component-kits/trilux
+            name: component-kit-example
+            mountPath: /app/component-kits/example
             readOnly: true
 
   - it: should support extraVolumeMounts without extraVolumes

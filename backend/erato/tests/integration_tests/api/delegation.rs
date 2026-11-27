@@ -5240,23 +5240,9 @@ fn answer_metadata(
     was_aborted: bool,
 ) -> erato::models::message::GenerationMetadata {
     erato::models::message::GenerationMetadata {
-        budget_usage: None,
-        used_prompt_tokens: None,
-        used_completion_tokens: None,
-        used_total_tokens: None,
-        used_reasoning_tokens: None,
-        reasoning_summary: None,
-        reasoning_items: None,
-        reasoning_item_encrypted_content: None,
-        langfuse_trace_id: None,
         was_aborted: was_aborted.then_some(true),
         error,
-        mcp_servers_unavailable: None,
-        mcp_servers_needing_auth: None,
-        mcp_servers_disabled_by_user: None,
-        mcp_tools_disabled_by_user: None,
-        continuation_in_flight: None,
-        submission_outcome: None,
+        ..Default::default()
     }
 }
 

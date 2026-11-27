@@ -1,5 +1,13 @@
 import { t } from "@lingui/core/macro";
 
+import { getErrorDescription } from "@/components/ui/Message/messageErrorCopy";
+import {
+  isBudgetLimitRefusal,
+  readConflictRefusal,
+} from "@/hooks/chat/conflictRefusal";
+
+import { plainErrorMessage } from "./plainErrorMessage";
+
 /**
  * Backend validation error for action-facet args (e.g. the Outlook draft
  * `full_body`) is a plain-text response of the shape:
@@ -13,9 +21,9 @@ const ACTION_FACET_SIZE_RE =
 
 /**
  * Returns a localized, actionable string for known chat-send error shapes
- * (currently the action-facet arg-size limit), or `null` when the input is
- * not an `Error`. Unknown error shapes fall through to `error.message` so
- * we don't swallow detail.
+ * (the action-facet arg-size limit, then the plain texts of
+ * `plainErrorMessage`), or `null` when the input is not an `Error`. Unknown
+ * error shapes fall through to `error.message` so we don't swallow detail.
  *
  * Uses the Lingui `t` macro so messages are extracted at build time and
  * resolved against the global `i18n` instance at call time. Safe to call
@@ -24,6 +32,10 @@ const ACTION_FACET_SIZE_RE =
 export function resolveChatSendErrorMessage(error: unknown): string | null {
   if (!(error instanceof Error) || !error.message) {
     return null;
+  }
+
+  if (isBudgetLimitRefusal(readConflictRefusal(error))) {
+    return getErrorDescription("budget_limit_reached");
   }
 
   const sizeMatch = ACTION_FACET_SIZE_RE.exec(error.message);
@@ -38,5 +50,5 @@ export function resolveChatSendErrorMessage(error: unknown): string | null {
     });
   }
 
-  return error.message;
+  return plainErrorMessage(error) ?? error.message;
 }

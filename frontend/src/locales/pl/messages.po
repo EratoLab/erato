@@ -2882,6 +2882,11 @@ msgstr "Błąd asystenta"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/messageErrorCopy.ts
+msgid "chat.message.error.variant.budget_limit_reached"
+msgstr "Twój osobisty budżet generowania został wyczerpany."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "Odpowiedź została odfiltrowana, ponieważ wiadomość uruchomiła politykę zarządzania treścią."
 
@@ -3338,6 +3343,11 @@ msgstr "Nie udało się odświeżyć budżetu. Te dane mogą być nieaktualne."
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Model"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.pageBack"
+msgstr "Wstecz:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
@@ -4413,6 +4423,57 @@ msgstr ""
 #: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Strona nie znaleziona"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.body"
+msgstr "Nie udało się wyświetlić tej strony. Odśwież, aby kontynuować."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "error.app.reload"
+msgstr "Odśwież"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.title"
+msgstr "Coś poszło nie tak"
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.appUpdated"
+msgstr "Nie udało się wczytać części aplikacji. Odśwież, aby kontynuować."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.connectionLost"
+msgstr "Połączenie z serwerem zostało przerwane. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.noConnection"
+msgstr "Brak połączenia z serwerem. Sprawdź sieć i spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverDidNotAnswer"
+msgstr "Serwer nie odpowiedział. Spróbuj ponownie za chwilę."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverStoppedAnswering"
+msgstr "Serwer przestał odpowiadać. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.signedOut"
+msgstr "Wylogowano. Odśwież, aby zalogować się ponownie."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.timedOut"
+msgstr "Serwer nie odpowiedział na czas. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/facetDisplayName.ts
@@ -11885,9 +11946,29 @@ msgid "ui.imagePreview.altText"
 msgstr "Podgląd w pełnym rozmiarze"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "ui.imagePreview.open"
+msgstr "Otwórz podgląd obrazu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "ui.imagePreview.openWithAlt"
+msgstr "Otwórz podgląd obrazu: {imageLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.imagePreview.title"
 msgstr "Podgląd obrazu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.description"
+msgstr "Odśwież, gdy będzie Ci wygodnie. Niewysłany tekst zostanie zachowany."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.title"
+msgstr "Dostępna jest nowa wersja."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
@@ -11925,6 +12006,11 @@ msgstr "Nieobsługiwany typ(y) pliku: {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Maksymalny rozmiar pliku: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
+msgid "upload.waitingForNetwork"
+msgstr "Oczekiwanie na sieć. Przesyłanie zostanie wznowione, gdy połączenie wróci."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

@@ -13,6 +13,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import { discardComposeDraftsOnUnload } from "@/hooks/chat/composeDraftReloadKeeper";
 import {
   hasActiveFilters,
   useChatHistoryFilterFoldback,
@@ -230,13 +231,21 @@ const SidebarLogo = memo<{
 SidebarLogo.displayName = "SidebarLogo";
 
 const ChatHistoryHeader = memo<{
+  collapseToggleRef?: Ref<HTMLButtonElement>;
   collapsed: boolean;
   isSlimMode: boolean;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
   sidebarLogoPath?: string | null;
 }>(
-  ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
+  ({
+    collapseToggleRef,
+    collapsed,
+    isSlimMode,
+    onToggleCollapse,
+    showTitle,
+    sidebarLogoPath,
+  }) => (
     <SidebarBand edge="header">
       {/* In slim mode, show logo with hover toggle or just toggle button */}
       {isSlimMode && (
@@ -266,6 +275,7 @@ const ChatHistoryHeader = memo<{
           )}
         >
           <SidebarToggle
+            ref={collapseToggleRef}
             surface="flush"
             expanded
             onClick={onToggleCollapse}
@@ -538,17 +548,12 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       }
     }, [isDrawerOpen, onToggleCollapse]);
 
-    // Closing from beside the drawer or by Escape: focus inside the drawer
-    // would stay on a control that has slid out of view, so it goes to the
-    // control that opens the drawer again.
     const expandToggleRef = useRef<HTMLButtonElement>(null);
-    const returnFocusOnHideRef = useRef(false);
-    const dismissDrawer = useCallback(() => {
-      returnFocusOnHideRef.current = Boolean(
-        ref.current?.contains(document.activeElement),
-      );
-      onToggleCollapse?.();
-    }, [onToggleCollapse]);
+    const collapseToggleRef = useRef<HTMLButtonElement>(null);
+    const dismissDrawer = useCallback(
+      () => onToggleCollapse?.(),
+      [onToggleCollapse],
+    );
     // Phone browsers keep the left edge for their own back swipe; a host app
     // can hand it to the page, and then a drag from it opens the drawer.
     const [edgeShell] = useState(() =>
@@ -577,12 +582,26 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       onOpen: openDrawer,
       onClose: dismissDrawer,
     });
+    // The open drawer makes the page inert, so focus goes into the drawer;
+    // once it closes, focus left in it (or dropped to the body by inert)
+    // would sit on a control that has slid out of view, so it goes to the
+    // control that opens the drawer again. Focus elsewhere stays.
+    const wasDrawerOpenRef = useRef(isDrawerOpen);
     useEffect(() => {
-      if (isHiddenMode && returnFocusOnHideRef.current) {
-        returnFocusOnHideRef.current = false;
-        expandToggleRef.current?.focus();
+      if (wasDrawerOpenRef.current === isDrawerOpen) {
+        return;
       }
-    }, [isHiddenMode]);
+      wasDrawerOpenRef.current = isDrawerOpen;
+      const active = document.activeElement;
+      const inDrawer = Boolean(active && ref.current?.contains(active));
+      if (isDrawerOpen) {
+        if (!inDrawer) {
+          collapseToggleRef.current?.focus({ preventScroll: true });
+        }
+      } else if (inDrawer || !active || active === document.body) {
+        expandToggleRef.current?.focus({ preventScroll: true });
+      }
+    }, [isDrawerOpen]);
     useEffect(() => {
       if (!isDrawerOpen) {
         return;
@@ -838,6 +857,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
       try {
         const signOutUrl = "/oauth2/sign_out"; // eslint-disable-line lingui/no-unlocalized-strings
+        discardComposeDraftsOnUnload();
         window.location.href = signOutUrl;
 
         setTimeout(() => {
@@ -941,9 +961,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             <div
               ref={scrimRef}
               role="presentation"
-              // A press here would otherwise blur the focused control before
-              // the click, and dismissDrawer could no longer see that focus
-              // was in the drawer.
+              // A press here leaves focus where it is, so the close sees it
+              // was in the drawer even where a browser keeps a focused page
+              // control out of the inert rule.
               onMouseDown={(event) => event.preventDefault()}
               onClick={dismissDrawer}
               className={clsx(
@@ -979,12 +999,16 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               className,
             )}
             style={sidebarShellStyle}
+            // Slid out of view on a narrow screen: out of reach for Tab and
+            // screen readers too.
+            inert={isNarrowScreen && isHiddenMode ? true : undefined}
             data-ui="sidebar"
             data-sidebar-mode={
               isHiddenMode ? "hidden" : isSlimMode ? "slim" : "expanded"
             }
           >
             <ChatHistoryHeader
+              collapseToggleRef={collapseToggleRef}
               collapsed={collapsed}
               isSlimMode={isSlimMode}
               onToggleCollapse={onToggleCollapse}

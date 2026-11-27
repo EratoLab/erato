@@ -16,9 +16,9 @@ export interface ComposeDraftState {
 }
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- internal sentinel key, never user-facing
-const NEW_CHAT_KEY = "__new-chat__";
+export const NEW_CHAT_KEY = "__new-chat__";
 
-function chatIdKey(chatId: string | null | undefined): string {
+export function composeSessionKey(chatId: string | null | undefined): string {
   return chatId ?? NEW_CHAT_KEY;
 }
 
@@ -48,14 +48,14 @@ export function useComposeSession({
   const saveDraft = useComposeSessionStore((state) => state.saveDraft);
 
   const [activeSessionId, setActiveSessionId] = useState<string>(() =>
-    resolveSessionId(chatIdKey(chatId)),
+    resolveSessionId(composeSessionKey(chatId)),
   );
 
-  const previousChatKeyRef = useRef<string>(chatIdKey(chatId));
+  const previousChatKeyRef = useRef<string>(composeSessionKey(chatId));
 
   useEffect(() => {
     const previousKey = previousChatKeyRef.current;
-    const nextKey = chatIdKey(chatId);
+    const nextKey = composeSessionKey(chatId);
 
     if (previousKey === nextKey) {
       return;
@@ -72,6 +72,17 @@ export function useComposeSession({
       current === nextSessionId ? current : nextSessionId,
     );
   }, [chatId, adoptSessionId, resolveSessionId]);
+
+  const restoreEpoch = useComposeSessionStore((state) => state.restoreEpoch);
+  useEffect(() => {
+    if (restoreEpoch === 0) return;
+    const restored = resolveSessionId(composeSessionKey(chatId));
+    setActiveSessionId((current) =>
+      current === restored ? current : restored,
+    );
+    // Only a restore moves the session here; chat switches are handled above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoreEpoch]);
 
   const getActiveSessionId = useCallback(
     () => activeSessionId,

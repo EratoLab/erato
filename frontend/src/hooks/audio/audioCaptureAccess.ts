@@ -1,3 +1,5 @@
+import { registerWorkInProgress } from "@/lib/chunkLoadRecovery";
+
 /** Optional host consent boundary. The ordinary web app uses browser consent. */
 export interface AudioCaptureAccessPolicy {
   beforeCapture: () => Promise<void>;
@@ -29,8 +31,25 @@ export async function requestAudioStream(
       throw new DOMException("Audio host was closed", "AbortError");
     }
   }
-  return mediaDevices.getUserMedia(constraints);
+  const stream = await mediaDevices.getUserMedia(constraints);
+  capturedStreams.add(stream);
+  return stream;
 }
+
+const capturedStreams = new Set<MediaStream>();
+
+/** Whether a microphone stream this page opened is still live. */
+export function isAudioCaptureLive(): boolean {
+  for (const stream of capturedStreams) {
+    if (stream.getTracks().some((track) => track.readyState === "live")) {
+      return true;
+    }
+    capturedStreams.delete(stream);
+  }
+  return false;
+}
+
+registerWorkInProgress(isAudioCaptureLive);
 
 export function enumerateAudioDevices(mediaDevices: MediaDevices) {
   // Enumeration on mount must neither prompt nor invalidate a saved device ID

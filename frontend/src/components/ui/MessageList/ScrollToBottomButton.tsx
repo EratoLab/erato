@@ -33,7 +33,7 @@ export const ScrollToBottomButton = memo(
     });
 
     return (
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center">
+      <div className="pointer-events-none absolute inset-x-0 bottom-[calc(1rem+var(--chat-composer-overlap,0px))] z-10 flex justify-center">
         <button
           type="button"
           onClick={onClick}

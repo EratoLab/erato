@@ -1,8 +1,4 @@
-import {
-  connectivity,
-  reconnectBackoffMs,
-} from "@/lib/connectivity/connectivity";
-import { abortableDelay } from "@/utils/abortableDelay";
+import { waitToSendAgain } from "@/lib/connectivity/connectivity";
 import { createValueStore } from "@/utils/chat/valueStore";
 
 export interface StopDeliveryOptions {
@@ -55,9 +51,7 @@ export function createStopDelivery() {
           undelivered();
           try {
             for (let failures = 0; !delivered; failures += 1) {
-              await connectivity.waitUntilOnline(signal);
-              if (failures > 0)
-                await abortableDelay(reconnectBackoffMs(failures - 1), signal);
+              await waitToSendAgain(failures, signal);
               delivered = await options.send();
             }
             options.onDeliveredLate();

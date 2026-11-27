@@ -1,4 +1,7 @@
 import clsx from "clsx";
+import { useLayoutEffect, useRef } from "react";
+
+import { useSystemGlass } from "@/lib/shellSystemGlass";
 
 import type { ReactNode } from "react";
 
@@ -31,9 +34,34 @@ export function ChatEmptyStateLayout({
   className,
 }: ChatEmptyStateLayoutProps) {
   const centered = mode === "centered";
+  const shellRef = useRef<HTMLDivElement>(null);
+  const clusterRef = useRef<HTMLDivElement>(null);
+  const systemGlass = useSystemGlass();
+  const floatsComposer = mode === "conversation" && systemGlass;
+
+  // The app's glass floats the composer over the list and pads the list by
+  // this much; CSS alone cannot read the composer's height.
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    const cluster = clusterRef.current;
+    if (!floatsComposer || !shell || !cluster) return;
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      shell.style.setProperty(
+        "--chat-composer-height",
+        `${cluster.offsetHeight}px`,
+      );
+    });
+    observer.observe(cluster);
+    return () => {
+      observer.disconnect();
+      shell.style.removeProperty("--chat-composer-height");
+    };
+  }, [floatsComposer]);
 
   return (
     <div
+      ref={shellRef}
       className={clsx(
         centered
           ? "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] py-4 sm:py-6"
@@ -61,7 +89,11 @@ export function ChatEmptyStateLayout({
           above
         )}
       </div>
-      <div className="w-full shrink-0" data-ui="composer-cluster">
+      <div
+        ref={clusterRef}
+        className="w-full shrink-0"
+        data-ui="composer-cluster"
+      >
         {composer}
       </div>
       <div

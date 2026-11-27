@@ -13,6 +13,7 @@ import {
 } from "./clientOperations/coordinator";
 import {
   READ_RESPONSE_TIMEOUT_MS,
+  REQUEST_TIMED_OUT_MESSAGE,
   v1betaApiFetch,
 } from "./generated/v1betaApi/v1betaApiFetcher";
 
@@ -511,6 +512,24 @@ describe("v1betaApiFetch network failures", () => {
 
     await expect(request).resolves.toEqual({ done: true });
   });
+  it("times out a write only when the caller gives it a limit", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(connectivity, "reportNetworkFailure").mockImplementation(() => {});
+    vi.stubGlobal("fetch", pendingUntilAborted());
+
+    const request = v1betaApiFetch({
+      url: "/api/v1beta/me/files",
+      method: "post",
+      requestTimeoutMs: 1_000,
+    });
+    const outcome = request.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    const error = await outcome;
+    expect((error as Error).message).toBe(REQUEST_TIMED_OUT_MESSAGE);
+    expect(isNetworkFailure(error)).toBe(true);
+  });
+
   it("does not cut a slow body once the response has started", async () => {
     vi.useFakeTimers();
     vi.spyOn(connectivity, "reportNetworkSuccess").mockImplementation(() => {});

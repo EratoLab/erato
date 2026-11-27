@@ -2130,6 +2130,16 @@
           "401": {
             "description": "When no valid JWT token is provided"
           },
+          "403": {
+            "description": "When the personal generation budget has been reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetLimitError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "When async tasks are disabled, or the origin chat or the run does not exist or is not accessible"
           },
@@ -2148,6 +2158,9 @@
           },
           "500": {
             "description": "When an internal server error occurs"
+          },
+          "503": {
+            "description": "When the personal generation budget cannot be verified"
           }
         },
         "security": [
@@ -2201,6 +2214,16 @@
           "401": {
             "description": "When no valid JWT token is provided"
           },
+          "403": {
+            "description": "When the personal generation budget has been reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetLimitError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "When async task delivery is disabled, or the chat or message does not exist or is not accessible"
           },
@@ -2216,6 +2239,9 @@
           },
           "500": {
             "description": "When an internal server error occurs"
+          },
+          "503": {
+            "description": "When the personal generation budget cannot be verified"
           }
         },
         "security": [
@@ -3468,6 +3494,16 @@
           "401": {
             "description": "When no valid JWT token is provided"
           },
+          "403": {
+            "description": "When the personal generation budget has been reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetLimitError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "When the chat does not exist or is not accessible"
           },
@@ -3483,6 +3519,9 @@
           },
           "500": {
             "description": "When an internal server error occurs"
+          },
+          "503": {
+            "description": "When the personal generation budget cannot be verified"
           }
         },
         "security": [
@@ -3523,6 +3562,16 @@
           "401": {
             "description": "When no valid JWT token is provided"
           },
+          "403": {
+            "description": "When the personal generation budget has been reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetLimitError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "When the chat does not exist or is not accessible"
           },
@@ -3538,6 +3587,9 @@
           },
           "500": {
             "description": "When an internal server error occurs"
+          },
+          "503": {
+            "description": "When the personal generation budget cannot be verified"
           }
         },
         "security": [
@@ -3623,6 +3675,16 @@
           "401": {
             "description": "When no valid JWT token is provided"
           },
+          "403": {
+            "description": "When the personal generation budget has been reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetLimitError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "When the chat does not exist or is not accessible"
           },
@@ -3638,6 +3700,9 @@
           },
           "500": {
             "description": "When an internal server error occurs"
+          },
+          "503": {
+            "description": "When the personal generation budget cannot be verified"
           }
         },
         "security": [
@@ -7592,6 +7657,27 @@
           "USD"
         ]
       },
+      "BudgetLimitCode": {
+        "type": "string",
+        "enum": [
+          "budget_limit_reached"
+        ]
+      },
+      "BudgetLimitError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/BudgetLimitCode"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
       "BudgetModelSpending": {
         "type": "object",
         "required": [
@@ -11092,6 +11178,25 @@
                 "type": "string",
                 "enum": [
                   "hallucination_loop"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The user's personal generation budget has been reached.",
+            "required": [
+              "error_description",
+              "error_type"
+            ],
+            "properties": {
+              "error_description": {
+                "type": "string"
+              },
+              "error_type": {
+                "type": "string",
+                "enum": [
+                  "budget_limit_reached"
                 ]
               }
             }

@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
+import { registerWorkInProgress } from "@/lib/chunkLoadRecovery";
 import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
 
 import type { UploadError } from "./errors";
@@ -20,6 +21,10 @@ interface FileUploadState {
    */
   isUploading: boolean;
   /**
+   * Whether an upload is waiting for the server to be reachable again
+   */
+  isWaitingForNetwork: boolean;
+  /**
    * Error message if upload failed
    */
   error: UploadError | null;
@@ -31,6 +36,7 @@ interface FileUploadState {
    * Set the uploading state
    */
   setUploading: (isUploading: boolean) => void;
+  setWaitingForNetwork: (isWaitingForNetwork: boolean) => void;
   /**
    * Add successfully uploaded files to the state
    */
@@ -59,6 +65,7 @@ interface FileUploadState {
 const initialState = {
   uploadedFiles: [],
   isUploading: false,
+  isWaitingForNetwork: false,
   error: null,
   silentChatId: null,
 };
@@ -73,6 +80,9 @@ export const useFileUploadStore = create<FileUploadState>()(
 
       setUploading: (isUploading: boolean) =>
         set({ isUploading }, false, "fileUpload/setUploading"),
+
+      setWaitingForNetwork: (isWaitingForNetwork: boolean) =>
+        set({ isWaitingForNetwork }, false, "fileUpload/setWaitingForNetwork"),
 
       addFiles: (files: FileUploadItem[]) =>
         set(
@@ -101,3 +111,5 @@ export const useFileUploadStore = create<FileUploadState>()(
     },
   ),
 );
+
+registerWorkInProgress(() => useFileUploadStore.getState().isUploading);

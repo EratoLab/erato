@@ -16,10 +16,15 @@ import type { ComposeDraftState } from "@/hooks/chat/useComposeSession";
 interface ComposeSessionStore {
   sessionIdByChatKey: Partial<Record<string, string>>;
   draftsBySessionId: Partial<Record<string, ComposeDraftState>>;
+  /** Bumped when drafts kept over a reload arrive, so open composers re-read. */
+  restoreEpoch: number;
   resolveSessionId: (chatKey: string) => string;
   adoptSessionId: (fromChatKey: string, toChatKey: string) => void;
   getDraft: (sessionId: string) => ComposeDraftState;
   saveDraft: (sessionId: string, draft: ComposeDraftState) => void;
+  refusedDraftsBySessionId: Partial<Record<string, ComposeDraftState>>;
+  saveRefusedDraft: (sessionId: string, draft: ComposeDraftState) => void;
+  takeRefusedDraft: (sessionId: string) => ComposeDraftState | undefined;
 }
 
 export const EMPTY_COMPOSE_DRAFT: ComposeDraftState = Object.freeze({
@@ -33,6 +38,28 @@ export const useComposeSessionStore = create<ComposeSessionStore>()(
     (set, get) => ({
       sessionIdByChatKey: {},
       draftsBySessionId: {},
+      restoreEpoch: 0,
+      refusedDraftsBySessionId: {},
+
+      saveRefusedDraft: (sessionId, draft) =>
+        set((prev) => ({
+          refusedDraftsBySessionId: {
+            ...prev.refusedDraftsBySessionId,
+            [sessionId]: draft,
+          },
+        })),
+
+      takeRefusedDraft: (sessionId) => {
+        const draft = get().refusedDraftsBySessionId[sessionId];
+        if (draft) {
+          set((prev) => {
+            const next = { ...prev.refusedDraftsBySessionId };
+            delete next[sessionId];
+            return { refusedDraftsBySessionId: next };
+          });
+        }
+        return draft;
+      },
 
       resolveSessionId: (chatKey) => {
         const existing = get().sessionIdByChatKey[chatKey];

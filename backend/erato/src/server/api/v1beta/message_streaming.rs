@@ -11,7 +11,7 @@ use crate::models::chat::{
     get_or_create_chat_by_previous_message_id,
 };
 use crate::models::message::{
-    ApprovalItem, BudgetTokenUsage, BudgetUsage, ContentPart, ContentPartImage,
+    ApprovalItem, BudgetEnforcement, BudgetTokenUsage, BudgetUsage, ContentPart, ContentPartImage,
     ContentPartReasoning, ContentPartText, ContentPartToolApproval, ContentPartToolApprovalRequest,
     ContentPartToolRejection, DelegationRunMode, GenerationErrorType, GenerationInputMessages,
     GenerationMetadata, GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema,
@@ -34,6 +34,9 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
 use crate::services::background_tasks::{
     BackgroundTaskManager, ClientStreamGuard, LeaseHeld, StreamingEvent, StreamingTask, Takeover,
     TaskCleanupGuard, TaskOutcome, ToolCallStatus as BgToolCallStatus,
+};
+use crate::services::budget::{
+    BudgetCheckError, BudgetLimitError, admit_generation, check_spending,
 };
 use crate::services::client_operations::executor_stream;
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
@@ -1462,6 +1465,29 @@ async fn send_generation_event(
         );
     }
     Ok(())
+}
+
+async fn send_budget_stream_error(
+    tx: &Sender<Result<Event, Report>>,
+    task: Option<&Arc<StreamingTask>>,
+    message_id: Uuid,
+    error: BudgetCheckError,
+) -> Result<(), Report> {
+    let event = MessageSubmitStreamingResponseMessage::Error(MessageSubmitStreamingResponseError {
+        message_id: Some(message_id),
+        error: error.generation_error(),
+    });
+    if let Some(task) = task {
+        send_background_event(
+            task,
+            StreamingEvent::Error {
+                error: Some(serde_json::to_value(&event)?),
+            },
+            "broadcast generation budget stop",
+        )
+        .await;
+    }
+    send_generation_event(&event, tx.clone()).await
 }
 
 async fn forward_error_report(tx: &Sender<Result<Event, Report>>, error: &Report) {
@@ -3100,6 +3126,7 @@ pub(crate) const REACT_REASON_TIP_MOVED: &str = "tip_moved";
 pub enum StreamRouteError {
     PlainText(axum::http::StatusCode, String),
     GenerationRunning(Box<GenerationRunningError>),
+    Budget(BudgetCheckError),
     /// `/react` only: the named row cannot be reacted to, and never will be.
     NothingToReact(Box<NothingToReactError>),
     /// `continuestream` only: the decisions do not cover the open approvals.
@@ -3126,10 +3153,17 @@ impl From<(axum::http::StatusCode, String)> for StreamRouteError {
     }
 }
 
+impl From<BudgetCheckError> for StreamRouteError {
+    fn from(error: BudgetCheckError) -> Self {
+        Self::Budget(error)
+    }
+}
+
 impl axum::response::IntoResponse for StreamRouteError {
     fn into_response(self) -> axum::response::Response {
         match self {
             StreamRouteError::PlainText(status, message) => (status, message).into_response(),
+            StreamRouteError::Budget(error) => error.into_response(),
             StreamRouteError::GenerationRunning(body) => {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
@@ -7416,7 +7450,7 @@ async fn launch_prepared_task<'a>(
             None,
             Box::pin(std::future::ready(SettledTask {
                 meta,
-                outcome: Err(error),
+                outcome: Err(error.to_string()),
             })),
         ),
     }
@@ -7599,10 +7633,14 @@ async fn stream_generate_chat_completion<'a>(
     // reached, so the first turn dispatches them instead of going straight to
     // the model. `None` for a generation that starts from a user message.
     resume: Option<ParkedTurnResume>,
+    budget_enforcement: Option<BudgetEnforcement>,
     // The reply is written as a spoken part and a written part (see
     // `splits_reply`); the spoken part is dropped when nothing is spoken.
     split_reply: bool,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
+    let resumed = resume.is_some();
+    let strict_budget = budget_enforcement == Some(BudgetEnforcement::Strict);
+    let mut budget_stop = None;
     let mut speech = streaming_task
         .filter(|task| {
             task.speech_enabled
@@ -8055,6 +8093,21 @@ async fn stream_generate_chat_completion<'a>(
         };
     }
 
+    macro_rules! budget_stop_metadata {
+        ($error:expr) => {{
+            let error = $error;
+            budget_stop = Some(error);
+            build_generation_metadata(
+                langfuse_trace_id.clone(),
+                false,
+                Some(error.generation_error()),
+                non_empty_string(&captured_reasoning_summary),
+                non_empty_vec(&captured_reasoning_items),
+                non_empty_vec(&captured_reasoning_item_encrypted_content),
+            )
+        }};
+    }
+
     let completion = 'loop_call_turns: loop {
         current_request_memory.refresh(&crate::metrics::owned::ProviderRequestView(
             &current_turn_chat_request,
@@ -8252,6 +8305,10 @@ async fn stream_generate_chat_completion<'a>(
                 },
             );
             if !gated_positions.is_empty() {
+                if strict_budget && let Err(error) = check_spending(app_state, &user_id).await {
+                    let metadata = budget_stop_metadata!(error);
+                    break 'loop_call_turns Ok((current_message_content, metadata));
+                }
                 let gated: Vec<genai::chat::ToolCall> = gated_positions
                     .iter()
                     .map(|position| batch[*position].clone())
@@ -8369,6 +8426,12 @@ async fn stream_generate_chat_completion<'a>(
                 // Leave the batch, but not before the join below: children are
                 // already running and their slots must not be left open.
                 exit_metadata = generation_metadata;
+                exit_after_join = true;
+                break 'pop_calls;
+            }
+
+            if strict_budget && let Err(error) = check_spending(app_state, &user_id).await {
+                exit_metadata = budget_stop_metadata!(error);
                 exit_after_join = true;
                 break 'pop_calls;
             }
@@ -11677,6 +11740,15 @@ async fn stream_generate_chat_completion<'a>(
                     leaving = true;
                     break;
                 }
+                if strict_budget
+                    && !queued_tasks.is_empty()
+                    && let Err(error) = check_spending(app_state, &user_id).await
+                {
+                    exit_metadata = budget_stop_metadata!(error);
+                    exit_after_join = true;
+                    leaving = true;
+                    break;
+                }
                 let Some(pending) = queued_tasks.pop_front() else {
                     break;
                 };
@@ -11900,7 +11972,7 @@ async fn stream_generate_chat_completion<'a>(
             );
         }
         exit_after_join |= end_after_batch;
-        if exit_after_join {
+        if exit_after_join && budget_stop.is_none() {
             let metadata = exit_metadata.or_else(|| {
                 build_generation_metadata(
                     langfuse_trace_id.clone(),
@@ -11931,7 +12003,7 @@ async fn stream_generate_chat_completion<'a>(
                 .map(|pending_wait| pending_wait.deadline)
                 .max()
                 .unwrap_or_else(tokio::time::Instant::now);
-            if latest_wait_deadline > tokio::time::Instant::now() {
+            if budget_stop.is_none() && latest_wait_deadline > tokio::time::Instant::now() {
                 if let Some(task) = streaming_task {
                     tokio::select! {
                         _ = tokio::time::sleep_until(latest_wait_deadline) => {}
@@ -11954,7 +12026,10 @@ async fn stream_generate_chat_completion<'a>(
 
             for pending_wait in pending_waits {
                 let (status, bg_status, message_status, output_value, response_text) =
-                    match pending_wait.error {
+                    match budget_stop
+                        .map(|error| error.message().to_string())
+                        .or(pending_wait.error)
+                    {
                         Some(error) => (
                             ToolCallStatus::Error,
                             BgToolCallStatus::Error,
@@ -12062,6 +12137,10 @@ async fn stream_generate_chat_completion<'a>(
             }
         }
 
+        if budget_stop.is_some() {
+            break 'loop_call_turns Ok((current_message_content, exit_metadata));
+        }
+
         if !current_turn_tool_responses.is_empty() {
             // The batch finishes out of order — a fanned-out task, a wait —
             // but the model is answered in the order it asked, so its calls
@@ -12156,6 +12235,14 @@ async fn stream_generate_chat_completion<'a>(
             current_turn_chat_request
                 .messages
                 .push(GenAiChatMessage::user(ContentPart::Image(image)));
+        }
+
+        if strict_budget
+            && (resumed || current_turn > 1)
+            && let Err(error) = check_spending(app_state, &user_id).await
+        {
+            let metadata = budget_stop_metadata!(error);
+            break 'loop_call_turns Ok((current_message_content, metadata));
         }
 
         let provider_guardrails = app_state.config.chat_provider_guardrails(chat_provider_id);
@@ -13280,6 +13367,10 @@ async fn stream_generate_chat_completion<'a>(
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
         } else {
+            if strict_budget && let Err(error) = check_spending(app_state, &user_id).await {
+                let metadata = budget_stop_metadata!(error);
+                break 'loop_call_turns Ok((current_message_content, metadata));
+            }
             if let Some(error_event) = fetch_non_streaming_error(
                 app_state,
                 current_turn_chat_request.clone(),
@@ -13369,6 +13460,12 @@ async fn stream_generate_chat_completion<'a>(
     }
     persist_correction!();
     let mut completion = completion;
+    if let Some(error) = budget_stop {
+        if let Ok((content, _)) = &mut completion {
+            close_budget_stopped_approvals(content, error);
+        }
+        send_budget_stream_error(&tx, streaming_task, assistant_message_id, error).await?;
+    }
     if let Ok((content, _)) = &mut completion {
         settle_spoken_parts(content);
         let upgraded = label_upgrades.finish(content);
@@ -18280,6 +18377,8 @@ pub(crate) async fn start_message_submit(
     warn_unknown_platform(&app_state.config, platform);
     validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
 
+    admit_generation(app_state, &me_user.id).await?;
+
     // Determine the chat_id first so we can use it as the background task key
     let (chat_id, chat_was_created, chat_assistant_id, chat_is_delegated) =
         if let Some(existing_chat_id) = request.existing_chat_id {
@@ -18455,6 +18554,8 @@ pub(crate) async fn start_message_submit(
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid previous_message_id)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
         (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
+        (status = FORBIDDEN, body = BudgetLimitError, description = "When the personal generation budget has been reached"),
+        (status = SERVICE_UNAVAILABLE, description = "When the personal generation budget cannot be verified"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -18651,23 +18752,10 @@ mod reasoning_replay_tests {
         reasoning_item_encrypted_content: Option<Vec<String>>,
     ) -> GenerationMetadata {
         GenerationMetadata {
-            budget_usage: None,
-            used_prompt_tokens: None,
-            used_completion_tokens: None,
-            used_total_tokens: None,
-            used_reasoning_tokens: None,
             reasoning_summary,
             reasoning_items,
             reasoning_item_encrypted_content,
-            langfuse_trace_id: None,
-            was_aborted: None,
-            error: None,
-            mcp_servers_unavailable: None,
-            mcp_servers_needing_auth: None,
-            mcp_servers_disabled_by_user: None,
-            mcp_tools_disabled_by_user: None,
-            continuation_in_flight: None,
-            submission_outcome: None,
+            ..Default::default()
         }
     }
 
@@ -19315,25 +19403,17 @@ fn internal_generation_error(error: &Report) -> GenerationErrorType {
     }
 }
 
+fn budget_admission_metadata(config: &crate::config::AppConfig) -> Option<GenerationMetadata> {
+    BudgetEnforcement::configured(config).map(|budget_enforcement| GenerationMetadata {
+        budget_enforcement: Some(budget_enforcement),
+        ..Default::default()
+    })
+}
+
 fn generation_metadata_for_error(error: GenerationErrorType) -> GenerationMetadata {
     GenerationMetadata {
-        budget_usage: None,
-        used_prompt_tokens: None,
-        used_completion_tokens: None,
-        used_total_tokens: None,
-        used_reasoning_tokens: None,
-        reasoning_summary: None,
-        reasoning_items: None,
-        reasoning_item_encrypted_content: None,
-        langfuse_trace_id: None,
-        was_aborted: None,
         error: Some(error),
-        mcp_servers_unavailable: None,
-        mcp_servers_needing_auth: None,
-        mcp_servers_disabled_by_user: None,
-        mcp_tools_disabled_by_user: None,
-        continuation_in_flight: None,
-        submission_outcome: None,
+        ..Default::default()
     }
 }
 
@@ -19882,7 +19962,7 @@ async fn run_generation_after_user_message_memory_inner(
         Some(generation_input_messages.clone()),
         &[],
         Some(generation_parameters),
-        None,
+        budget_admission_metadata(&app_state.config),
         None,
     )
     .await
@@ -19968,6 +20048,7 @@ async fn run_generation_after_user_message_memory_inner(
         }),
         task_tool_budgets_for_chat(chat),
         None,
+        BudgetEnforcement::configured(&app_state.config),
         splits_reply(&generation_input_messages),
     );
 
@@ -20286,6 +20367,8 @@ mod revision_broadcast_tests {
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
         (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
+        (status = FORBIDDEN, body = BudgetLimitError, description = "When the personal generation budget has been reached"),
+        (status = SERVICE_UNAVAILABLE, description = "When the personal generation budget cannot be verified"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -20375,6 +20458,7 @@ pub(crate) async fn start_regeneration(
         }
     })?;
     reject_if_archived(&chat)?;
+    admit_generation(&app_state, &me_user.id).await?;
     let chat = accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
     // Assistant mentions: an explicit request value is validated hard (400);
@@ -20623,7 +20707,7 @@ pub(crate) async fn start_regeneration(
                 Some(generation_input_messages.clone()),
                 &[],
                 Some(generation_parameters),
-                None,
+                budget_admission_metadata(&app_state.config),
                 None,
             )
             .await
@@ -20726,6 +20810,7 @@ pub(crate) async fn start_regeneration(
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
+                BudgetEnforcement::configured(&app_state.config),
                 splits_reply(&generation_input_messages),
             )
             .await;
@@ -20827,6 +20912,8 @@ pub(crate) async fn start_regeneration(
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
         (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
+        (status = FORBIDDEN, body = BudgetLimitError, description = "When the personal generation budget has been reached"),
+        (status = SERVICE_UNAVAILABLE, description = "When the personal generation budget cannot be verified"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -20922,6 +21009,7 @@ pub(crate) async fn start_edit(
         }
     })?;
     reject_if_archived(&chat)?;
+    admit_generation(&app_state, &me_user.id).await?;
     let chat = accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
     // Assistant mentions follow the same edit contract as the action facet:
@@ -21259,7 +21347,7 @@ pub(crate) async fn start_edit(
                 Some(generation_input_messages.clone()),
                 &[],
                 Some(generation_parameters),
-                None,
+                budget_admission_metadata(&app_state.config),
                 None,
             )
             .await
@@ -21362,6 +21450,7 @@ pub(crate) async fn start_edit(
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
+                BudgetEnforcement::configured(&app_state.config),
                 splits_reply(&generation_input_messages),
             )
             .await;
@@ -22191,6 +22280,8 @@ async fn task_result_still_reactable(
         (status = BAD_REQUEST, description = "Invalid chat ID format"),
         (status = NOT_FOUND, description = "When async task delivery is disabled, or the chat or message does not exist or is not accessible"),
         (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held (JSON, code = generation_running), or there is nothing to react to (JSON, code = nothing_to_react, body = NothingToReactError)"),
+        (status = FORBIDDEN, body = BudgetLimitError, description = "When the personal generation budget has been reached"),
+        (status = SERVICE_UNAVAILABLE, description = "When the personal generation budget cannot be verified"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -22302,6 +22393,8 @@ pub async fn react_to_task_result_sse(
 
     // 9-11, cheaply, before anything is taken.
     task_result_still_reactable(&app_state, chat_id, child_chat_id, task_result_message_id).await?;
+
+    admit_generation(&app_state, &me_user.id).await?;
 
     // Both reads are best-effort by construction, and both happen BEFORE the
     // lease so that neither can put a `?` in the window between acquiring it
@@ -22656,6 +22749,76 @@ pub(crate) fn continuation_owes_an_answer(message: &messages::Model) -> bool {
                 .ok()
         })
         .is_some_and(|metadata| metadata.continuation_in_flight == Some(true))
+}
+
+fn budget_stopped(message: &messages::Model) -> bool {
+    message
+        .generation_metadata
+        .as_ref()
+        .and_then(|metadata| metadata.pointer("/error/error_type"))
+        .and_then(JsonValue::as_str)
+        == Some("budget_limit_reached")
+}
+
+fn close_budget_stopped_approvals(content: &mut Vec<ContentPart>, error: BudgetCheckError) {
+    if let Some(state) = parked_approval_state(content) {
+        for item in state.decidable() {
+            content.push(ContentPart::ToolRejection(ContentPartToolRejection {
+                tool_call_id: item.tool_call_id,
+                never_allow: false,
+                user_tool_approval_setting_id: None,
+                rejected_at: now_timestamp(),
+                approval_id: Some(item.approval_id),
+                child_chat_id: item.child.map(|child| child.child_chat_id),
+                reason: match error {
+                    BudgetCheckError::LimitReached => Some("budget_limit_reached".into()),
+                    BudgetCheckError::Unavailable => Some("budget_unavailable".into()),
+                },
+                change_request: None,
+                voice: None,
+            }));
+        }
+        // The last part alone determines whether the row is parked. A stop
+        // that only held waiting children has no decision to append.
+        if content.len() == state.request_index + 1 {
+            content.pop();
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn stop_approval_for_budget(
+    tx: Sender<Result<Event, Report>>,
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message: &messages::Model,
+    mut content: Vec<ContentPart>,
+    error: BudgetCheckError,
+) -> Result<(), Report> {
+    close_budget_stopped_approvals(&mut content, error);
+    let mut metadata = message
+        .generation_metadata
+        .clone()
+        .map(serde_json::from_value::<GenerationMetadata>)
+        .transpose()?
+        .unwrap_or_default();
+    metadata.error = Some(error.generation_error());
+    metadata.continuation_in_flight = None;
+    update_message_generation_metadata(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &message.id,
+        metadata,
+    )
+    .await?;
+    send_budget_stream_error(&tx, Some(task), message.id, error).await?;
+    stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+        tx, task, app_state, policy, content, me_user, message.id,
+    )
+    .await
 }
 
 /// Claim this message for the continuation that is about to run, so a retry
@@ -23478,6 +23641,9 @@ pub(crate) async fn start_continuation(
     } else {
         (message, parsed)
     };
+    if budget_stopped(&message) {
+        return Err(already_continued());
+    }
     let Some(state) = parked_approval_state(&parsed.content) else {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
@@ -24882,6 +25048,27 @@ pub(crate) async fn run_continuation(
         }
     };
 
+    if budget_stopped(&message) {
+        return Err(eyre!(
+            "This generation already stopped at the personal budget limit"
+        ));
+    }
+    let strict_budget = BudgetEnforcement::for_continuation(&app_state.config, &message)
+        == Some(BudgetEnforcement::Strict);
+    if strict_budget && let Err(error) = check_spending(app_state, &me_user.id).await {
+        return stop_approval_for_budget(
+            tx,
+            task,
+            app_state,
+            policy,
+            me_user,
+            &message,
+            parsed.content,
+            error,
+        )
+        .await;
+    }
+
     let change_requests = match entry {
         ContinuationEntry::Decide => change_request_words(&request),
         _ => HashMap::new(),
@@ -25123,6 +25310,23 @@ pub(crate) async fn run_continuation(
             .iter()
             .find(|tool| tool.server_id == server_id && tool.tool.name == item.tool_name)
             .cloned();
+        if strict_budget
+            && is_approved
+            && approved_tool.is_some()
+            && let Err(error) = check_spending(app_state, &me_user.id).await
+        {
+            return stop_approval_for_budget(
+                tx,
+                task,
+                app_state,
+                policy,
+                me_user,
+                &message,
+                parsed.content,
+                error,
+            )
+            .await;
+        }
         // The card names the server's own tool; the row and the model's replay
         // keep the name the model called it by, qualified or not, even when
         // the tools that share the name changed since the turn parked.
@@ -25685,6 +25889,19 @@ pub(crate) async fn run_continuation(
     let reparked_children = if child_decisions.is_empty() {
         Vec::new()
     } else {
+        if strict_budget && let Err(error) = check_spending(app_state, &me_user.id).await {
+            return stop_approval_for_budget(
+                tx,
+                task,
+                app_state,
+                policy,
+                me_user,
+                &message,
+                parsed.content,
+                error,
+            )
+            .await;
+        }
         settle_parked_children(
             app_state,
             policy,
@@ -26929,6 +27146,7 @@ async fn resume_parked_generation(
         // The same logical turn retains its consumption across stops.
         task_tool_budgets_for_chat(&chat),
         resume,
+        BudgetEnforcement::for_continuation(&app_state.config, &message),
         split_reply,
     ))
     .await?;

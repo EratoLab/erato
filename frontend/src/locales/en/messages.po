@@ -2882,6 +2882,11 @@ msgstr "Assistant error"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/messageErrorCopy.ts
+msgid "chat.message.error.variant.budget_limit_reached"
+msgstr "Your personal generation budget has been reached."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "The response was filtered due to the prompt triggering content management policy."
 
@@ -3338,6 +3343,11 @@ msgstr "Could not refresh your budget. These figures may be out of date."
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Model"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.pageBack"
+msgstr "Back:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
@@ -4413,6 +4423,57 @@ msgstr "List searchable fields"
 #: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Page Not Found"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.body"
+msgstr "This page could not be shown. Reload to continue."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "error.app.reload"
+msgstr "Reload"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.title"
+msgstr "Something went wrong"
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.appUpdated"
+msgstr "Part of the app could not be loaded. Reload to continue."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.connectionLost"
+msgstr "The connection to the server was lost. Please try again."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.noConnection"
+msgstr "No connection to the server. Check your network and try again."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverDidNotAnswer"
+msgstr "The server did not answer. Please try again in a moment."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverStoppedAnswering"
+msgstr "The server stopped answering. Please try again."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.signedOut"
+msgstr "You are signed out. Reload to sign in again."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.timedOut"
+msgstr "The server did not answer in time. Please try again."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/facetDisplayName.ts
@@ -11885,9 +11946,29 @@ msgid "ui.imagePreview.altText"
 msgstr "Preview at full size"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "ui.imagePreview.open"
+msgstr "Open image preview"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "ui.imagePreview.openWithAlt"
+msgstr "Open image preview: {imageLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.imagePreview.title"
 msgstr "Image Preview"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.description"
+msgstr "Reload when you are ready. Your unsent text is kept."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.title"
+msgstr "A new version is available."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
@@ -11925,6 +12006,11 @@ msgstr "Unsupported file type(s): {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Maximum file size: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
+msgid "upload.waitingForNetwork"
+msgstr "Waiting for the network. The upload continues once the connection is back."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

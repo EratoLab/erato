@@ -29,6 +29,7 @@ import {
 
 import { getIdToken } from "@/auth/tokenStore";
 import { parkedWaitsOnly } from "@/components/ui/Message/approvalItems";
+import { getErrorDescription } from "@/components/ui/Message/messageErrorCopy";
 import {
   CANCEL_REMINDER_TOOL_NAME,
   CREATE_REMINDER_TOOL_NAME,
@@ -74,6 +75,7 @@ import {
   connectivity,
   isNetworkFailure,
   isStalledStream,
+  markClosedStream,
   reconnectBackoffMs,
 } from "@/lib/connectivity/connectivity";
 import {
@@ -109,7 +111,7 @@ import {
   abortClientToolCalls,
   getClientToolHeaders,
 } from "./clientToolExecutors";
-import { readConflictRefusal } from "./conflictRefusal";
+import { isBudgetLimitRefusal, readConflictRefusal } from "./conflictRefusal";
 import { handleAssistantMessageStarted } from "./handlers/handleAssistantMessageStarted";
 import { handleChatCreated } from "./handlers/handleChatCreated";
 import { handleClientToolCall } from "./handlers/handleClientToolCall";
@@ -140,6 +142,7 @@ import {
   isPendingChat,
   useChatHistoryStore,
 } from "./useChatHistory";
+import { composeSessionKey } from "./useComposeSession";
 import { useExplicitNavigation } from "./useExplicitNavigation";
 import { useReactToTaskResult } from "./useReactToTaskResult";
 import { useResumeSettledWaitingStop } from "./useResumeSettledWaitingStop";
@@ -241,6 +244,17 @@ const getSSEConnectionError = (
   }
 
   return new Error(fallbackMessage);
+};
+
+// A refusal arrives before the server owns a lease. Revert only the local
+// seed for that POST, leaving a newer status from the server intact.
+const seedGenerationStatus = (streamKey: string) => {
+  if (streamKey === NEW_CHAT_STREAM_KEY) return undefined;
+  const store = useGenerationStatusStore.getState();
+  const previous = store.statusByChatId[streamKey];
+  store.seedRunningLocal(streamKey, new Date().toISOString());
+  const seeded = useGenerationStatusStore.getState().statusByChatId[streamKey];
+  return () => store.restoreStatus(streamKey, seeded, previous);
 };
 
 const getAuthHeaders = (): Record<string, string> => {
@@ -1661,7 +1675,9 @@ export function useChatMessaging(
             stopSpeechPlayback(activeStreamKey);
             const streamError = responseData;
             const description =
-              streamError.error_description || "Streaming error";
+              streamError.error_type === "budget_limit_reached"
+                ? getErrorDescription(streamError.error_type)
+                : streamError.error_description || "Streaming error";
             logger.error(
               "[DEBUG_STREAMING] processStreamEvent: stream error received.",
               JSON.stringify(streamError),
@@ -2330,6 +2346,17 @@ export function useChatMessaging(
       // Read before the optimistic messages below: once they have rendered,
       // the new reply's placeholder is the most recent assistant message.
       const previousMessageId = findMostRecentAssistantMessageId();
+      const composeStore = useComposeSessionStore.getState();
+      const composeSessionId = composeStore.resolveSessionId(
+        composeSessionKey(chatId),
+      );
+      const draftFiles = composeStore.getDraft(composeSessionId).attachedFiles;
+      const uploadFiles = useFileUploadStore.getState().uploadedFiles;
+      const submittedFiles = (inputFileIds ?? []).map(
+        (id) =>
+          uploadFiles.find((file) => file.id === id) ??
+          draftFiles.find((file) => file.id === id),
+      );
 
       // Create optimistic user message immediately on submit so UI updates
       // first. The tracked mentions ride along so the highlight shows before
@@ -2424,11 +2451,7 @@ export function useChatMessaging(
       }
 
       // A brand-new chat gets its seed on chat_created, once it has an id.
-      if (streamKey !== NEW_CHAT_STREAM_KEY) {
-        useGenerationStatusStore
-          .getState()
-          .seedRunningLocal(streamKey, new Date().toISOString());
-      }
+      const restoreGenerationStatus = seedGenerationStatus(streamKey);
 
       try {
         // Reset any previous streaming state FIRST
@@ -2608,11 +2631,26 @@ export function useChatMessaging(
             // carry no composer draft to hand off, so attaching there would
             // swallow the error and leave the user's edit silently undone.
             const refusal = readConflictRefusal(connectionError);
-            const refusedFiles = (inputFileIds ?? []).map((fileId) =>
-              useFileUploadStore
+            if (isBudgetLimitRefusal(refusal)) {
+              restoreGenerationStatus?.();
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+              useComposeSessionStore
                 .getState()
-                .uploadedFiles.find((file) => file.id === fileId),
-            );
+                .saveRefusedDraft(composeSessionId, {
+                  message: content,
+                  attachedFiles: submittedFiles.filter(
+                    (file) => file !== undefined,
+                  ),
+                  mentionedAssistants: mentionedAssistants ?? [],
+                });
+              removeUserMessages([userMessage.id], activeStreamKey);
+              if (silentChatId) {
+                setAwaitingFirstStreamChunkForNewChat(false);
+                setNewlyCreatedChatId(null);
+                setNewlyCreatedChatIdInStore(null);
+              }
+            }
             if (
               refusal?.status === 409 &&
               refusal.code === "generation_running" &&
@@ -2620,7 +2658,7 @@ export function useChatMessaging(
               // An attachment we can no longer name would be dropped from the
               // queued draft. Better a visible error the user can retry than
               // a silently shortened message.
-              refusedFiles.every((file) => file !== undefined)
+              submittedFiles.every((file) => file !== undefined)
             ) {
               const handed = handleGenerationRunningRefusal(
                 effectiveChatIdForRequest,
@@ -2629,7 +2667,7 @@ export function useChatMessaging(
                   optimisticMessageId: userMessage.id,
                   draft: {
                     message: content,
-                    attachedFiles: refusedFiles.filter(
+                    attachedFiles: submittedFiles.filter(
                       (file) => file !== undefined,
                     ),
                     mentionedAssistants: mentionedAssistants ?? [],
@@ -2722,7 +2760,11 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] SSE connection closed unexpectedly while streaming was still active.",
               );
               // Use setError from store
-              setError(new Error("SSE connection closed unexpectedly"));
+              setError(
+                markClosedStream(
+                  new Error("SSE connection closed unexpectedly"),
+                ),
+              );
 
               // Reset streaming state
               logger.log(
@@ -2836,28 +2878,13 @@ export function useChatMessaging(
       replaceInputFileIds?: string[],
       selectedFacetIds?: string[],
       actionFacet?: ActionFacetRequest,
+      onAdmitted?: () => void,
     ): Promise<void> => {
       stopReadAloud();
       if (isSubmittingForKey(streamKey) || stops.pending.get().has(streamKey)) {
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
         return;
       }
-
-      // Read from the store, not the render closure, so this callback does not
-      // depend on `messages`/`messageOrder`, which change on every stream chunk.
-      const supersededMessageIds = collectSupersededMessageIds(
-        useMessagingStore.getState().getRenderableMessages(streamKey),
-        messageId,
-      );
-
-      dropSupersededMessages(supersededMessageIds, streamKey);
-
-      // Keep UX responsive and allow user_message_saved to reconcile temp -> real.
-      const optimisticEditedUserMessage = createOptimisticUserMessage(
-        newContent,
-        replaceInputFileIds,
-      );
-      addUserMessage(optimisticEditedUserMessage, streamKey);
 
       // Clear any previous streaming state and close existing SSE connection
       resetStreaming(streamKey);
@@ -2868,11 +2895,7 @@ export function useChatMessaging(
       }
 
       setSubmittingForKey(streamKey, true);
-      if (streamKey !== NEW_CHAT_STREAM_KEY) {
-        useGenerationStatusStore
-          .getState()
-          .seedRunningLocal(streamKey, new Date().toISOString());
-      }
+      const restoreGenerationStatus = seedGenerationStatus(streamKey);
 
       try {
         const requestBody = {
@@ -2919,6 +2942,11 @@ export function useChatMessaging(
                 return;
               }
             }
+            if (isBudgetLimitRefusal(readConflictRefusal(connectionError))) {
+              restoreGenerationStatus?.();
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+            }
             setError(connectionError);
             endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
@@ -2926,7 +2954,16 @@ export function useChatMessaging(
             setSubmittingForKey(activeStreamKey, false);
           },
           onOpen: () => {
-            // no-op
+            const supersededMessageIds = collectSupersededMessageIds(
+              useMessagingStore.getState().getRenderableMessages(streamKey),
+              messageId,
+            );
+            onAdmitted?.();
+            dropSupersededMessages(supersededMessageIds, streamKey);
+            addUserMessage(
+              createOptimisticUserMessage(newContent, replaceInputFileIds),
+              streamKey,
+            );
           },
           onClose: () => {
             const activeStreamKey = connectionStreamKeyRef.current;
@@ -2949,7 +2986,11 @@ export function useChatMessaging(
               logger.warn(
                 "[DEBUG_STREAMING] Edit SSE connection closed unexpectedly while streaming was still active.",
               );
-              setError(new Error("SSE connection closed unexpectedly (edit)"));
+              setError(
+                markClosedStream(
+                  new Error("SSE connection closed unexpectedly (edit)"),
+                ),
+              );
               endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
@@ -3030,11 +3071,7 @@ export function useChatMessaging(
       );
 
       setSubmittingForKey(streamKey, true);
-      if (streamKey !== NEW_CHAT_STREAM_KEY) {
-        useGenerationStatusStore
-          .getState()
-          .seedRunningLocal(streamKey, new Date().toISOString());
-      }
+      const restoreGenerationStatus = seedGenerationStatus(streamKey);
 
       try {
         const requestBody = {
@@ -3077,6 +3114,11 @@ export function useChatMessaging(
                 return;
               }
             }
+            if (isBudgetLimitRefusal(readConflictRefusal(connectionError))) {
+              restoreGenerationStatus?.();
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+            }
             setError(connectionError);
             endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
@@ -3110,7 +3152,9 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] Regenerate SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(
-                new Error("SSE connection closed unexpectedly (regenerate)"),
+                markClosedStream(
+                  new Error("SSE connection closed unexpectedly (regenerate)"),
+                ),
               );
               endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
@@ -3475,7 +3519,9 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] Continue SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(
-                new Error("SSE connection closed unexpectedly (continue)"),
+                markClosedStream(
+                  new Error("SSE connection closed unexpectedly (continue)"),
+                ),
               );
               endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);

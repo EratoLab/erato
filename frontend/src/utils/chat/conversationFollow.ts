@@ -78,6 +78,15 @@ const topInList = (element: Element, container: HTMLElement) =>
   container.getBoundingClientRect().top +
   container.scrollTop;
 
+/**
+ * The list's height a person sees: a composer floating over its end
+ * (globals.css, the app's glass) declares what it covers as the list's
+ * scroll padding.
+ */
+export const visibleListHeight = (container: HTMLElement): number =>
+  container.clientHeight -
+  (parseFloat(window.getComputedStyle(container).scrollPaddingBottom) || 0);
+
 /** `restingTop`, measured in the list for its last message. */
 export const conversationRestingTop = (
   container: HTMLElement,
@@ -93,7 +102,7 @@ export const conversationRestingTop = (
   ).at(-1);
   const start = row.querySelector(`[${WRITTEN_START_ATTRIBUTE}]`);
   return restingTop({
-    clientHeight: container.clientHeight,
+    clientHeight: visibleListHeight(container),
     waitingCard: card
       ? {
           top: topInList(card, container),

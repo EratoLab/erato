@@ -2882,6 +2882,11 @@ msgstr "Erreur de l'assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/messageErrorCopy.ts
+msgid "chat.message.error.variant.budget_limit_reached"
+msgstr "Vous avez atteint la limite de votre budget personnel de génération."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "La réponse a été filtrée car le message a déclenché la politique de gestion du contenu."
 
@@ -3338,6 +3343,11 @@ msgstr "Votre budget n’a pas pu être actualisé. Ces chiffres sont peut-être
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Modèle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.pageBack"
+msgstr "Retour :"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
@@ -4413,6 +4423,57 @@ msgstr ""
 #: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Page non trouvée"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.body"
+msgstr "Cette page n’a pas pu être affichée. Rechargez pour continuer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "error.app.reload"
+msgstr "Recharger"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.title"
+msgstr "Un problème est survenu"
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.appUpdated"
+msgstr "Une partie de l’application n’a pas pu être chargée. Rechargez pour continuer."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.connectionLost"
+msgstr "La connexion au serveur a été perdue. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.noConnection"
+msgstr "Pas de connexion au serveur. Vérifiez votre réseau et réessayez."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverDidNotAnswer"
+msgstr "Le serveur n’a pas répondu. Veuillez réessayer dans un instant."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverStoppedAnswering"
+msgstr "Le serveur a cessé de répondre. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.signedOut"
+msgstr "Vous êtes déconnecté. Rechargez pour vous reconnecter."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.timedOut"
+msgstr "Le serveur n’a pas répondu à temps. Veuillez réessayer."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/facetDisplayName.ts
@@ -11885,9 +11946,29 @@ msgid "ui.imagePreview.altText"
 msgstr "Aperçu en taille réelle"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "ui.imagePreview.open"
+msgstr "Ouvrir l’aperçu de l’image"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "ui.imagePreview.openWithAlt"
+msgstr "Ouvrir l’aperçu de l’image : {imageLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.imagePreview.title"
 msgstr "Aperçu de l'image"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.description"
+msgstr "Rechargez quand vous le souhaitez. Votre texte non envoyé est conservé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.title"
+msgstr "Une nouvelle version est disponible."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
@@ -11925,6 +12006,11 @@ msgstr "Type(s) de fichier non pris en charge : {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Taille de fichier maximale : {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
+msgid "upload.waitingForNetwork"
+msgstr "En attente du réseau. L’envoi reprendra dès que la connexion sera rétablie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

@@ -176,6 +176,8 @@ describe("Word session controller", () => {
       return since.ok ? since.entries.map((entry) => entry.chat) : [];
     };
     const pane = await renderOpenedPane();
+    // The pane names its chat to the journal in an effect after it draws.
+    await flushLiveReads();
 
     expect(writer()).toEqual(["chat-report"]);
     act(() => pane.session().selectChat("chat-picked"));

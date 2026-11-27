@@ -23,7 +23,14 @@ const CONTRACT = 1;
 
 /** Whether a native app shows this page through the shell contract. */
 export function inHostShell(): boolean {
-  return typeof window !== "undefined" && isHostShell(window.ERATO_SHELL);
+  return hostShell() !== null;
+}
+
+/** The shell, whatever it offers; for events a page hears either way. */
+export function hostShell(): HostShell | null {
+  if (typeof window === "undefined") return null;
+  const shell = window.ERATO_SHELL;
+  return isHostShell(shell) ? shell : null;
 }
 
 /** The shell, when it offers `capability` at `minVersion` or later. */

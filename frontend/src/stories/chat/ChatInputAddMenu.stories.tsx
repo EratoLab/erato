@@ -254,3 +254,45 @@ export const Mobile: Story = {
     viewport: { defaultViewport: "mobile" },
   },
 };
+
+const MODELS = [
+  "GPT-5.4 Mini (EU)",
+  "GPT-5.6 Sol (Global)",
+  "GPT-6 Astra (OpenAI)",
+  "Qwen 3.8 Max (QwenCloud)",
+  "Qwen 3.8 Flash (QwenCloud)",
+  "Kimi K3 (Moonshot)",
+  "Mistral Large 4 (Mistral)",
+];
+
+function ModelSubmenuMenu() {
+  const [model, setModel] = useState(MODELS[0]);
+  return (
+    <InteractiveMenu
+      initialChecked={["web"]}
+      extraSections={[
+        {
+          id: "model",
+          header: "Model",
+          placement: "belowTools",
+          submenu: { summary: model },
+          items: MODELS.map((name) => ({
+            id: `model-${name}`,
+            label: name,
+            checked: name === model,
+            exclusive: true,
+            onToggle: () => setModel(name),
+          })),
+        },
+      ]}
+    />
+  );
+}
+
+export const ModelSubmenu: Story = {
+  name: "Model as a sub-menu",
+  render: () => <ModelSubmenuMenu />,
+  parameters: {
+    viewport: { defaultViewport: "mobile" },
+  },
+};

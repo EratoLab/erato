@@ -12,8 +12,7 @@ const spies = vi.hoisted(() => ({
 
 vi.mock("@erato/frontend/library", () => ({
   installAudioCaptureAccessPolicy: () => () => {},
-  restoreComposeReloadState: () => {},
-  saveComposeReloadState: () => {
+  saveComposeDraftForReload: () => {
     const error = new Error("Attachments are still staged");
     error.name = "ComposeReloadBlockedError";
     throw error;

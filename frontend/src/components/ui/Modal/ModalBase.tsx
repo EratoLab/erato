@@ -3,8 +3,10 @@ import clsx from "clsx";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { useIsNarrowTouchScreen } from "@/hooks/useResponsive";
 import { isImeComposing } from "@/utils/isImeComposing";
 
+import { useSheetDismiss } from "./useSheetDismiss";
 import { ChevronLeftIcon, CloseIcon } from "../icons";
 
 import type React from "react";
@@ -21,6 +23,9 @@ interface ModalBaseProps {
    * viewport, for narrow panes. `fullscreen` covers the screen inside the safe
    * areas, with no gutter, corner or shadow: on a narrow screen a centred
    * popup only spends its width on margins.
+   *
+   * On a phone (narrow, no hovering pointer) every placement but `fullscreen`
+   * becomes a bottom sheet with a grabber that a swipe down closes.
    */
   placement?: "center" | "bottom" | "fullscreen";
   /**
@@ -54,7 +59,7 @@ interface ModalBaseProps {
 }
 
 const HEADER_BUTTON_CLASS =
-  "modal-close-geometry focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary";
+  "modal-close-geometry modal-close-skin focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary";
 const HEADER_BUTTON_STYLE: React.CSSProperties = {
   padding: "var(--theme-spacing-modal-close-button-padding)",
 };
@@ -86,6 +91,14 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   closeOnOverlayClick = true,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const isSheet = useIsNarrowTouchScreen() && placement !== "fullscreen";
+  const { dismiss } = useSheetDismiss({
+    enabled: isOpen && isSheet,
+    shellRef: modalRef,
+    bandRef: headerRef,
+    onClose,
+  });
   // Dialogs stack (a file preview over a conversation), so each names itself.
   const titleId = useId();
   const mouseDownTargetRef = useRef<EventTarget | null>(null);
@@ -129,7 +142,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         !isImeComposing(event) &&
         isTopModal(token)
       ) {
-        onClose();
+        dismiss();
       }
     };
 
@@ -142,7 +155,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose, token]);
+  }, [isOpen, dismiss, token]);
 
   // Keyed on opening alone: callers pass inline onClose closures, and
   // refocusing on each new one pulled focus out of the dialog's fields on
@@ -166,7 +179,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       event.target === event.currentTarget &&
       mouseDownTargetRef.current === event.currentTarget
     ) {
-      onClose();
+      dismiss();
     }
     mouseDownTargetRef.current = null;
   };
@@ -183,11 +196,13 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         // The skin's viewport gutter is unlayered, so a padding utility would
         // lose to it; the sheet narrows the gutter through the skin's variable.
         "modal-overlay-skin fixed inset-0 z-50 flex justify-center",
-        placement === "bottom"
-          ? "items-end [--modal-viewport-margin:0.5rem]"
-          : placement === "fullscreen"
-            ? "items-stretch [--modal-viewport-margin:0px]"
-            : "items-center",
+        isSheet
+          ? "items-end"
+          : placement === "bottom"
+            ? "items-end [--modal-viewport-margin:0.5rem]"
+            : placement === "fullscreen"
+              ? "items-stretch [--modal-viewport-margin:0px]"
+              : "items-center",
         className,
       )}
       onMouseDown={handleOverlayMouseDown}
@@ -196,13 +211,16 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       aria-label={t`Close modal overlay`}
       data-ui="modal-overlay"
       data-placement={placement === "center" ? undefined : placement}
+      data-sheet={isSheet ? "" : undefined}
     >
       <div
         ref={modalRef}
         className={clsx(
           "modal-shell-skin modal-shell-frame-geometry theme-transition relative flex w-full flex-col overflow-hidden font-sans",
           "focus-ring",
-          placement === "bottom" && "max-h-[calc(100%-3.25rem)] max-w-full",
+          placement === "bottom" &&
+            !isSheet &&
+            "max-h-[calc(100%-3.25rem)] max-w-full",
           placement === "fullscreen" && "h-full max-h-none max-w-none",
           contentClassName,
         )}
@@ -214,10 +232,19 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         aria-describedby={describedBy}
         data-ui="modal-shell"
         data-placement={placement === "center" ? undefined : placement}
+        data-sheet={isSheet ? "" : undefined}
       >
-        {/* Optional Header */}
+        {isSheet ? <div data-ui="modal-grabber" aria-hidden="true" /> : null}
         {title && (
-          <div className="modal-section-geometry flex shrink-0 items-start gap-3 border-b border-theme-border">
+          <div
+            ref={headerRef}
+            data-ui="modal-header"
+            className={clsx(
+              "modal-section-geometry flex shrink-0 gap-3 border-b border-theme-border",
+              // Level with the 44 px buttons, as a phone's sheet titles are.
+              isSheet ? "items-center" : "items-start",
+            )}
+          >
             {back ? (
               <button
                 ref={back.ref}
@@ -240,7 +267,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
             {/* Keep the close control beside long titles, including in add-in panes. */}
             {showCloseButton ? (
               <button
-                onClick={onClose}
+                onClick={dismiss}
                 className={HEADER_BUTTON_CLASS}
                 style={HEADER_BUTTON_STYLE}
                 aria-label={t`Close modal`}
@@ -252,7 +279,12 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         )}
 
         {/* Content - scrollable */}
-        <div className="modal-section-geometry flex-1 overflow-y-auto">
+        <div
+          className={clsx(
+            "modal-section-geometry flex-1 overflow-y-auto",
+            isSheet && "overscroll-y-contain",
+          )}
+        >
           {children}
         </div>
         {footer ? (

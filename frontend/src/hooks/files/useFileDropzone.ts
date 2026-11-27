@@ -6,6 +6,7 @@ import {
   useMessagingStore,
 } from "@/hooks/chat/store/messagingStore";
 import { clientPlatformHeaders } from "@/lib/clientPlatform";
+import { sendWhenOnline } from "@/lib/connectivity/sendWhenOnline";
 import {
   useCreateChat,
   fetchUploadFile,
@@ -24,12 +25,15 @@ import {
 } from "@/utils/validateFileSizes";
 
 import {
+  UploadNetworkError,
   UploadTooLargeError,
   UploadUnknownError,
   UnsupportedFileTypeError,
   type UploadError,
   isUploadTooLarge,
+  toUploadError,
 } from "./errors";
+import { uploadTimeLimitMs } from "./uploadTimeLimit";
 import { useFileUploadStore } from "./useFileUploadStore";
 
 import type { FileUploadItemWithSize } from "@/components/ui/FileUpload/FilePreviewBase";
@@ -197,6 +201,7 @@ export function useFileDropzone({
     isUploading,
     error: uploadError,
     setUploading,
+    setWaitingForNetwork,
     addFiles,
     setError,
     clearFiles,
@@ -218,17 +223,16 @@ export function useFileDropzone({
     latestChatProviderIdRef.current = chatProviderId;
   }, [chatProviderId]);
 
-  // Add create chat mutation for silent chat creation
-  const createChatMutation = useCreateChat({
-    onError: (error) => {
-      logger.error("Failed to create chat for file upload:", error);
-      setError(
-        // eslint-disable-next-line lingui/no-unlocalized-strings
-        new UploadUnknownError("Failed to prepare chat for file upload"),
-      );
-      setUploading(false);
-    },
-  });
+  // Silent chat creation; its errors reach the upload's own catch.
+  const createChatMutation = useCreateChat();
+
+  // Leaving the chat ends an upload still waiting for the network.
+  const unmountSignalRef = useRef<AbortSignal | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    unmountSignalRef.current = controller.signal;
+    return () => controller.abort();
+  }, []);
 
   // Function to upload files
   const uploadFiles = useCallback(
@@ -236,6 +240,7 @@ export function useFileDropzone({
       if (disabled || isUploading || files.length === 0) return;
 
       let uploadedItems: FileUploadItem[] | undefined;
+      const signal = unmountSignalRef.current ?? undefined;
 
       try {
         setUploading(true);
@@ -277,15 +282,25 @@ export function useFileDropzone({
         // No chat yet — create one silently.
         if (!uploadChatId) {
           logger.log("Creating silent chat for file uploads");
-          const createChatResult = await createChatMutation.mutateAsync({
-            body: {
-              ...(assistantId ? { assistant_id: assistantId } : {}),
-              ...(latestChatProviderIdRef.current
-                ? { chat_provider_id: latestChatProviderIdRef.current }
-                : {}),
+          const createChatResult = await sendWhenOnline(
+            () =>
+              createChatMutation.mutateAsync({
+                body: {
+                  ...(assistantId ? { assistant_id: assistantId } : {}),
+                  ...(latestChatProviderIdRef.current
+                    ? { chat_provider_id: latestChatProviderIdRef.current }
+                    : {}),
+                },
+                headers: clientPlatformHeaders(),
+              }),
+            {
+              signal,
+              onWaitingForNetwork: setWaitingForNetwork,
+              // A lost answer would leave an extra empty chat; resend only
+              // when the browser knew it was offline, so nothing went out.
+              mayResend: () => navigator.onLine === false,
             },
-            headers: clientPlatformHeaders(),
-          });
+          );
           logger.log("Silent chat creation result:", createChatResult);
           uploadChatId = createChatResult.chat_id;
           // Set the silentChatId in the store
@@ -315,24 +330,28 @@ export function useFileDropzone({
         // Call fetchUploadFile directly, bypassing the problematic hook
         let result: FileUploadResponse;
         try {
-          // Use type assertion on the variables object for the call
-          result = await fetchUploadFile(variables as UploadFileVariables);
+          result = await sendWhenOnline(
+            () =>
+              fetchUploadFile({
+                ...(variables as UploadFileVariables),
+                requestTimeoutMs: uploadTimeLimitMs(
+                  filesToUpload.reduce((sum, file) => sum + file.size, 0),
+                ),
+              }),
+            {
+              signal,
+              onWaitingForNetwork: setWaitingForNetwork,
+              // A proxy that cuts off a too-large upload looks like a drop.
+              mayResend: (error) => !isUploadTooLarge(error),
+            },
+          );
           logger.log("File upload API call successful, result:", result);
         } catch (uploadError) {
           logger.error("Error calling fetchUploadFile:", uploadError);
-
-          // Check for fetch-like error with status
-          if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError(
-              maxSizeFormatted,
-              filesToUpload.map((file) => file.name),
-            );
-          }
-
-          // Fallback to unknown error
-          throw new UploadUnknownError(
-            // eslint-disable-next-line lingui/no-unlocalized-strings
-            String(uploadError) || "Failed to upload files",
+          throw toUploadError(
+            uploadError,
+            filesToUpload.map((file) => file.name),
+            maxSizeFormatted,
           );
         }
 
@@ -349,13 +368,16 @@ export function useFileDropzone({
           uploadedItems = [];
         }
       } catch (err) {
+        if (signal?.aborted) return uploadedItems;
         logger.error("Error uploading files (outer catch):", err);
         const isKnownError =
           err instanceof UploadTooLargeError ||
-          err instanceof UploadUnknownError;
+          err instanceof UploadUnknownError ||
+          err instanceof UploadNetworkError;
 
-        setError(isKnownError ? err : new UploadUnknownError());
+        setError(isKnownError ? err : new UploadUnknownError(err));
       } finally {
+        setWaitingForNetwork(false);
         setUploading(false);
       }
 
@@ -377,6 +399,7 @@ export function useFileDropzone({
       addFiles,
       onFilesUploaded,
       setUploading,
+      setWaitingForNetwork,
       setError,
       setSilentChatId,
     ],

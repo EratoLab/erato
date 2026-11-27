@@ -1,8 +1,7 @@
 import {
   installAudioCaptureAccessPolicy,
   toast,
-  saveComposeReloadState,
-  restoreComposeReloadState,
+  saveComposeDraftForReload,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -122,22 +121,14 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
 
           if (disposed) return;
           const supportsAudioCapture = isOfficeAudioCaptureSupported();
-          const draftKey = `erato.office.audioConsentDraft.${host}`;
-          try {
-            restoreComposeReloadState(window.sessionStorage, draftKey);
-          } catch (error) {
-            console.warn(
-              "Failed to restore composer after microphone consent",
-              error,
-            );
-          }
           disposeAudioAccess = installAudioCaptureAccessPolicy(
             createOfficeAudioAccess({
               host,
               supported: supportsAudioCapture,
               beforeReload: () => {
                 try {
-                  saveComposeReloadState(window.sessionStorage, draftKey);
+                  // The draft keeper installed in main.tsx brings it back.
+                  saveComposeDraftForReload();
                 } catch (error) {
                   // Sticky, and every microphone click retries the reload.
                   toast.error({
