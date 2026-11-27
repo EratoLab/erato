@@ -25,10 +25,12 @@ import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useMergedRef } from "@/hooks/ui/useMergedRef";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
 import { useProfile } from "@/hooks/useProfile";
+import { useIsNarrowTouchScreen } from "@/hooks/useResponsive";
 import {
   chatMessagesQuery,
   useChatDetail,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useSystemGlass } from "@/lib/shellSystemGlass";
 import { useChatSession, useChatTranscript } from "@/providers/ChatProvider";
 import {
   useChatInputFeature,
@@ -807,6 +809,32 @@ export const Chat = ({
     !!currentChatId &&
     hasMessages &&
     canEditForCurrentChat;
+  // In the app on a phone the top buttons float over the chat as round glass
+  // controls, the share button as an icon like the sidebar's on the left.
+  const systemGlass = useSystemGlass();
+  const isNarrowTouchScreen = useIsNarrowTouchScreen();
+  const floatsTopBar =
+    systemGlass && isNarrowTouchScreen && layoutMode === "conversation";
+  const topBarRef = useRef<HTMLDivElement>(null);
+  const hasTopBar = Boolean(TopLeftAccessory) || canShareCurrentChat;
+
+  // The list pads its top by the floating bar's height (globals.css); CSS
+  // cannot read it, and a theme's accessory may be taller than one row.
+  useEffect(() => {
+    const bar = topBarRef.current;
+    const page = bar?.parentElement;
+    if (!floatsTopBar || !bar || !page) return;
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      page.style.setProperty("--chat-top-bar-height", `${bar.offsetHeight}px`);
+    });
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      page.style.removeProperty("--chat-top-bar-height");
+    };
+  }, [floatsTopBar, hasTopBar]);
+
   const currentShareButtonLabel = currentChatShareLink?.enabled
     ? t({
         id: "chat.share.button.shared",
@@ -1009,8 +1037,9 @@ export const Chat = ({
                 </div>
               </div>
             )}
-            {TopLeftAccessory || canShareCurrentChat ? (
+            {hasTopBar ? (
               <div
+                ref={topBarRef}
                 className={clsx(
                   "flex min-w-0 shrink-0 items-center",
                   // In hidden mode the sidebar's toggle floats over this corner.
@@ -1031,17 +1060,48 @@ export const Chat = ({
                   ) : null}
                 </div>
                 {canShareCurrentChat ? (
-                  <div className="shrink-0 py-2 pr-3 sm:pr-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon={<ShareIcon className="size-4" />}
-                      onClick={() => {
-                        handleOpenShareDialog(currentChatId);
-                      }}
-                    >
-                      {currentShareButtonLabel}
-                    </Button>
+                  <div
+                    className={clsx(
+                      "shrink-0 py-2",
+                      floatsTopBar
+                        ? "pr-[var(--phone-edge-inset)]"
+                        : "pr-3 sm:pr-4",
+                    )}
+                  >
+                    {floatsTopBar ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        geometry="icon"
+                        className="floating-control-skin relative border"
+                        // A shared chat's link is live: the glyph takes the
+                        // accent, as the word "Shared" did.
+                        iconClassName={
+                          currentChatShareLink?.enabled
+                            ? "text-theme-fg-accent"
+                            : undefined
+                        }
+                        icon={<ShareIcon />}
+                        aria-label={currentShareButtonLabel}
+                        title={currentShareButtonLabel}
+                        data-ui="chat-share-button"
+                        onClick={() => {
+                          handleOpenShareDialog(currentChatId);
+                        }}
+                      />
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<ShareIcon className="size-4" />}
+                        data-ui="chat-share-button"
+                        onClick={() => {
+                          handleOpenShareDialog(currentChatId);
+                        }}
+                      >
+                        {currentShareButtonLabel}
+                      </Button>
+                    )}
                   </div>
                 ) : null}
               </div>

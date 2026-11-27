@@ -23,7 +23,9 @@ import { useToastStore } from "@/components/ui/Toast/toastStore";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { markSystemGlass } from "@/lib/shellSystemGlass";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 
 import { Chat } from "./Chat";
 import AssistantsPageStructure from "../Assistant/AssistantsPageStructure";
@@ -1117,6 +1119,73 @@ describe("Chat top bar", () => {
       bar.compareDocumentPosition(centredShell) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  describe("in the app on a phone", () => {
+    beforeEach(() => {
+      vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+        matches: query.includes("max-width: 639.98px"),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(private readonly callback: ResizeObserverCallback) {}
+          observe() {
+            this.callback([], this);
+          }
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(
+        60,
+      );
+      installHostShell({ systemGlass: 1 });
+      markSystemGlass(document.documentElement);
+    });
+
+    afterEach(() => {
+      removeHostShell();
+      markSystemGlass(document.documentElement);
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it("shows share as a round glass button named by its label", () => {
+      renderChat({ messageOrder: ["user-1"] });
+
+      const share = screen.getByRole("button", { name: "Share" });
+      expect(share).toHaveClass("floating-control-skin");
+      expect(share).toHaveAttribute("data-geometry", "icon-sm");
+      expect(share.textContent).toBe("");
+      fireEvent.click(share);
+      expect(screen.getByTestId("share-dialog-stub")).toHaveAttribute(
+        "data-chat-id",
+        "origin-1",
+      );
+    });
+
+    it("tells the list how tall the floating bar is", () => {
+      const { container } = renderChat({ messageOrder: ["user-1"] });
+
+      const page = topBar(container)!.parentElement!;
+      expect(page.style.getPropertyValue("--chat-top-bar-height")).toBe("60px");
+    });
+  });
+
+  it("keeps the worded share button outside the app", () => {
+    renderChat({ messageOrder: ["user-1"] });
+
+    const share = screen.getByRole("button", { name: "Share" });
+    expect(share).not.toHaveClass("floating-control-skin");
+    expect(share.textContent).toBe("Share");
   });
 
   it("leaves the top strip's corner unreserved while sharing is on", () => {

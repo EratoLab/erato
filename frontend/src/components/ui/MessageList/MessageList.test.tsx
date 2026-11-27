@@ -252,7 +252,7 @@ describe("MessageList", () => {
 
     expect(chatBody).toHaveClass("chat-body-skin");
     expect(chatBody.className).toContain(
-      "[padding:var(--theme-spacing-shell-padding-y)_calc(var(--theme-spacing-shell-padding-x)/2)_calc(var(--theme-spacing-shell-padding-y)+var(--chat-composer-overlap,0px))]",
+      "[padding:calc(var(--theme-spacing-shell-padding-y)+var(--chat-top-overlap,0px))_calc(var(--theme-spacing-shell-padding-x)/2)_calc(var(--theme-spacing-shell-padding-y)+var(--chat-composer-overlap,0px))]",
     );
     expect(chatBody.className).toContain(
       "gap-[var(--theme-spacing-shell-gap)]",
@@ -281,7 +281,7 @@ describe("MessageList", () => {
 
     expect(chatBody).toHaveClass("chat-body-skin");
     expect(chatBody.className).toContain(
-      "[padding:var(--theme-spacing-shell-padding-y)_calc(var(--theme-spacing-shell-padding-x)/2)_calc(var(--theme-spacing-shell-padding-y)+var(--chat-composer-overlap,0px))]",
+      "[padding:calc(var(--theme-spacing-shell-padding-y)+var(--chat-top-overlap,0px))_calc(var(--theme-spacing-shell-padding-x)/2)_calc(var(--theme-spacing-shell-padding-y)+var(--chat-composer-overlap,0px))]",
     );
     expect(contentShell).toHaveStyle({
       maxWidth: "var(--theme-layout-chat-content-max-width)",

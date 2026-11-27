@@ -2706,6 +2706,109 @@ html[data-system-glass][data-theme="dark"] {
   border-color: transparent;
 }
 
+/* The top edge in the app on a phone: a chat runs on up under the status bar
+   and its top buttons float over it, as the composer floats over its foot.
+   The page reaches into the top safe area (the app viewport's padding), the
+   bar lies over the list at the safe area's edge, and the list pads its top
+   by both (MessageList, --chat-top-overlap), so its first line starts below
+   the buttons and scrolls up under them. A band, solid under the status bar,
+   fades the text out below it, so the clock stays readable. Only the list's top padding
+   changes: scrolling and auto-scroll are as they were. The bar's height
+   comes from Chat (--chat-top-bar-height); without a bar the floating
+   sidebar button alone takes the same row. */
+@media (max-width: 639.98px) {
+  @media not all and (hover: hover) and (pointer: fine) {
+    html[data-system-glass]
+      [data-ui="chat-conversation-dropzone"]:has(
+        > [data-ui="chat-conversation-shell"]
+      ) {
+      --chat-top-overlap: calc(
+        var(--safe-area-top) +
+          var(
+            --chat-top-bar-height,
+            max(
+                var(--touch-target-min),
+                var(--theme-spacing-control-min-height) - 0.25rem
+              ) +
+              1rem
+          )
+      );
+      margin-top: calc(-1 * var(--safe-area-top));
+    }
+
+    html[data-system-glass]
+      [data-ui="chat-conversation-dropzone"]:has(
+        > [data-ui="chat-conversation-shell"]
+      )
+      > [data-ui="chat-top-bar"] {
+      position: absolute;
+      top: var(--safe-area-top);
+      inset-inline: 0;
+      z-index: 30;
+      pointer-events: none;
+    }
+
+    html[data-system-glass]
+      [data-ui="chat-conversation-dropzone"]:has(
+        > [data-ui="chat-conversation-shell"]
+      )
+      > [data-ui="chat-top-bar"]
+      > *
+      > * {
+      pointer-events: auto;
+    }
+
+    html[data-system-glass]
+      [data-ui="chat-conversation-dropzone"]
+      [data-ui="chat-body"] {
+      scroll-padding-top: var(--chat-top-overlap, 0px);
+    }
+
+    html[data-system-glass]
+      [data-ui="chat-conversation-dropzone"]
+      > [data-ui="chat-conversation-shell"]
+      > [data-ui="welcome-above"]::before {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      top: 0;
+      z-index: 1;
+      height: calc(var(--safe-area-top) + 1.25rem);
+      background: var(--theme-shell-chat-body);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      -webkit-mask-image: linear-gradient(
+        black calc(100% - 1.25rem),
+        transparent
+      );
+      mask-image: linear-gradient(black calc(100% - 1.25rem), transparent);
+      pointer-events: none;
+    }
+
+    /* The two round top buttons draw their glyphs at about 17 pt, as an iOS
+       bar button does. */
+    :where(html[data-system-glass])
+      :is(
+        [data-ui="sidebar-toggle"][data-surface="floating"],
+        [data-ui="chat-share-button"].floating-control-skin
+      )
+      :is(svg[stroke-width], svg:has(> [stroke-width])) {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    :where(html[data-system-glass])
+      :is(
+        [data-ui="sidebar-toggle"][data-surface="floating"],
+        [data-ui="chat-share-button"].floating-control-skin
+      )
+      :is(svg[stroke-width], svg > [stroke-width]) {
+      stroke-width: 1.75;
+    }
+  }
+}
+
 /* Increase Contrast keeps the shapes and makes the fill solid. */
 @media (prefers-contrast: more) {
   html[data-system-glass] {
