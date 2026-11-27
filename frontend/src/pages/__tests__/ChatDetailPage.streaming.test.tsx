@@ -44,6 +44,7 @@ const listedMessages = vi.hoisted((): { latest: Record<string, unknown> } => ({
   latest: {},
 }));
 const editStream = vi.hoisted(() => ({
+  onOpen: undefined as (() => void) | undefined,
   onMessage: undefined as
     | ((event: { data: string; type: string }) => void)
     | undefined,
@@ -151,6 +152,7 @@ vi.mock("@/utils/sse/sseClient", async (importOriginal) => {
       if (!url.endsWith("/editstream")) {
         return actual.createSSEConnection(url, options);
       }
+      editStream.onOpen = options.onOpen;
       editStream.onMessage = options.onMessage;
       return () => {};
     },
@@ -208,6 +210,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  editStream.onOpen = undefined;
   editStream.onMessage = undefined;
   useMessagingStore.getState().clearAllStreaming();
   useMessagingStore.getState().clearAllApiMessages();
@@ -349,6 +352,7 @@ function submitEdit(container: HTMLElement, id: string) {
     target: { value: EDITED_TEXT },
   });
   fireEvent.click(screen.getByTestId("message-editor-submit"));
+  act(() => editStream.onOpen?.());
 }
 
 function startEditedReply(previousId?: string) {

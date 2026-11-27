@@ -475,7 +475,7 @@ pub async fn drain_pending_deliveries(
         // that, at four of the five tails, has already held one.
         let outcome = Box::pin(deliver_task_result(app_state, policy, me_user, child_id)).await;
         if outcome == DeliveryOutcome::Deferred {
-            // The origin is busy again — a later tail finds the rest.
+            // A later tail can retry deferred work.
             break;
         }
     }
@@ -823,6 +823,14 @@ pub async fn deliver_task_result(
     // A chat parked on an approval belongs to the person who has to answer it.
     // Dropping a result under a mounted approval card would move the card.
     if origin.generation_state.as_deref() == Some("awaiting_approval") {
+        release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
+        return DeliveryOutcome::Deferred;
+    }
+
+    if scheduling != erato_config::config::TaskScheduling::Silent
+        && let Err(error) = crate::services::budget::admit_generation(app_state, &me_user.id).await
+    {
+        tracing::debug!(%origin_chat_id, reason = error.message(), "Deferring task reaction");
         release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
         return DeliveryOutcome::Deferred;
     }

@@ -2882,6 +2882,11 @@ msgstr "Assistentenfehler"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/messageErrorCopy.ts
+msgid "chat.message.error.variant.budget_limit_reached"
+msgstr "Ihr persönliches Generierungsbudget ist ausgeschöpft."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "Die Antwort wurde gefiltert, weil die Eingabe oder Ausgabe gegen die Inhaltsrichtlinien verstößt."
 

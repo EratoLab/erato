@@ -3,6 +3,7 @@ import { skipToken } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { getErrorDescription } from "@/components/ui/Message/messageErrorCopy";
 import {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,
@@ -159,10 +160,12 @@ const DelegatedRunRetryControl = ({
           className="text-xs text-theme-fg-muted"
           data-testid="delegated-run-retry-refused"
         >
-          {t({
-            id: "chat.history.delegatedRuns.retryFailed",
-            message: "This task cannot be retried",
-          })}
+          {refusal.code === "budget_limit_reached"
+            ? getErrorDescription(refusal.code)
+            : t({
+                id: "chat.history.delegatedRuns.retryFailed",
+                message: "This task cannot be retried",
+              })}
         </span>
       )}
     </>

@@ -924,6 +924,35 @@ describe("useChatMessaging", () => {
       expect(result.current.isPendingResponse).toBe(false);
     });
 
+    it("preserves a refused draft without attaching to a stream", async () => {
+      const byUrl = captureSse();
+      const { result } = renderHook(() => useChatMessaging(null), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        await result.current.sendMessage("Keep my draft");
+      });
+      const refusal = new FrontendRequestError(
+        "SSE request failed",
+        { method: "POST", url: "/api/v1beta/me/messages/submitstream" },
+        {
+          status: 403,
+          statusText: "Forbidden",
+          body: JSON.stringify({ code: "budget_limit_reached" }),
+        },
+      );
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/submitstream"].onError(refusal);
+      });
+      const store = useComposeSessionStore.getState();
+      const sessionId = store.resolveSessionId("__new-chat__");
+      expect(store.takeRefusedDraft(sessionId)?.message).toBe("Keep my draft");
+      expect(result.current.error).toBe(refusal);
+      expect(result.current.isPendingResponse).toBe(false);
+      expect(result.current.messageOrder).toHaveLength(0);
+      expect(byUrl["/api/v1beta/me/messages/resumestream"]).toBeUndefined();
+    });
+
     // The `refusedFiles.every(...)` conjunct on the handoff is not a dead
     // defensive check. Audio-recording attachments reach the composer through
     // `upsertAudioTranscriptionAttachment` and never enter `useFileUploadStore`,
@@ -4262,6 +4291,7 @@ describe("useChatMessaging", () => {
 
     await act(async () => {
       await result.current.editMessage("msg-user-edit", "Edited content");
+      sseCallbacks.onOpen?.();
     });
 
     expect(result.current.messages["msg-user-edit"]).toBeUndefined();

@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { getErrorDescription } from "@/components/ui/Message/messageErrorCopy";
 import { OpenNewWindowIcon } from "@/components/ui/icons";
 import { useDelegatedRunRetry } from "@/hooks/chat/useDelegatedRunRetry";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
@@ -126,10 +127,12 @@ export const RetryTaskControl = ({
       </span>
       {refusal !== null && (
         <span data-testid={`${testIdPrefix}-retry-refused`}>
-          {t({
-            id: "trace.delegation.retry.failed",
-            message: "This task cannot be retried",
-          })}
+          {refusal.code === "budget_limit_reached"
+            ? getErrorDescription(refusal.code)
+            : t({
+                id: "trace.delegation.retry.failed",
+                message: "This task cannot be retried",
+              })}
         </span>
       )}
     </div>

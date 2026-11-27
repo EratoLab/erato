@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import enMessages from "@/locales/en/messages.json";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
+import { FrontendRequestError } from "@/utils/errorReport";
 
 beforeAll(() => {
   // Activate the compiled English catalog so the macro-extracted message
@@ -33,6 +34,21 @@ describe("resolveChatSendErrorMessage", () => {
     expect(result).toContain("64 KB"); // round(65536 / 1024) = 64
     expect(result).toMatch(/draft is too long/i);
     expect(result).toMatch(/rewrite action/i);
+  });
+
+  it("explains a typed budget refusal", () => {
+    const error = new FrontendRequestError(
+      "SSE request failed",
+      { method: "POST", url: "/api/v1beta/me/messages/submitstream" },
+      {
+        status: 403,
+        statusText: "Forbidden",
+        body: JSON.stringify({ code: "budget_limit_reached" }),
+      },
+    );
+    expect(resolveChatSendErrorMessage(error)).toBe(
+      "Your personal generation budget has been reached.",
+    );
   });
 
   it("falls back to the raw error.message for unrecognized errors", () => {

@@ -8,6 +8,7 @@ mod client_operations;
 mod client_submissions;
 mod client_tool_decisions;
 mod client_tool_operations;
+mod generation_budget;
 mod mcp_approval_argument;
 mod mcp_apps;
 mod mcp_file_outputs;

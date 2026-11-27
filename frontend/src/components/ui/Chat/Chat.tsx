@@ -491,7 +491,6 @@ export const Chat = ({
       // The queued follow-up was written against the branch this edit
       // supersedes, so it must not auto-send into the new one.
       chatInputControlsRef.current?.clearQueuedMessage();
-      setEditingMessageId(null);
       // `action_facet` is deliberately not passed: the backend restores the
       // edited message's own stored facet, while the composer holds whatever
       // is currently selected.
@@ -500,6 +499,8 @@ export const Chat = ({
         newContent,
         replaceInputFileIds,
         activeSelectedFacetIds,
+        undefined,
+        () => setEditingMessageId(null),
       );
     },
     [activeSelectedFacetIds, editMessage, isPendingResponse],

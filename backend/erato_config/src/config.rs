@@ -13337,12 +13337,23 @@ pub struct SentryConfig {
     pub sentry_dsn: Option<SecretConfigString>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet, HeapSize)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct BudgetConfig {
     // Whether budget tracking and display is enabled.
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
+
+    /// Reject new generations at the personal budget limit when budget tracking is enabled.
+    /// Defaults to `false` in this release. The default will change to `true` in a future release.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub enforce_limit: bool,
+
+    /// Let an admitted request finish even if it reaches the budget limit. Defaults to `true`.
+    #[serde(default = "default_allow_request_to_finish")]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub allow_request_to_finish: bool,
 
     // The maximum budget amount per budget period (unit-less).
     // Only has an effect if `enabled` is `true`.
@@ -13429,6 +13440,26 @@ where
         ));
     }
     Ok(rate)
+}
+
+fn default_allow_request_to_finish() -> bool {
+    true
+}
+
+impl Default for BudgetConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            enforce_limit: false,
+            allow_request_to_finish: default_allow_request_to_finish(),
+            max_budget: None,
+            budget_currency: BudgetCurrency::default(),
+            warn_threshold: default_warn_threshold(),
+            budget_period_days: default_budget_period_days(),
+            frontend_tab: BudgetFrontendTabConfig::default(),
+            model_rates: HashMap::new(),
+        }
+    }
 }
 
 impl BudgetConfig {

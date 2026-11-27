@@ -42,6 +42,13 @@ export const getErrorDescription = (
     });
   }
 
+  if (errorType === "budget_limit_reached") {
+    return t({
+      id: "chat.message.error.variant.budget_limit_reached",
+      message: "Your personal generation budget has been reached.",
+    });
+  }
+
   if (errorType === "rate_limit") {
     return t({
       id: "chat.message.error.variant.rate_limit",

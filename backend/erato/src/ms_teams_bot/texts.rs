@@ -141,6 +141,10 @@ texts! {
         "Beim Starten ist etwas schiefgelaufen. Bitte versuchen Sie es mit der Schaltfläche noch einmal.";
     RequestNotProcessed => "The request could not be processed.",
         "Die Anfrage konnte nicht verarbeitet werden.";
+    PersonalBudgetReached => "Your personal generation budget has been reached.",
+        "Ihr persönliches Generierungsbudget ist ausgeschöpft.";
+    PersonalBudgetUnavailable => "Your personal generation budget could not be verified.",
+        "Ihr persönliches Generierungsbudget konnte nicht überprüft werden.";
 
     // Approvals
     ApprovalNeeded => "Approval needed", "Genehmigung erforderlich";
