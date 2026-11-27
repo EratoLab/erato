@@ -124,6 +124,7 @@ export function attachDrawerSwipe(
     }
   };
   const releasePage = () => {
+    delete scrim.dataset.sidebarMoving;
     if (movedPage) {
       movedPage.style.transform = "";
       movedPage.style.transition = "";
@@ -285,6 +286,10 @@ export function attachDrawerSwipe(
       drawer.style.transition = "none";
       drawer.style.opacity = "1";
       scrim.style.transition = "none";
+      // Measured on an iPhone 15 (WebKit): without this attribute change on
+      // the scrim, the drag's first frame takes about 40 ms instead of 20.
+      // Why is not known; keep it until a profile says otherwise.
+      scrim.dataset.sidebarMoving = "";
       if (movedPage) {
         movedPage.style.transition = "none";
         movedPage.dataset.sidebarMoving = "";

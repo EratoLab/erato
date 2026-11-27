@@ -1686,6 +1686,7 @@ describe("ChatHistorySidebar", () => {
       expect(page().style.transform).toBe("translateX(140px)");
       expect(scrim.style.transform).toBe("translateX(140px)");
       expect(page()).toHaveAttribute("data-sidebar-moving");
+      expect(scrim).toHaveAttribute("data-sidebar-moving");
 
       touch(edge, "touchmove", 185, 400, 600);
       touch(edge, "touchend", 185, 400, 800);
