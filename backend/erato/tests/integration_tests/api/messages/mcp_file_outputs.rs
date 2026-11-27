@@ -30,8 +30,11 @@ struct Fixture {
     protocol: erato::config::McpProtocolMode,
     structured: bool,
     /// No file fields; the result adds structured content that differs from
-    /// its text, links and resources, of which only the links are kept.
+    /// its text, links and resources. The links are kept as links and the
+    /// resources stored as files.
     details: bool,
+    /// Content blocks the result carries beside its text.
+    blocks: Vec<Value>,
     is_error: bool,
     storage_failure: bool,
     calls: Arc<AtomicUsize>,
@@ -86,6 +89,10 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
                 // Both copies contain Base64 on the wire; neither may leak to history.
                 result["structuredContent"] = fixture.output;
             }
+            result["content"]
+                .as_array_mut()
+                .unwrap()
+                .extend(fixture.blocks);
             if fixture.details {
                 result["structuredContent"] =
                     json!({"stdout": MARKER, "row": {"id": "row-1", "title": DETAILS_STRUCTURED}});
@@ -177,6 +184,44 @@ fn file_output() -> Value {
     ]})
 }
 
+const NOTES: &str = "BLOCK-NOTES-TEXT";
+
+/// An image, a resource with a blob and one with text, each named in `_meta`.
+fn file_blocks() -> Vec<Value> {
+    vec![
+        json!({"type": "image", "data": PNG, "mimeType": "image/png",
+               "_meta": {"chat.erato/file_name": "block-chart.png"}}),
+        json!({"type": "resource",
+               "resource": {"uri": "records://exports/1", "mimeType": "text/csv", "blob": CSV},
+               "_meta": {"chat.erato/file_name": "block-data.csv"}}),
+        json!({"type": "resource",
+               "resource": {"uri": "records://exports/2", "mimeType": "text/plain", "text": NOTES,
+                            "_meta": {"chat.erato/file_name": "block-notes.txt"}}}),
+    ]
+}
+
+/// The name and bytes of each file `blocks` carry, by the name `_meta` or the
+/// URI's last segment gives it.
+fn block_files(blocks: &[Value]) -> HashMap<String, Vec<u8>> {
+    blocks
+        .iter()
+        .filter_map(|block| {
+            let resource = &block["resource"];
+            let name = block["_meta"]["chat.erato/file_name"]
+                .as_str()
+                .or(resource["_meta"]["chat.erato/file_name"].as_str())
+                .or_else(|| resource["uri"].as_str()?.rsplit('/').next())?;
+            let bytes = match resource["text"].as_str() {
+                Some(text) => text.as_bytes().to_vec(),
+                None => STANDARD
+                    .decode(block["data"].as_str().or(resource["blob"].as_str())?)
+                    .ok()?,
+            };
+            Some((name.to_string(), bytes))
+        })
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn check_output(
     pool: Pool<Postgres>,
@@ -203,6 +248,37 @@ async fn check_output(
             expected_files,
             protocol,
             false,
+            Vec::new(),
+        )
+        .await;
+    }
+}
+
+/// A result whose content carries `blocks` beside the text of `output`.
+async fn check_blocks(
+    pool: Pool<Postgres>,
+    output: Value,
+    blocks: Vec<Value>,
+    approval: Option<&str>,
+    expected_status: &str,
+    expected_files: usize,
+) {
+    for protocol in [
+        erato::config::McpProtocolMode::Legacy,
+        erato::config::McpProtocolMode::Stateless,
+    ] {
+        check_output_for_protocol(
+            pool.clone(),
+            output.clone(),
+            approval,
+            true,
+            false,
+            false,
+            expected_status,
+            expected_files,
+            protocol,
+            false,
+            blocks.clone(),
         )
         .await;
     }
@@ -221,9 +297,11 @@ async fn check_details(pool: Pool<Postgres>, approval: Option<&str>) {
             false,
             false,
             "success",
-            0,
+            // The three embedded resources.
+            3,
             protocol,
             true,
+            Vec::new(),
         )
         .await;
     }
@@ -241,12 +319,14 @@ async fn check_output_for_protocol(
     expected_files: usize,
     protocol: erato::config::McpProtocolMode,
     details: bool,
+    blocks: Vec<Value>,
 ) {
     let fixture = Fixture {
         output,
         protocol,
         structured,
         details,
+        blocks,
         is_error,
         storage_failure,
         calls: Arc::default(),
@@ -470,7 +550,24 @@ async fn check_output_for_protocol(
             ]}),
             "{tool}"
         );
-        assert_eq!(tool["output"], fixture.output);
+        // The output lists the stored resources beside the tool's own.
+        assert_eq!(tool["output"]["result"], fixture.output);
+        assert_eq!(tool["output"]["filesTruncated"], false);
+        let listed: Vec<_> = tool["output"]["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|file| (file["filename"].clone(), file["mimeType"].clone()))
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                (json!("row-1"), json!("text/plain")),
+                (json!("row"), json!("text/html;profile=mcp-app")),
+                (json!("chart"), json!("image/png")),
+            ],
+            "{tool}"
+        );
         let follow_up = server
             .post("/api/v1beta/me/messages/submitstream")
             .with_bearer_token(TEST_JWT_TOKEN)
@@ -498,13 +595,15 @@ async fn check_output_for_protocol(
         );
         let bodies = recorder.bodies();
         assert_eq!(bodies.len(), 2);
+        // The text resource is a file of the chat now, and read as one.
+        assert!(bodies[0].contains(DETAILS_TEXT), "{}", bodies[0]);
         for value in bodies.into_iter().chain([replayed]) {
             for detail in [
                 DETAILS_TITLE,
                 DETAILS_LINK,
-                DETAILS_TEXT,
                 DETAILS_STRUCTURED,
                 SERVER_LINK,
+                "records://",
             ] {
                 assert!(
                     !value.contains(detail),
@@ -520,6 +619,27 @@ async fn check_output_for_protocol(
             }
         }
     }
+    let mut expected_bytes = block_files(&fixture.blocks);
+    if fixture.details {
+        expected_bytes.extend([
+            ("row-1".to_string(), DETAILS_TEXT.as_bytes().to_vec()),
+            ("row".to_string(), b"<p>app</p>".to_vec()),
+            ("chart".to_string(), STANDARD.decode(PNG).unwrap()),
+        ]);
+    }
+    // A marked field's file wins over a block carrying the same bytes.
+    for file in fixture.output["files"].as_array().into_iter().flatten() {
+        if let (Some(path), Some(Ok(bytes))) = (
+            file["path"].as_str(),
+            file["content_base64"]
+                .as_str()
+                .map(|data| STANDARD.decode(data)),
+        ) {
+            expected_bytes.retain(|_, known| *known != bytes);
+            expected_bytes.insert(path.to_string(), bytes);
+        }
+    }
+    let mut stored_names = Vec::new();
     for pointer in &pointers {
         let id = Uuid::parse_str(pointer["file_upload_id"].as_str().unwrap()).unwrap();
         let upload = file_uploads::Entity::find_by_id(id)
@@ -527,29 +647,52 @@ async fn check_output_for_protocol(
             .await
             .unwrap()
             .unwrap();
-        let expected = fixture.output["files"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|file| file["path"] == upload.filename)
-            .unwrap()["content_base64"]
-            .as_str()
-            .unwrap();
+        let expected = expected_bytes
+            .get(&upload.filename)
+            .unwrap_or_else(|| panic!("unexpected file {}", upload.filename));
         assert_eq!(
-            state
+            &state
                 .default_file_storage_provider()
                 .read_file_to_bytes(&upload.file_storage_path)
                 .await
                 .unwrap(),
-            STANDARD.decode(expected).unwrap()
+            expected
         );
         assert!(
             tool["output"]
                 .to_string()
                 .contains(&format!("erato-file://{id}"))
         );
+        // A server's name is the display name only, never the storage path.
+        assert!(
+            !upload
+                .file_storage_path
+                .ends_with(&format!("/{}", upload.filename)),
+            "{}",
+            upload.file_storage_path
+        );
+        // A file from a content block is listed with its reference, name and type.
+        if let Some(listed) = tool["output"]["files"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|file| file["filename"] == upload.filename && file.get("fileReference").is_some())
+        {
+            assert_eq!(listed["fileReference"], format!("erato-file://{id}"));
+            assert!(listed["mimeType"].as_str().unwrap().contains('/'));
+            let image = listed["mimeType"].as_str().unwrap().starts_with("image/");
+            assert_eq!(pointer["content_type"] == "image_file_pointer", image);
+        }
+        stored_names.push(upload.filename);
     }
     if expected_files > 0 {
+        stored_names.sort();
+        let mut expected_names: Vec<_> = expected_bytes.into_keys().collect();
+        expected_names.sort();
+        assert_eq!(stored_names, expected_names);
+    }
+    // The details fixture replays above.
+    if expected_files > 0 && !fixture.details {
         assert_eq!(fixture.files.lock().unwrap().len(), expected_files);
         let reads_before_replay = fixture.reads.load(Ordering::SeqCst);
         // Exercise historical replay as well as the immediate continuation.
@@ -568,7 +711,7 @@ async fn check_output_for_protocol(
             response.text(),
         ] {
             assert!(
-                !value.contains(PNG) && !value.contains(CSV),
+                !value.contains(PNG) && !value.contains(CSV) && !value.contains(NOTES),
                 "raw payload leaked: {value}"
             );
             assert!(!value.contains("structuredContent"));
@@ -598,6 +741,17 @@ async fn check_output_for_protocol(
             assert!(outputs.contains("erato-file://"), "{body}");
             assert!(!outputs.contains(PNG) && !outputs.contains(CSV));
             assert!(!outputs.contains("structuredContent"));
+            // The tool result itself names every file of a content block,
+            // on the immediate continuation and on replay.
+            for listed in tool["output"]["files"].as_array().into_iter().flatten() {
+                if let Some(reference) = listed["fileReference"].as_str() {
+                    assert!(outputs.contains(reference), "{body}");
+                    assert!(
+                        outputs.contains(listed["filename"].as_str().unwrap()),
+                        "{body}"
+                    );
+                }
+            }
         }
     }
     handle.abort();
@@ -722,6 +876,89 @@ async fn uninterrupted_result_details(pool: Pool<Postgres>) {
     check_details(pool, None).await;
 }
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approved_file_blocks(pool: Pool<Postgres>) {
+    check_blocks(
+        pool,
+        json!({"stdout": MARKER}),
+        file_blocks(),
+        Some("approve"),
+        "success",
+        3,
+    )
+    .await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_file_blocks(pool: Pool<Postgres>) {
+    check_blocks(
+        pool,
+        json!({"stdout": MARKER}),
+        file_blocks(),
+        None,
+        "success",
+        3,
+    )
+    .await;
+}
+/// Marked fields and blocks in one result: the image and the CSV arrive both
+/// ways and are stored once, under the marked fields' names.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_marked_fields_and_file_blocks(pool: Pool<Postgres>) {
+    check_blocks(pool, file_output(), file_blocks(), None, "success", 3).await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approved_marked_fields_and_file_blocks(pool: Pool<Postgres>) {
+    check_blocks(
+        pool,
+        file_output(),
+        file_blocks(),
+        Some("approve"),
+        "success",
+        3,
+    )
+    .await;
+}
+/// Two blocks with the same bytes under two names are two files.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_equal_file_blocks(pool: Pool<Postgres>) {
+    let copy = |name: &str| {
+        json!({"type": "resource",
+               "resource": {"uri": format!("records://exports/{name}"),
+                            "mimeType": "text/csv", "blob": CSV}})
+    };
+    check_blocks(
+        pool,
+        json!({"stdout": MARKER}),
+        vec![copy("first.csv"), copy("second.csv")],
+        None,
+        "success",
+        2,
+    )
+    .await;
+}
+/// One malformed block after valid ones: nothing is stored, and the model
+/// gets an error it can act on.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approved_invalid_file_block(pool: Pool<Postgres>) {
+    let mut blocks = file_blocks();
+    blocks.push(json!({"type": "image", "data": "not base64!", "mimeType": "image/png"}));
+    check_blocks(
+        pool,
+        json!({"stdout": MARKER}),
+        blocks,
+        Some("approve"),
+        "error",
+        0,
+    )
+    .await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_invalid_file_block(pool: Pool<Postgres>) {
+    let mut blocks = file_blocks();
+    blocks.push(json!({"type": "resource",
+        "resource": {"uri": "records://exports/3", "blob": CSV}}));
+    check_blocks(pool, json!({"stdout": MARKER}), blocks, None, "error", 0).await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn approved_ordinary_result(pool: Pool<Postgres>) {
     check_output(
         pool,
@@ -795,6 +1032,7 @@ async fn integrated_file_retrieval_full_text_and_replay(pool: Pool<Postgres>) {
         protocol: erato::config::McpProtocolMode::Legacy,
         structured: false,
         details: false,
+        blocks: Vec::new(),
         is_error: false,
         storage_failure: false,
         calls: Arc::default(),
@@ -1027,6 +1265,7 @@ async fn invalid_mcp_file_argument_reaches_model_and_chat_history(pool: Pool<Pos
         protocol: erato::config::McpProtocolMode::Legacy,
         structured: false,
         details: false,
+        blocks: Vec::new(),
         is_error: false,
         storage_failure: false,
         calls: Arc::default(),

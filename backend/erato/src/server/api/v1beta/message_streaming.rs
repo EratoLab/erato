@@ -11360,7 +11360,7 @@ async fn stream_generate_chat_completion<'a>(
                             post_processed.result_details,
                             structured_content_for_view(
                                 &tool_call_result,
-                                &file_content_parts,
+                                post_processed.structured_content_pointer,
                                 output_value.as_ref(),
                             ),
                             tool_call_result.meta.as_ref(),
@@ -25322,7 +25322,7 @@ pub(crate) async fn run_continuation(
                                         processed.result_details,
                                         structured_content_for_view(
                                             &result,
-                                            &file_content_parts,
+                                            processed.structured_content_pointer,
                                             processed.output_value.as_ref(),
                                         ),
                                         result.meta.as_ref(),
