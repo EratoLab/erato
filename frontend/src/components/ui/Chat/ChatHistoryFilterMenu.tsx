@@ -18,6 +18,10 @@ import {
   useChatHistoryFilterStore,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
+import {
+  observePopoverViewport,
+  resolvePopoverViewport,
+} from "@/lib/popoverViewport";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
@@ -27,10 +31,6 @@ import {
   PopoverSectionHeader,
   PopoverSeparator,
 } from "../Controls/PopoverPanel";
-import {
-  observePopoverViewport,
-  resolvePopoverViewport,
-} from "../Controls/popoverViewport";
 import { Row } from "../Controls/Row";
 import { CheckIcon, ChevronRightIcon, FilterSortIcon } from "../icons";
 

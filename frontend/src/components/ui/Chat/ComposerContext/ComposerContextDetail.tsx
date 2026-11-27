@@ -11,12 +11,12 @@ import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { PopoverPanel } from "@/components/ui/Controls/PopoverPanel";
+import { ModalBase } from "@/components/ui/Modal/ModalBase";
+import { CloseIcon } from "@/components/ui/icons";
 import {
   observePopoverViewport,
   resolvePopoverViewport,
-} from "@/components/ui/Controls/popoverViewport";
-import { ModalBase } from "@/components/ui/Modal/ModalBase";
-import { CloseIcon } from "@/components/ui/icons";
+} from "@/lib/popoverViewport";
 import { isImeComposing } from "@/utils/isImeComposing";
 
 import {
@@ -306,7 +306,12 @@ export const ComposerContextDetail = ({
     const viewport = resolvePopoverViewport(
       "var(--theme-layout-dropdown-viewport-margin)",
       anchor,
-      [{ value: "var(--theme-layout-composer-context-detail-width)", fallback: 384 }],
+      [
+        {
+          value: "var(--theme-layout-composer-context-detail-width)",
+          fallback: 384,
+        },
+      ],
     );
     const [preferred] = viewport.extra;
     const width = Math.min(preferred, viewport.right - viewport.left);

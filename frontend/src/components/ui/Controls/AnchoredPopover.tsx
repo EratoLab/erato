@@ -15,13 +15,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { isImeComposing } from "@/utils/isImeComposing";
-
-import { PopoverPanel } from "./PopoverPanel";
 import {
   observePopoverViewport,
   resolvePopoverViewport,
-} from "./popoverViewport";
+} from "@/lib/popoverViewport";
+import { isImeComposing } from "@/utils/isImeComposing";
+
+import { PopoverPanel } from "./PopoverPanel";
 
 import type { PopoverWidth } from "./PopoverPanel";
 

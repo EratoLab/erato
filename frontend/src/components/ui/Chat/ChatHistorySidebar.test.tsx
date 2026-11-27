@@ -1986,9 +1986,15 @@ describe("ChatHistorySidebar", () => {
       });
 
       it.each([
-        ["a tap beside it", () => fireEvent.click(screen.getByTestId("sidebar-scrim"))],
+        [
+          "a tap beside it",
+          () => fireEvent.click(screen.getByTestId("sidebar-scrim")),
+        ],
         ["Escape", () => fireEvent.keyDown(document.body, { key: "Escape" })],
-        ["a drag", () => drag(screen.getByTestId("sidebar-scrim"), 350, 60, 600)],
+        [
+          "a drag",
+          () => drag(screen.getByTestId("sidebar-scrim"), 350, 60, 600),
+        ],
       ])("gives the page back on %s", async (_, close) => {
         await renderDrawer(true);
 

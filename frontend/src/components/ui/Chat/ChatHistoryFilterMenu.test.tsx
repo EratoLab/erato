@@ -427,12 +427,13 @@ describe("ChatHistoryFilterMenu", () => {
       "var(--safe-area-right)": 0,
     };
     const setUp = (submenuHeight: number, keyboardTop?: number) => {
-      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-        function (this: HTMLElement) {
-          const width = this.style.width ? (lengths[this.style.width] ?? 0) : 200;
-          return DOMRect.fromRect({ x: 0, y: 100, width, height: 40 });
-        },
-      );
+      vi.spyOn(
+        HTMLElement.prototype,
+        "getBoundingClientRect",
+      ).mockImplementation(function (this: HTMLElement) {
+        const width = this.style.width ? (lengths[this.style.width] ?? 0) : 200;
+        return DOMRect.fromRect({ x: 0, y: 100, width, height: 40 });
+      });
       vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
         function (this: HTMLElement) {
           return this.dataset.testid === "chat-history-filter-menu-submenu"
@@ -455,7 +456,9 @@ describe("ChatHistoryFilterMenu", () => {
     const openStatusFlyout = () => {
       renderMenu();
       openMenu();
-      fireEvent.click(screen.getByTestId("chat-history-filter-menu-row-status"));
+      fireEvent.click(
+        screen.getByTestId("chat-history-filter-menu-row-status"),
+      );
       return screen.getByTestId("chat-history-filter-menu-submenu");
     };
 

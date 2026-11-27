@@ -1,4 +1,7 @@
-import { VIEWPORT_PADDING_FALLBACK_PX, resolvePopoverLengths } from "./PopoverPanel";
+import {
+  VIEWPORT_PADDING_FALLBACK_PX,
+  resolvePopoverLengths,
+} from "@/components/ui/Controls/PopoverPanel";
 
 /** Edges in viewport px, each already moved in by the padding. */
 export interface PopoverViewport {

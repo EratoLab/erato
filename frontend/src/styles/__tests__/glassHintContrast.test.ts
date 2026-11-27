@@ -89,7 +89,10 @@ function hintContrast({ surface, muted, primary, keep: share }: Glass) {
   );
 }
 
-const builtIn = (theme: typeof defaultTheme, surface: "chatInput" | "dropdown") => ({
+const builtIn = (
+  theme: typeof defaultTheme,
+  surface: "chatInput" | "dropdown",
+) => ({
   surface: theme.colors.shell[surface],
   muted: theme.colors.foreground.muted,
   primary: theme.colors.foreground.primary,
@@ -97,14 +100,44 @@ const builtIn = (theme: typeof defaultTheme, surface: "chatInput" | "dropdown") 
 
 describe("hints on the glass", () => {
   it.each([
-    ["the light composer", { ...builtIn(defaultTheme, "chatInput"), keep: keep.light }],
-    ["a light menu", { ...builtIn(defaultTheme, "dropdown"), keep: keep.light }],
+    [
+      "the light composer",
+      { ...builtIn(defaultTheme, "chatInput"), keep: keep.light },
+    ],
+    [
+      "a light menu",
+      { ...builtIn(defaultTheme, "dropdown"), keep: keep.light },
+    ],
     ["a dark menu", { ...builtIn(darkTheme, "dropdown"), keep: keep.darkMenu }],
     // The shipped themes' hardest cases: a mid-grey hint on white, and on a
     // dark grey composer.
-    ["a #888 hint on white", { surface: "#ffffff", muted: "#888888", primary: "#000000", keep: keep.light }],
-    ["a #888 hint in a dark composer", { surface: "#2c2c2c", muted: "#888888", primary: "#ffffff", keep: keep.darkComposer }],
-    ["a #888 hint in a dark menu", { surface: "#000000", muted: "#888888", primary: "#ffffff", keep: keep.darkMenu }],
+    [
+      "a #888 hint on white",
+      {
+        surface: "#ffffff",
+        muted: "#888888",
+        primary: "#000000",
+        keep: keep.light,
+      },
+    ],
+    [
+      "a #888 hint in a dark composer",
+      {
+        surface: "#2c2c2c",
+        muted: "#888888",
+        primary: "#ffffff",
+        keep: keep.darkComposer,
+      },
+    ],
+    [
+      "a #888 hint in a dark menu",
+      {
+        surface: "#000000",
+        muted: "#888888",
+        primary: "#ffffff",
+        keep: keep.darkMenu,
+      },
+    ],
   ])("reach 4.5:1 over white and black content in %s", (_, glass) => {
     expect(hintContrast(glass)).toBeGreaterThanOrEqual(4.5);
   });
