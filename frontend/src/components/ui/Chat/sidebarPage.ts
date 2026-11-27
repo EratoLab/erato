@@ -33,7 +33,9 @@ export function useSidebarPage(
     ref,
     className: clsx(
       ERATO_GEOMETRY_CLASS.sidebarPageGeometry,
-      "transition-[margin,transform] duration-300 ease-in-out motion-reduce:transition-none",
+      // Only the side margin: the app's chat moves its top margin into the
+      // status bar when its first message arrives, which must not slide.
+      "transition-[margin-left,transform] duration-300 ease-in-out motion-reduce:transition-none",
       !sidebarCollapsed &&
         "sm:ml-[var(--sidebar-width-override,var(--theme-layout-sidebar-width))]",
       sidebarCollapsed &&

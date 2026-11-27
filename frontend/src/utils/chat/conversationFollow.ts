@@ -79,13 +79,21 @@ const topInList = (element: Element, container: HTMLElement) =>
   container.scrollTop;
 
 /**
- * The list's height a person sees: a composer floating over its end
- * (globals.css, the app's glass) declares what it covers as the list's
- * scroll padding.
+ * What floats over the list's top: the app's top buttons (globals.css)
+ * declare what they cover as the list's scroll padding.
+ */
+const coveredTop = (container: HTMLElement): number =>
+  parseFloat(window.getComputedStyle(container).scrollPaddingTop) || 0;
+
+/**
+ * The list's height a person sees: a composer floating over its end and
+ * buttons over its top (globals.css, the app's glass) declare what they
+ * cover as the list's scroll padding.
  */
 export const visibleListHeight = (container: HTMLElement): number =>
   container.clientHeight -
-  (parseFloat(window.getComputedStyle(container).scrollPaddingBottom) || 0);
+  (parseFloat(window.getComputedStyle(container).scrollPaddingBottom) || 0) -
+  coveredTop(container);
 
 /** `restingTop`, measured in the list for its last message. */
 export const conversationRestingTop = (
@@ -101,15 +109,17 @@ export const conversationRestingTop = (
     row.querySelectorAll(`[${WAITING_CARD_ATTRIBUTE}]`),
   ).at(-1);
   const start = row.querySelector(`[${WRITTEN_START_ATTRIBUTE}]`);
+  // Measured from the top of what is visible, below anything floating there.
+  const top = coveredTop(container);
   return restingTop({
     clientHeight: visibleListHeight(container),
     waitingCard: card
       ? {
-          top: topInList(card, container),
+          top: topInList(card, container) - top,
           height: card.getBoundingClientRect().height,
         }
       : null,
-    answerStart: start ? topInList(start, container) : null,
+    answerStart: start ? topInList(start, container) - top : null,
   });
 };
 

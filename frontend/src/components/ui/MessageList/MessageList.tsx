@@ -691,11 +691,11 @@ export const MessageList = memo<MessageListProps>(
     const containerClass = useMemo(() => {
       return clsx(
         "chat-body-skin flex flex-1 flex-col overflow-y-auto",
-        // A composer floating over the list (globals.css) sets the overlap,
-        // so the last message can scroll clear of it.
-        "[padding:var(--theme-spacing-shell-padding-y)_calc(var(--theme-spacing-shell-padding-x)/2)_calc(var(--theme-spacing-shell-padding-y)+var(--chat-composer-overlap,0px))]",
+        // A composer or top bar floating over the list (globals.css) sets
+        // the overlaps, so the first and last messages scroll clear of them.
+        "[padding:calc(var(--theme-spacing-shell-padding-y)+var(--chat-top-overlap,0px))_calc(var(--theme-spacing-shell-padding-x)/2)_calc(var(--theme-spacing-shell-padding-y)+var(--chat-composer-overlap,0px))]",
         "gap-[var(--theme-spacing-shell-gap)]",
-        "sm:[padding:var(--theme-spacing-shell-padding-y)_var(--theme-spacing-shell-padding-x)_calc(var(--theme-spacing-shell-padding-y)+var(--chat-composer-overlap,0px))]",
+        "sm:[padding:calc(var(--theme-spacing-shell-padding-y)+var(--chat-top-overlap,0px))_var(--theme-spacing-shell-padding-x)_calc(var(--theme-spacing-shell-padding-y)+var(--chat-composer-overlap,0px))]",
         className,
         // Apply transition properties without changing opacity
         // This creates a smoother experience when content changes
