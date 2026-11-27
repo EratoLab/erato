@@ -237,7 +237,15 @@ export function useFileDropzone({
   // Function to upload files
   const uploadFiles = useCallback(
     async (files: File[]) => {
-      if (disabled || isUploading || files.length === 0) return;
+      // Read at call time: this callback can be recreated mid-upload (chat or
+      // capabilities arriving) and outlive it, and a remembered `true` would
+      // turn away every later upload without a word.
+      if (
+        disabled ||
+        useFileUploadStore.getState().isUploading ||
+        files.length === 0
+      )
+        return;
 
       let uploadedItems: FileUploadItem[] | undefined;
       const signal = unmountSignalRef.current ?? undefined;
@@ -383,7 +391,7 @@ export function useFileDropzone({
 
       return uploadedItems; // Return the uploaded items
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isUploading is handled separately
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- createChatMutation changes identity every render
     [
       capabilities,
       isLoadingCapabilities,

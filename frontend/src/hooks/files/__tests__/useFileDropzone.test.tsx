@@ -12,6 +12,7 @@ import {
   fetchUploadFile,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useUploadFeature } from "@/providers/FeatureConfigProvider";
+import { useFileCapabilitiesContext } from "@/providers/FileCapabilitiesProvider";
 import { makeFileWithSize } from "@/test/fileFixtures";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
@@ -361,6 +362,55 @@ describe("useFileDropzone", () => {
 
     // API should not be called
     expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("uploads again when the file capabilities arrived during an upload", async () => {
+    const capabilitiesMock = vi.mocked(useFileCapabilitiesContext);
+    const defaultCapabilities = capabilitiesMock.getMockImplementation();
+    const loaded = useFileCapabilitiesContext();
+    let current: typeof loaded = {
+      ...loaded,
+      capabilities: [],
+      isLoading: true,
+    };
+    capabilitiesMock.mockImplementation(() => current);
+    const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+    let finishFirst: (
+      value: Awaited<ReturnType<typeof fetchUploadFile>>,
+    ) => void = () => {};
+    mockFetchUploadFile.mockImplementationOnce(
+      () => new Promise((resolve) => (finishFirst = resolve)),
+    );
+
+    try {
+      const { result, rerender } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+      const file = new File(["text"], "notes.txt", { type: "text/plain" });
+
+      let first: Promise<unknown> = Promise.resolve();
+      act(() => {
+        first = result.current.uploadFiles([file]);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      current = loaded;
+      rerender();
+      await act(async () => {
+        finishFirst({ files: [createMockUploadedFile("file1", "notes.txt")] });
+        await first;
+      });
+      expect(result.current.isUploading).toBe(false);
+
+      await act(async () => {
+        await result.current.uploadFiles([file]);
+      });
+
+      expect(mockFetchUploadFile).toHaveBeenCalledTimes(2);
+    } finally {
+      capabilitiesMock.mockImplementation(defaultCapabilities!);
+    }
   });
 
   it("routes a first-turn upload to the streaming chat instead of orphaning it", async () => {
