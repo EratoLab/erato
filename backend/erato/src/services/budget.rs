@@ -22,6 +22,7 @@ const WINDOW_USAGE_SQL: &str = r#"
             COALESCE(generation_parameters->>'generation_chat_provider_id', 'unknown') AS identifier,
             true AS legacy, created_at AS occurred_at,
             COALESCE((metadata->>'used_prompt_tokens')::numeric, 0) AS input_tokens,
+            NULL::numeric AS cached_input_tokens,
             COALESCE((metadata->>'used_completion_tokens')::numeric, 0) +
                 COALESCE((metadata->>'used_reasoning_tokens')::numeric, 0) AS output_tokens,
             COALESCE((metadata->>'used_total_tokens')::numeric, 0) AS total_tokens
@@ -30,6 +31,7 @@ const WINDOW_USAGE_SQL: &str = r#"
         UNION ALL
         SELECT entry.key, false, created_at,
             (entry.value->>'prompt_tokens')::numeric,
+            (entry.value->>'cached_input_tokens')::numeric,
             (entry.value->>'completion_tokens')::numeric,
             (entry.value->>'total_tokens')::numeric
         FROM historical
@@ -43,6 +45,7 @@ const WINDOW_USAGE_SQL: &str = r#"
         UNION ALL
         SELECT entry.key, false, (settlement.value->>'settled_at')::timestamptz,
             (entry.value->>'prompt_tokens')::numeric,
+            (entry.value->>'cached_input_tokens')::numeric,
             (entry.value->>'completion_tokens')::numeric,
             (entry.value->>'total_tokens')::numeric
         FROM chats c
@@ -58,6 +61,7 @@ const WINDOW_USAGE_SQL: &str = r#"
     )
     SELECT identifier, legacy, occurred_at <= $4 AS expiring,
         SUM(input_tokens)::double precision AS input_tokens,
+        SUM(cached_input_tokens)::double precision AS cached_input_tokens,
         SUM(output_tokens)::double precision AS output_tokens,
         BOOL_OR(total_tokens > 0 AND input_tokens = 0 AND output_tokens = 0) AS unsplit_tokens
     FROM usage
@@ -72,6 +76,7 @@ struct Usage {
     legacy: bool,
     expiring: bool,
     input_tokens: f64,
+    cached_input_tokens: Option<f64>,
     output_tokens: f64,
     unsplit_tokens: bool,
 }
@@ -139,27 +144,35 @@ fn price_usage(
     let mut expiring_spend = 0.0;
     for row in rows {
         let (identifier, provider) = resolve_provider(config, &row.identifier, row.legacy);
-        let (input_rate, output_rate) = config.budget.model_rates.get(&row.identifier).map_or_else(
+        let rates = config.budget.model_rates.get(&row.identifier).map_or_else(
             || {
-                provider.map_or((None, None), |provider| {
+                provider.map_or([None; 3], |provider| {
                     let capabilities = &provider.model_capabilities;
-                    (
+                    [
                         capabilities.cost_input_tokens_per_1m,
+                        capabilities.cost_cached_input_tokens_per_1m,
                         capabilities.cost_output_tokens_per_1m,
-                    )
+                    ]
                 })
             },
             |rates| {
-                (
+                [
                     Some(rates.cost_input_tokens_per_1m),
+                    rates.cost_cached_input_tokens_per_1m,
                     Some(rates.cost_output_tokens_per_1m),
-                )
+                ]
             },
         );
-        let [input_rate, output_rate] = [input_rate, output_rate]
-            .map(|rate| rate.filter(|rate| rate.is_finite() && *rate >= 0.0));
+        let [input_rate, cached_input_rate, output_rate] =
+            rates.map(|rate| rate.filter(|rate| rate.is_finite() && *rate >= 0.0));
+        let cached_input_tokens = row
+            .cached_input_tokens
+            .filter(|_| cached_input_rate.is_some())
+            .unwrap_or_default();
+        let regular_input_tokens = row.input_tokens - cached_input_tokens;
         let spending = [
-            price_tokens(row.input_tokens, input_rate),
+            price_tokens(regular_input_tokens, input_rate),
+            price_tokens(cached_input_tokens, cached_input_rate),
             price_tokens(row.output_tokens, output_rate),
         ]
         .into_iter()
@@ -167,7 +180,7 @@ fn price_usage(
         .reduce(|left, right| left + right);
         let complete = (!row.unsplit_tokens
             || (input_rate == Some(0.0) && output_rate == Some(0.0)))
-            && (row.input_tokens == 0.0 || input_rate.is_some())
+            && (regular_input_tokens == 0.0 || input_rate.is_some())
             && (row.output_tokens == 0.0 || output_rate.is_some());
 
         let model = models
@@ -267,7 +280,7 @@ mod tests {
         insert_usage(&pool, chat, start, legacy.clone()).await;
         insert_usage(&pool, chat, first_inside, legacy).await;
         insert_usage(&pool, chat, cutoff, json!({
-            "budget_usage_at_creation": {"chat": tokens(5)},
+            "budget_usage_at_creation": {"chat": {"prompt_tokens": 5, "cached_input_tokens": 2, "completion_tokens": 0, "total_tokens": 5}},
             "budget_usage": {"chat": tokens(1004)},
             "budget_usage_settlements": [
                 {"settled_at": (as_of + Duration::days(1) + Duration::microseconds(1)).to_rfc3339(), "usage": {"chat": tokens(999)}}
@@ -284,7 +297,7 @@ mod tests {
                 "budget_usage": {"chat": tokens(120), "image": tokens(25)},
                 "budget_usage_settlements": [
                     {"settled_at": start.to_rfc3339(), "usage": {"chat": tokens(500)}},
-                    {"settled_at": cutoff.to_rfc3339(), "usage": {"chat": tokens(10)}},
+                    {"settled_at": cutoff.to_rfc3339(), "usage": {"chat": {"prompt_tokens": 10, "cached_input_tokens": 4, "completion_tokens": 0, "total_tokens": 10}}},
                     {"settled_at": as_of.to_rfc3339(), "usage": {"chat": tokens(60), "image": tokens(25)}}
                 ]
             }),
@@ -334,6 +347,21 @@ mod tests {
                 .collect::<Vec<_>>(),
             [("chat", Some(85.0)), ("image", Some(25.0))]
         );
+
+        let mut discounted_config = config.clone();
+        discounted_config.budget.max_budget = Some(200.0);
+        discounted_config
+            .budget
+            .model_rates
+            .get_mut("chat")
+            .unwrap()
+            .cost_cached_input_tokens_per_1m = Some(500_000.0);
+        let discounted = user_budget(&db, &discounted_config, "budget-user", as_of)
+            .await
+            .unwrap();
+        assert_eq!(discounted.current_spending, 107.0);
+        assert_eq!(discounted.allowance_freed_next_24h, Some(22.0));
+        assert!(discounted.pricing_complete);
 
         config.budget.frontend_tab.enabled = true;
         let enabled = user_budget(&db, &config, "budget-user", as_of)
@@ -397,6 +425,7 @@ mod tests {
             identifier.into(),
             BudgetModelRate {
                 cost_input_tokens_per_1m: cost,
+                cost_cached_input_tokens_per_1m: None,
                 cost_output_tokens_per_1m: cost,
             },
         );

@@ -1105,6 +1105,13 @@ export type BudgetStatusResponse = {
 
 export type BudgetTokenUsage = {
   /**
+   * Reported cache reads included in `prompt_tokens`. Omitted when unreported.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  cached_input_tokens?: number;
+  /**
    * @format int64
    * @minimum 0
    */

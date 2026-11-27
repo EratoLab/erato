@@ -543,12 +543,17 @@ fn mcp_budget_usage(result: &rmcp::model::CallToolResult) -> Option<BudgetUsage>
     if usage.model_identifier.trim().is_empty() || usage.model_identifier.contains('\0') {
         return None;
     }
+    let cached_input_tokens = payload
+        .get("cached_input_tokens")
+        .and_then(Value::as_u64)
+        .filter(|&cached| cached <= usage.total_prompt_tokens);
     Some(BudgetUsage::from([(
         usage.model_identifier,
         BudgetTokenUsage {
             prompt_tokens: usage.total_prompt_tokens,
             completion_tokens: usage.total_completion_tokens,
             total_tokens: usage.total_tokens,
+            cached_input_tokens,
             reasoning_tokens: usage.total_reasoning_tokens,
         },
     )]))
@@ -14880,7 +14885,8 @@ mod tests {
         effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
         filter_mcp_tools_by_allowlist, filter_mcp_tools_by_disabled_patterns,
         filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
-        merge_action_facet_into_mcp_allowlist, reserved_tool_selected, resolve_submitted_decisions,
+        mcp_budget_usage, merge_action_facet_into_mcp_allowlist, reserved_tool_selected,
+        resolve_submitted_decisions,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
     use crate::models::message::{ApprovalItem, ToolApprovalKind};
@@ -14892,6 +14898,37 @@ mod tests {
     use sea_orm::prelude::Uuid;
     use serde_json::{Map, json};
     use std::collections::HashSet;
+
+    #[test]
+    fn invalid_mcp_cache_reads_leave_base_usage_intact() {
+        use rmcp::model::{CallToolResult, MetaObject};
+
+        for (reported, expected) in [
+            (None, None),
+            (Some(json!(0)), Some(0)),
+            (Some(json!(4)), Some(4)),
+            (Some(json!(-1)), None),
+            (Some(json!(11)), None),
+            (Some(json!("4")), None),
+        ] {
+            let mut payload = json!({
+                "model_identifier": "deployment",
+                "total_prompt_tokens": 10,
+                "total_completion_tokens": 3,
+                "total_tokens": 13
+            });
+            if let Some(cached) = reported {
+                payload["cached_input_tokens"] = cached;
+            }
+            let result = CallToolResult::success(vec![]).with_meta(Some(MetaObject(
+                Map::from_iter([("chat.erato/token_usage".into(), payload)]),
+            )));
+            let usage = mcp_budget_usage(&result).unwrap()["deployment"];
+            assert_eq!(usage.cached_input_tokens, expected);
+            assert_eq!(usage.prompt_tokens, 10);
+            assert_eq!(usage.completion_tokens, 3);
+        }
+    }
 
     fn managed_tool(
         server_id: &str,
