@@ -4415,6 +4415,57 @@ msgid "error.404.title"
 msgstr "404 - Página no encontrada"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.body"
+msgstr "No se pudo mostrar esta página. Recarga para continuar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "error.app.reload"
+msgstr "Recargar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.title"
+msgstr "Algo salió mal"
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.appUpdated"
+msgstr "No se pudo cargar una parte de la aplicación. Recarga para continuar."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.connectionLost"
+msgstr "Se perdió la conexión con el servidor. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.noConnection"
+msgstr "No hay conexión con el servidor. Comprueba tu red e inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverDidNotAnswer"
+msgstr "El servidor no respondió. Inténtalo de nuevo en un momento."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverStoppedAnswering"
+msgstr "El servidor dejó de responder. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.signedOut"
+msgstr "Has cerrado sesión. Recarga para iniciar sesión de nuevo."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.timedOut"
+msgstr "El servidor no respondió a tiempo. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/facetDisplayName.ts
 msgid "facets.builtin.schedule.displayName"
 msgstr ""
@@ -11890,6 +11941,16 @@ msgid "ui.imagePreview.title"
 msgstr "Vista previa de imagen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.description"
+msgstr "Recarga cuando te venga bien. Tu texto sin enviar se conserva."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.title"
+msgstr "Hay una nueva versión disponible."
+
+#. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.cloudLink"
 msgstr "Error al vincular el archivo en la nube. Por favor, inténtelo de nuevo."
@@ -11925,6 +11986,11 @@ msgstr "Tipo(s) de archivo no compatible(s): {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Tamaño máximo de archivo: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
+msgid "upload.waitingForNetwork"
+msgstr "Esperando la red. La subida continuará en cuanto vuelva la conexión."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

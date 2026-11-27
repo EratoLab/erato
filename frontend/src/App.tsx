@@ -9,6 +9,7 @@ import {
   chatLayout,
 } from "./app/startPreload";
 import { ClientProviders } from "./components/providers/ClientProviders";
+import { AppErrorBoundary } from "./components/ui/Feedback/AppErrorBoundary";
 import { StartScreen } from "./components/ui/Feedback/StartScreen";
 // These logic-only route sentinels must not suspend while a newly created chat
 // switches from /chat/new to /chat/:id; doing so hides the optimistic messages.
@@ -75,11 +76,13 @@ const NotFoundPage = () => (
 // Main App Shell (Global Layout - for things outside ChatLayout or other specific layouts)
 function App() {
   return (
-    <ClientProviders>
-      <Suspense fallback={<StartScreen />}>
-        <Outlet />
-      </Suspense>
-    </ClientProviders>
+    <AppErrorBoundary>
+      <ClientProviders>
+        <Suspense fallback={<StartScreen />}>
+          <Outlet />
+        </Suspense>
+      </ClientProviders>
+    </AppErrorBoundary>
   );
 }
 

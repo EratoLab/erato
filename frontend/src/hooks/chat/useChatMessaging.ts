@@ -74,6 +74,7 @@ import {
   connectivity,
   isNetworkFailure,
   isStalledStream,
+  markClosedStream,
   reconnectBackoffMs,
 } from "@/lib/connectivity/connectivity";
 import {
@@ -2722,7 +2723,11 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] SSE connection closed unexpectedly while streaming was still active.",
               );
               // Use setError from store
-              setError(new Error("SSE connection closed unexpectedly"));
+              setError(
+                markClosedStream(
+                  new Error("SSE connection closed unexpectedly"),
+                ),
+              );
 
               // Reset streaming state
               logger.log(
@@ -2949,7 +2954,11 @@ export function useChatMessaging(
               logger.warn(
                 "[DEBUG_STREAMING] Edit SSE connection closed unexpectedly while streaming was still active.",
               );
-              setError(new Error("SSE connection closed unexpectedly (edit)"));
+              setError(
+                markClosedStream(
+                  new Error("SSE connection closed unexpectedly (edit)"),
+                ),
+              );
               endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
@@ -3110,7 +3119,9 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] Regenerate SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(
-                new Error("SSE connection closed unexpectedly (regenerate)"),
+                markClosedStream(
+                  new Error("SSE connection closed unexpectedly (regenerate)"),
+                ),
               );
               endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
@@ -3475,7 +3486,9 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] Continue SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(
-                new Error("SSE connection closed unexpectedly (continue)"),
+                markClosedStream(
+                  new Error("SSE connection closed unexpectedly (continue)"),
+                ),
               );
               endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);

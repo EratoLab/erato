@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
+import { registerWorkInProgress } from "@/lib/chunkLoadRecovery";
 import { contentSize, mergeDisplayMessages } from "@/utils/chat/messageUtils";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -1025,5 +1026,12 @@ export const useMessagingStore = create<MessagingStore>()(
         "messaging/handleReasoningDelta",
       ],
     },
+  ),
+);
+
+// A reload for a newer build would cut off an answer streaming in.
+registerWorkInProgress(() =>
+  Object.values(useMessagingStore.getState().streamingByKey).some(
+    (streaming) => streaming.isStreaming,
   ),
 );

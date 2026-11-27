@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect } from "react";
 
+import { setComposeDraftOwner } from "@/hooks/chat/composeDraftReloadKeeper";
 import { useProfile as useProfileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 /**
@@ -28,6 +29,11 @@ export function useProfileApi() {
   const refreshProfile = useCallback(async () => {
     await refetch();
   }, [refetch]);
+
+  const profileId = profile?.id;
+  useEffect(() => {
+    if (profileId) setComposeDraftOwner(profileId);
+  }, [profileId]);
 
   // Handle session expiry by reloading the page when we get a 401/403 error
   // This will trigger a redirect to the login page

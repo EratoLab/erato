@@ -7,9 +7,13 @@
 import "@erato/frontend/library.css";
 import "./styles.css";
 import {
+  AppErrorBoundary,
   BrandingOverviewPage,
   I18nProvider,
   applyComponentKitRegistrations,
+  installChunkLoadRecovery,
+  installComposeDraftReloadKeeper,
+  showUpdateAvailableNotice,
 } from "@erato/frontend/library";
 import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
@@ -25,6 +29,9 @@ const TeamsApp = lazy(() => import("./teams/TeamsApp"));
 const WordApp = lazy(() => import("./word/WordApp"));
 
 injectFrontendEnv();
+installChunkLoadRecovery({ updateWaiting: showUpdateAvailableNotice });
+// Before the first render, so the composer mounts with the kept draft.
+installComposeDraftReloadKeeper();
 
 // Kit scripts have executed by now (document order). Host routes add their
 // own contributions synchronously when their lazy module is selected.
@@ -39,58 +46,60 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <BrowserRouter basename="/office-addin">
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <Suspense fallback={null}>
-              <OutlookApp />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/teams"
-          element={
-            <Suspense fallback={null}>
-              <TeamsApp />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/word"
-          element={
-            <Suspense fallback={null}>
-              <WordApp />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/excel"
-          element={
-            <Suspense fallback={null}>
-              <ExcelApp />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/powerpoint"
-          element={
-            <Suspense fallback={null}>
-              <PowerPointApp />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/branding-overview"
-          element={
-            <I18nProvider>
-              <BrandingOverviewPage />
-            </I18nProvider>
-          }
-        />
-        <Route path="/setup" element={<AddinSetupRoute />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AppErrorBoundary>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <Suspense fallback={null}>
+                <OutlookApp />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/teams"
+            element={
+              <Suspense fallback={null}>
+                <TeamsApp />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/word"
+            element={
+              <Suspense fallback={null}>
+                <WordApp />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/excel"
+            element={
+              <Suspense fallback={null}>
+                <ExcelApp />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/powerpoint"
+            element={
+              <Suspense fallback={null}>
+                <PowerPointApp />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/branding-overview"
+            element={
+              <I18nProvider>
+                <BrandingOverviewPage />
+              </I18nProvider>
+            }
+          />
+          <Route path="/setup" element={<AddinSetupRoute />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppErrorBoundary>
     </BrowserRouter>
   </React.StrictMode>,
 );

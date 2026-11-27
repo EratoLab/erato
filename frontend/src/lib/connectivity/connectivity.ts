@@ -1,3 +1,4 @@
+import { abortableDelay } from "@/utils/abortableDelay";
 import { createValueStore, type ValueStore } from "@/utils/chat/valueStore";
 
 /**
@@ -192,6 +193,22 @@ export function createConnectivityMonitor(
 
 export const connectivity = createConnectivityMonitor();
 
+/**
+ * Before sending again after `failures` failed tries: waits until the server
+ * is reachable, then backs off (no wait before the first resend). Rejects when
+ * `signal` aborts.
+ */
+export async function waitToSendAgain(
+  failures: number,
+  signal?: AbortSignal,
+  monitor: ConnectivityMonitor = connectivity,
+): Promise<void> {
+  await monitor.waitUntilOnline(signal);
+  if (failures > 0) {
+    await abortableDelay(reconnectBackoffMs(failures - 1), signal);
+  }
+}
+
 export const connectivityStatus: ValueStore<ConnectivityStatus> = {
   get: () => connectivity.getStatus(),
   subscribe: (listener) => connectivity.subscribe(listener),
@@ -222,5 +239,19 @@ export function markStalledStream<T extends object>(error: T): T {
 export function isStalledStream(error: unknown): boolean {
   return (
     typeof error === "object" && error !== null && stalledStreams.has(error)
+  );
+}
+
+const closedStreams = new WeakSet<object>();
+
+/** Tags an error as a stream that ended without its last event. */
+export function markClosedStream<T extends object>(error: T): T {
+  closedStreams.add(error);
+  return error;
+}
+
+export function isClosedStream(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && closedStreams.has(error)
   );
 }

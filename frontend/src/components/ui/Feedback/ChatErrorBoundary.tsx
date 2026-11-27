@@ -3,9 +3,16 @@
 import { t } from "@lingui/core/macro";
 import { Component } from "react";
 
-import { Button } from "../Controls/Button";
-import { ErrorIcon } from "../icons";
-import { CopyErrorButton } from "./CopyErrorButton";
+import { isChunkLoadError } from "@/lib/chunkLoadRecovery";
+import { plainErrorMessage } from "@/utils/plainErrorMessage";
+
+import {
+  catchError,
+  ErrorPanel,
+  NOTHING_CAUGHT,
+  recoverAfterCatch,
+  type CatchState,
+} from "./ErrorPanel";
 
 import type { ReactNode } from "react";
 
@@ -22,30 +29,23 @@ interface FallbackProps {
 /**
  * Error fallback component to display when chat encounters an error
  */
-const ChatErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
-  return (
-    <div className="flex size-full flex-col items-center justify-center space-y-4 p-8">
-      <div className="flex size-12 items-center justify-center rounded-full bg-[var(--theme-error-bg)]">
-        <ErrorIcon className="size-6 text-[var(--theme-error-fg)]" />
-      </div>
-      <h3 className="text-lg font-medium text-[var(--theme-fg-primary)]">
-        {t`Chat Error`}
-      </h3>
-      <p className="max-w-md text-center text-sm text-[var(--theme-fg-muted)]">
-        {error.message ||
-          t`Something went wrong while loading the chat interface.`}
-      </p>
-      <Button onClick={resetErrorBoundary} variant="primary" className="mt-4">
-        {t`Try Again`}
-      </Button>
-      <CopyErrorButton error={error} />
-    </div>
-  );
-};
-
-type ChatErrorBoundaryState =
-  | { didCatch: false; error: null }
-  | { didCatch: true; error: unknown };
+const ChatErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => (
+  <ErrorPanel
+    title={t`Chat Error`}
+    body={
+      plainErrorMessage(error) ??
+      t`Something went wrong while loading the chat interface.`
+    }
+    actionLabel={t`Try Again`}
+    // Trying again cannot bring back a code file the server no longer has.
+    onAction={
+      isChunkLoadError(error)
+        ? () => window.location.reload()
+        : resetErrorBoundary
+    }
+    error={error}
+  />
+);
 
 /**
  * Error boundary component specifically for chat components
@@ -58,17 +58,19 @@ type ChatErrorBoundaryState =
 // searched the whole message list below it for readers on each token.
 export class ChatErrorBoundary extends Component<
   ChatErrorBoundaryProps,
-  ChatErrorBoundaryState
+  CatchState
 > {
-  state: ChatErrorBoundaryState = { didCatch: false, error: null };
+  state: CatchState = NOTHING_CAUGHT;
 
-  static getDerivedStateFromError(error: unknown): ChatErrorBoundaryState {
-    return { didCatch: true, error };
+  static getDerivedStateFromError = catchError;
+
+  componentDidCatch(error: unknown) {
+    recoverAfterCatch(error);
   }
 
   private readonly resetErrorBoundary = () => {
     this.props.onReset?.();
-    this.setState({ didCatch: false, error: null });
+    this.setState(NOTHING_CAUGHT);
   };
 
   render() {
