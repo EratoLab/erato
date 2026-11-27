@@ -71,6 +71,7 @@ import {
   registerComposeReloadOptions,
   takeComposeReloadOptions,
 } from "@/hooks/chat/composeReloadState";
+import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import {
   useConfirmationRegistryStore,
   useHasPendingConfirmation,
@@ -507,6 +508,9 @@ export const ChatInput = ({
     getDraft: getComposeDraftBySessionId,
     saveDraft: saveComposeDraftBySessionId,
   } = useComposeSession({ chatId });
+  const refusedDraft = useComposeSessionStore(
+    (state) => state.refusedDraftsBySessionId[composeSessionId],
+  );
   const [message, setMessage] = useState("");
   const [internalIsAudioMode, setInternalIsAudioMode] = useState(false);
   const [conversationStartSignal, setConversationStartSignal] = useState(0);
@@ -1671,7 +1675,12 @@ export const ChatInput = ({
   // phase, and seeding any earlier would read the draft before it folds its
   // queued message in.
   useLayoutEffect(() => {
-    const draft = getComposeDraftBySessionId(activeComposeSessionIdRef.current);
+    const sessionId = activeComposeSessionIdRef.current;
+    const stored = getComposeDraftBySessionId(sessionId);
+    const refused = useComposeSessionStore
+      .getState()
+      .takeRefusedDraft(sessionId);
+    const draft = refused ? mergeComposeDrafts(refused, stored) : stored;
     if (draft.message) {
       setMessage(draft.message);
     }
@@ -1737,7 +1746,11 @@ export const ChatInput = ({
       setIsDrainArmed(false);
       setQueueReplacePending(false);
     }
-    const incoming = getComposeDraftBySessionId(composeSessionId);
+    const stored = getComposeDraftBySessionId(composeSessionId);
+    const refused = useComposeSessionStore
+      .getState()
+      .takeRefusedDraft(composeSessionId);
+    const incoming = refused ? mergeComposeDrafts(refused, stored) : stored;
     activeComposeSessionIdRef.current = composeSessionId;
     setMessage(incoming.message);
     setAttachedFiles(incoming.attachedFiles);
@@ -1751,6 +1764,29 @@ export const ChatInput = ({
     saveComposeDraftBySessionId,
     getQueuedBySessionId,
     clearQueuedBySessionId,
+    setAttachedFiles,
+  ]);
+
+  useEffect(() => {
+    if (!refusedDraft) return;
+    const draft = useComposeSessionStore
+      .getState()
+      .takeRefusedDraft(composeSessionId);
+    if (!draft) return;
+    const merged = mergeComposeDrafts(draft, {
+      message,
+      attachedFiles,
+      mentionedAssistants,
+    });
+    setMessage(merged.message);
+    setAttachedFiles(merged.attachedFiles);
+    setMentionedAssistants(merged.mentionedAssistants);
+  }, [
+    attachedFiles,
+    composeSessionId,
+    mentionedAssistants,
+    message,
+    refusedDraft,
     setAttachedFiles,
   ]);
 

@@ -1054,6 +1054,13 @@ export type AudioTranscriptionMetadata = {
 
 export type BudgetCurrency = "EUR" | "USD";
 
+export type BudgetLimitCode = "budget_limit_reached";
+
+export type BudgetLimitError = {
+  code: BudgetLimitCode;
+  message: string;
+};
+
 export type BudgetModelSpending = {
   identifier: string;
   label: string;
@@ -2913,6 +2920,10 @@ export type GenerationErrorType =
        */
       error_description: string;
       error_type: "hallucination_loop";
+    }
+  | {
+      error_description: string;
+      error_type: "budget_limit_reached";
     }
   | {
       /**

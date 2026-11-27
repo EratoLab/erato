@@ -6,6 +6,7 @@ from typing import List
 VALID_SCENARIOS = [
     "basic",
     "tight-budget",
+    "tight-budget-enforced",
     "assistants",
     "approvals",
     "entra_id",

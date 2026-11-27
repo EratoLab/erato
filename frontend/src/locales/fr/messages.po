@@ -2882,6 +2882,11 @@ msgstr "Erreur de l'assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/messageErrorCopy.ts
+msgid "chat.message.error.variant.budget_limit_reached"
+msgstr "Vous avez atteint la limite de votre budget personnel de génération."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "La réponse a été filtrée car le message a déclenché la politique de gestion du contenu."
 
