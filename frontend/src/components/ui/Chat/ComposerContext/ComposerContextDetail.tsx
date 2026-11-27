@@ -10,10 +10,11 @@ import {
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { PopoverPanel } from "@/components/ui/Controls/PopoverPanel";
 import {
-  PopoverPanel,
-  resolvePopoverViewportPadding,
-} from "@/components/ui/Controls/PopoverPanel";
+  observePopoverViewport,
+  resolvePopoverViewport,
+} from "@/components/ui/Controls/popoverViewport";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { CloseIcon } from "@/components/ui/icons";
 import { isImeComposing } from "@/utils/isImeComposing";
@@ -302,24 +303,19 @@ export const ComposerContextDetail = ({
       return;
     }
     const rect = anchor.getBoundingClientRect();
-    const margin = resolvePopoverViewportPadding(
+    const viewport = resolvePopoverViewport(
       "var(--theme-layout-dropdown-viewport-margin)",
       anchor,
+      [{ value: "var(--theme-layout-composer-context-detail-width)", fallback: 384 }],
     );
-    const preferred = resolvePopoverViewportPadding(
-      "var(--theme-layout-composer-context-detail-width)",
-      anchor,
-      384,
-    );
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const width = Math.min(preferred, viewportWidth - margin * 2);
+    const [preferred] = viewport.extra;
+    const width = Math.min(preferred, viewport.right - viewport.left);
     const left = Math.max(
-      margin,
-      Math.min(rect.left, viewportWidth - width - margin),
+      viewport.left,
+      Math.min(rect.left, viewport.right - width),
     );
-    const spaceAbove = rect.top - POPOVER_GAP_PX - margin;
-    const spaceBelow = viewportHeight - rect.bottom - POPOVER_GAP_PX - margin;
+    const spaceAbove = rect.top - POPOVER_GAP_PX - viewport.top;
+    const spaceBelow = viewport.bottom - rect.bottom - POPOVER_GAP_PX;
     const above =
       spaceAbove >= POPOVER_MIN_ABOVE_PX || spaceAbove >= spaceBelow;
     setPosition(
@@ -327,7 +323,7 @@ export const ComposerContextDetail = ({
         ? {
             left,
             width,
-            bottom: viewportHeight - rect.top + POPOVER_GAP_PX,
+            bottom: viewport.layoutHeight - rect.top + POPOVER_GAP_PX,
             maxHeight: Math.max(0, spaceAbove),
           }
         : {
@@ -347,12 +343,7 @@ export const ComposerContextDetail = ({
     if (sheet) {
       return;
     }
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
+    return observePopoverViewport(place);
   }, [sheet, place]);
 
   if (!detail) {

@@ -1967,5 +1967,76 @@ describe("ChatHistorySidebar", () => {
       expect(drawer().style.transform).toBe("");
       expect(sidebarMode()).toBe("expanded");
     });
+
+    describe("out of reach beside the open drawer", () => {
+      const expandToggle = () =>
+        screen.getByRole("button", { name: "expand sidebar" });
+      const collapseToggle = () =>
+        screen.getByRole("button", { name: "collapse sidebar" });
+
+      it("takes the pushed page out of reach and the hidden drawer with it", async () => {
+        await renderDrawer(true);
+        expect(page()).toHaveAttribute("inert");
+        expect(drawer()).not.toHaveAttribute("inert");
+
+        fireEvent.click(collapseToggle());
+
+        expect(page()).not.toHaveAttribute("inert");
+        expect(drawer()).toHaveAttribute("inert");
+      });
+
+      it.each([
+        ["a tap beside it", () => fireEvent.click(screen.getByTestId("sidebar-scrim"))],
+        ["Escape", () => fireEvent.keyDown(document.body, { key: "Escape" })],
+        ["a drag", () => drag(screen.getByTestId("sidebar-scrim"), 350, 60, 600)],
+      ])("gives the page back on %s", async (_, close) => {
+        await renderDrawer(true);
+
+        close();
+
+        expect(sidebarMode()).toBe("hidden");
+        expect(page()).not.toHaveAttribute("inert");
+        expect(page()).not.toHaveAttribute("aria-hidden");
+      });
+
+      it("takes the page out of reach once a drag from the edge opens the drawer", async () => {
+        await renderDrawer(false);
+        expect(page()).not.toHaveAttribute("inert");
+
+        drag(screen.getByTestId("sidebar-edge"), 5, 250, 600);
+
+        expect(sidebarMode()).toBe("expanded");
+        expect(page()).toHaveAttribute("inert");
+      });
+
+      it("moves focus into the drawer on open and back to the toggle on close", async () => {
+        await renderDrawer(false);
+        expandToggle().focus();
+
+        fireEvent.click(expandToggle());
+        await waitFor(() => expect(collapseToggle()).toHaveFocus());
+
+        fireEvent.click(collapseToggle());
+        await waitFor(() => expect(expandToggle()).toHaveFocus());
+      });
+
+      it("hands focus dropped by the page to the toggle on close", async () => {
+        await renderDrawer(true);
+        (document.activeElement as HTMLElement | null)?.blur();
+
+        drag(screen.getByTestId("sidebar-scrim"), 350, 60, 600);
+
+        await waitFor(() => expect(expandToggle()).toHaveFocus());
+      });
+
+      it("leaves the page reachable on a wide screen", async () => {
+        mockedNarrowScreen = false;
+        await renderDrawer(true);
+
+        expect(page()).not.toHaveAttribute("inert");
+        expect(page()).not.toHaveAttribute("aria-hidden");
+        expect(drawer()).not.toHaveAttribute("inert");
+      });
+    });
   });
 });

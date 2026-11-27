@@ -17,11 +17,11 @@ import { createPortal } from "react-dom";
 
 import { isImeComposing } from "@/utils/isImeComposing";
 
+import { PopoverPanel } from "./PopoverPanel";
 import {
-  PopoverPanel,
-  resolvePopoverLengths,
-  VIEWPORT_PADDING_FALLBACK_PX,
-} from "./PopoverPanel";
+  observePopoverViewport,
+  resolvePopoverViewport,
+} from "./popoverViewport";
 
 import type { PopoverWidth } from "./PopoverPanel";
 
@@ -157,30 +157,10 @@ export function AnchoredPopover({
     }
 
     const panelRect = panelElement.getBoundingClientRect();
-    // Where the page runs under the status bar or the home bar, a panel kept
-    // only off the window edge ends up behind the clock.
-    const [padding, safeTop, safeBottom] = resolvePopoverLengths(
-      [
-        { value: viewportPadding, fallback: VIEWPORT_PADDING_FALLBACK_PX },
-        { value: "var(--safe-area-top)", fallback: 0 },
-        { value: "var(--safe-area-bottom)", fallback: 0 },
-      ],
+    const viewport = resolvePopoverViewport(
+      viewportPadding,
       triggerRef.current ?? panelElement,
     );
-    const viewport = {
-      width: window.innerWidth,
-      height: window.innerHeight,
-      padding,
-    };
-    const safeArea = { top: safeTop, bottom: safeBottom };
-    // An on-screen keyboard covers the bottom of the window without making it
-    // shorter; only the visual viewport ends where the keyboard begins.
-    const visibleBottom = window.visualViewport
-      ? Math.min(
-          viewport.height,
-          window.visualViewport.offsetTop + window.visualViewport.height,
-        )
-      : viewport.height;
 
     const requiredSpace = {
       vertical: panelRect.height + anchorGap + viewport.padding,
@@ -188,11 +168,10 @@ export function AnchoredPopover({
     };
 
     const space = {
-      top: triggerRect.top - viewport.padding - safeArea.top,
-      bottom:
-        visibleBottom - triggerRect.bottom - viewport.padding - safeArea.bottom,
-      left: triggerRect.left - viewport.padding,
-      right: viewport.width - triggerRect.right - viewport.padding,
+      top: triggerRect.top - viewport.top,
+      bottom: viewport.bottom - triggerRect.bottom,
+      left: triggerRect.left - viewport.left,
+      right: viewport.right - triggerRect.right,
     };
 
     const hasSpace = {
@@ -232,11 +211,8 @@ export function AnchoredPopover({
         : horizontal === "left"
           ? triggerRect.left
           : triggerRect.right - panelRect.width;
-    const maxLeft = Math.max(
-      viewport.padding,
-      viewport.width - panelRect.width - viewport.padding,
-    );
-    const left = clamp(desiredLeft, viewport.padding, maxLeft);
+    const maxLeft = Math.max(viewport.left, viewport.right - panelRect.width);
+    const left = clamp(desiredLeft, viewport.left, maxLeft);
     const maxHeight = Math.max(
       0,
       vertical === "bottom" ? space.bottom - anchorGap : space.top - anchorGap,
@@ -246,7 +222,7 @@ export function AnchoredPopover({
       vertical === "bottom" ? `${triggerRect.bottom + anchorGap}px` : "auto";
     panelElement.style.bottom =
       vertical === "top"
-        ? `${viewport.height - triggerRect.top + anchorGap}px`
+        ? `${viewport.layoutHeight - triggerRect.top + anchorGap}px`
         : "auto";
     panelElement.style.left = `${left}px`;
     panelElement.style.maxHeight = `${maxHeight}px`;
@@ -271,17 +247,9 @@ export function AnchoredPopover({
     updatePosition();
     setIsPositioned(true);
 
-    const handleViewportChange = () => {
+    return observePopoverViewport(() => {
       requestAnimationFrame(updatePosition);
-    };
-
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
-
-    return () => {
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
-    };
+    });
   }, [isOpen, updatePosition]);
 
   useEffect(() => {

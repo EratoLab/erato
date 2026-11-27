@@ -170,6 +170,39 @@ describe("AnchoredPopover", () => {
       measure.mockRestore();
     });
 
+    it("keeps clear of a notch at the side in landscape", () => {
+      const measure = vi
+        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+        .mockImplementation(function (this: HTMLElement) {
+          const width =
+            this.style.width === "var(--safe-area-left)"
+              ? 47
+              : this.style.width
+                ? 8
+                : 60;
+          return DOMRect.fromRect({ width, height: this.style.width ? 0 : 40 });
+        });
+      render(
+        <AnchoredPopover
+          isOpen
+          onOpenChange={vi.fn()}
+          anchorRect={{ top: 300, bottom: 320, left: 10, right: 30 }}
+          anchorGap={8}
+          width="content"
+          widthFloor={false}
+          manageFocus={false}
+          role="toolbar"
+          ariaLabel="Actions"
+          preferredOrientation={{ vertical: "top", horizontal: "left" }}
+        >
+          <button type="button">Action</button>
+        </AnchoredPopover>,
+      );
+
+      expect(screen.getByRole("toolbar").style.left).toBe(`${47 + 8}px`);
+      measure.mockRestore();
+    });
+
     it("opens above when an on-screen keyboard covers the room below", () => {
       const measure = panelSize(60, 200);
       Object.defineProperty(window, "visualViewport", {

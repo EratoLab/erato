@@ -26,8 +26,11 @@ import {
   PopoverPanel,
   PopoverSectionHeader,
   PopoverSeparator,
-  resolvePopoverViewportPadding,
 } from "../Controls/PopoverPanel";
+import {
+  observePopoverViewport,
+  resolvePopoverViewport,
+} from "../Controls/popoverViewport";
 import { Row } from "../Controls/Row";
 import { CheckIcon, ChevronRightIcon, FilterSortIcon } from "../icons";
 
@@ -156,7 +159,12 @@ export function ChatHistoryFilterMenu({
   const [openSubmenu, setOpenSubmenu] = useState<SubmenuKey | null>(null);
   const [submenuTop, setSubmenuTop] = useState(0);
   const [submenuSide, setSubmenuSide] = useState<"right" | "left">("right");
-  const [submenuMaxTop, setSubmenuMaxTop] = useState<number | null>(null);
+  // Panel-relative, so the flyout stays inside the screen's usable area.
+  const [submenuBounds, setSubmenuBounds] = useState<{
+    minTop: number;
+    maxTop: number;
+    maxHeight: number;
+  } | null>(null);
   // The flyout shifts up by its own top padding so its first option aligns
   // with the anchor row; measured (before paint) because that padding is the
   // themable dropdown chrome token, not a constant.
@@ -272,20 +280,16 @@ export function ChatHistoryFilterMenu({
     itemSelector: openSubmenu ? OPTION_SELECTOR : ROW_SELECTOR,
   });
 
-  // Before paint: flip the flyout to the left when it would overrun the
-  // viewport's right edge, cap its top so it cannot overrun the bottom, and
-  // honor a keyboard open by focusing the selected option.
-  useLayoutEffect(() => {
-    if (!openSubmenu) {
-      return;
-    }
+  // Flip the flyout to the left when it would overrun the usable area's
+  // right edge, and keep it between that area's top and bottom.
+  const placeSubmenu = useCallback(() => {
     const panelElement = panelRef.current;
     const submenuElement = submenuRef.current;
     if (!panelElement || !submenuElement) {
       return;
     }
 
-    const viewportPadding = resolvePopoverViewportPadding(
+    const viewport = resolvePopoverViewport(
       "var(--theme-layout-dropdown-viewport-margin)",
       panelElement,
     );
@@ -296,30 +300,38 @@ export function ChatHistoryFilterMenu({
     );
     const submenuWidth = submenuElement.offsetWidth;
     const overflowsRight =
-      panelRect.right - SUBMENU_OVERLAP_PX + submenuWidth >
-      window.innerWidth - viewportPadding;
+      panelRect.right - SUBMENU_OVERLAP_PX + submenuWidth > viewport.right;
     const fitsLeft =
-      panelRect.left + SUBMENU_OVERLAP_PX - submenuWidth >= viewportPadding;
+      panelRect.left + SUBMENU_OVERLAP_PX - submenuWidth >= viewport.left;
     setSubmenuSide(overflowsRight && fitsLeft ? "left" : "right");
 
-    // Panel-relative bounds keeping the flyout inside the viewport; the lower
-    // bound wins when the viewport is shorter than the flyout.
-    const submenuHeight = submenuElement.offsetHeight;
-    setSubmenuMaxTop(
-      Math.max(
-        viewportPadding - panelRect.top,
-        window.innerHeight - viewportPadding - panelRect.top - submenuHeight,
-      ),
-    );
+    setSubmenuBounds({
+      minTop: viewport.top - panelRect.top,
+      maxTop: viewport.bottom - panelRect.top - submenuElement.offsetHeight,
+      maxHeight: Math.max(0, viewport.bottom - viewport.top),
+    });
+  }, []);
+
+  // Before paint, and again when the keyboard or a rotation moves the edges;
+  // a keyboard open focuses the selected option.
+  useLayoutEffect(() => {
+    if (!openSubmenu) {
+      return;
+    }
+    placeSubmenu();
 
     if (focusSubmenuOnOpenRef.current) {
       focusSubmenuOnOpenRef.current = false;
+      const submenuElement = submenuRef.current;
       const focusTarget =
-        submenuElement.querySelector<HTMLElement>('[aria-checked="true"]') ??
-        submenuElement.querySelector<HTMLElement>(OPTION_SELECTOR);
+        submenuElement?.querySelector<HTMLElement>('[aria-checked="true"]') ??
+        submenuElement?.querySelector<HTMLElement>(OPTION_SELECTOR);
       focusTarget?.focus();
     }
-  }, [openSubmenu]);
+
+    // After the panel's own move, which was asked for first.
+    return observePopoverViewport(() => requestAnimationFrame(placeSubmenu));
+  }, [openSubmenu, placeSubmenu]);
 
   const applyAndClose = useCallback(
     (apply: () => void) => {
@@ -739,10 +751,17 @@ export function ChatHistoryFilterMenu({
             dataUi="chat-history-filter-menu-submenu"
             className="z-10"
             style={{
-              top: Math.min(
-                Math.max(0, submenuTop - submenuPadTop),
-                submenuMaxTop ?? Number.MAX_SAFE_INTEGER,
+              // The top bound wins when the area is shorter than the flyout,
+              // which then scrolls.
+              top: Math.max(
+                submenuBounds?.minTop ?? Number.MIN_SAFE_INTEGER,
+                Math.min(
+                  Math.max(0, submenuTop - submenuPadTop),
+                  submenuBounds?.maxTop ?? Number.MAX_SAFE_INTEGER,
+                ),
               ),
+              maxHeight: submenuBounds?.maxHeight,
+              overflowY: "auto",
               ...(submenuSide === "right"
                 ? { left: `calc(100% - ${SUBMENU_OVERLAP_PX}px)` }
                 : { right: `calc(100% - ${SUBMENU_OVERLAP_PX}px)` }),

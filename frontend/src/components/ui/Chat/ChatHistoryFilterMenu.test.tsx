@@ -7,7 +7,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatHistoryFilterStore } from "@/hooks/chat/store/chatHistoryFilterStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
@@ -414,5 +414,82 @@ describe("ChatHistoryFilterMenu", () => {
     expect(
       screen.getByTestId("chat-history-filter-menu-option-status-all"),
     ).toHaveClass("dropdown-item-geometry");
+  });
+
+  describe("on a phone", () => {
+    // A probe that resolves a length reports that length as its width; every
+    // other box, the panel included, sits 100px down the screen.
+    const lengths: Record<string, number> = {
+      "var(--theme-layout-dropdown-viewport-margin)": 8,
+      "var(--safe-area-top)": 59,
+      "var(--safe-area-bottom)": 34,
+      "var(--safe-area-left)": 0,
+      "var(--safe-area-right)": 0,
+    };
+    const setUp = (submenuHeight: number, keyboardTop?: number) => {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+        function (this: HTMLElement) {
+          const width = this.style.width ? (lengths[this.style.width] ?? 0) : 200;
+          return DOMRect.fromRect({ x: 0, y: 100, width, height: 40 });
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
+        function (this: HTMLElement) {
+          return this.dataset.testid === "chat-history-filter-menu-submenu"
+            ? submenuHeight
+            : 0;
+        },
+      );
+      if (keyboardTop !== undefined) {
+        Object.defineProperty(window, "visualViewport", {
+          configurable: true,
+          value: {
+            offsetTop: 0,
+            height: keyboardTop,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+          },
+        });
+      }
+    };
+    const openStatusFlyout = () => {
+      renderMenu();
+      openMenu();
+      fireEvent.click(screen.getByTestId("chat-history-filter-menu-row-status"));
+      return screen.getByTestId("chat-history-filter-menu-submenu");
+    };
+
+    afterEach(() => {
+      Reflect.deleteProperty(window, "visualViewport");
+      vi.restoreAllMocks();
+    });
+
+    it("keeps the flyout above the home bar and the on-screen keyboard", () => {
+      // The keyboard starts at 420; above it the home bar (34) and the margin.
+      setUp(300, 420);
+
+      const flyout = openStatusFlyout();
+
+      // Its bottom at 420 - 34 - 8 = 378: 378 - 300 - 100 below the panel top.
+      expect(flyout.style.top).toBe("-22px");
+      expect(flyout.style.maxHeight).toBe(`${378 - 59 - 8}px`);
+    });
+
+    it("keeps a flyout taller than the room below the status bar, scrolling it", () => {
+      setUp(400, 420);
+
+      const flyout = openStatusFlyout();
+
+      // Its top at 59 + 8 = 67, 33 above the panel's top.
+      expect(flyout.style.top).toBe("-33px");
+      expect(flyout.style.maxHeight).toBe("311px");
+      expect(flyout.style.overflowY).toBe("auto");
+    });
+
+    it("stays beside its row where there is room", () => {
+      setUp(200);
+
+      expect(openStatusFlyout().style.top).toBe("0px");
+    });
   });
 });
