@@ -30,6 +30,7 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Features and enhancements
 
+**The phone app's glass comes closer to the system's.** The round floating buttons let more of the chat through behind a stronger blur, every glass surface (composer, menus, round buttons) draws a light rim brighter along its top edge, and a round button swells a little while pressed. Increase Contrast still fills them solid. For themes: `--glass-control-opacity`, `--glass-rim-top`, `--glass-rim`.
 **In the phone app a chat runs up under the status bar, and Share is a round glass button.** As at its foot, a chat now scrolls on under the top of the screen: the sidebar button and Share float over it as round glass controls, and a band under the status bar keeps the clock readable. Share shows its glyph alone there, in the accent colour while the chat's link is live; phone browsers and desktop keep the worded button. Only the list's top padding changes; scrolling and auto-scroll work as before. For themes: `data-ui="chat-share-button"`, `--chat-top-overlap`, `--chat-top-bar-height`.
 
 **On a phone the model is chosen from a sub-menu.** In the composer's "+" menu the model list no longer sits inline: one Model row shows the current model and opens the models as a page of the same menu, with a back row, as an iPhone menu opens a nested menu. A deployment with a single model keeps one row. For component kits and hosts: an `AddMenuSection` with `submenu: { summary }` renders this way.
