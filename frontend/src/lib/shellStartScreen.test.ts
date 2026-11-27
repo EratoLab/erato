@@ -125,6 +125,39 @@ describe("the start screen report", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it("tells a shell of version 1 nothing new", async () => {
+    const request = installHostShell({ startScreen: 1 });
+    const { reportDrawnWhenSettled, setStartMayResume } = await load();
+    setStartMayResume(true);
+    reportDrawnWhenSettled();
+    await frames();
+    setStartMayResume(false);
+    await frames();
+    expect(request.mock.calls).toEqual([
+      ["startScreen.ready", { background: "#111827" }],
+    ]);
+  });
+
+  it("tells a shell that keeps pages whether a start may resume, and again when that changes", async () => {
+    const request = installHostShell({ startScreen: 2 });
+    const { reportDrawnWhenSettled, setStartMayResume } = await load();
+    setStartMayResume(false);
+    setStartMayResume(true);
+    await frames();
+    expect(request).not.toHaveBeenCalled();
+
+    reportDrawnWhenSettled();
+    await frames();
+    setStartMayResume(true);
+    setStartMayResume(false);
+    setStartMayResume(false);
+    await frames();
+    expect(request.mock.calls).toEqual([
+      ["startScreen.ready", { background: "#111827", resume: true }],
+      ["startScreen.ready", { background: "#111827", resume: false }],
+    ]);
+  });
+
   it("does not report for a layout that went away", async () => {
     const request = installHostShell({ startScreen: 1 });
     const { reportDrawnWhenSettled } = await load();

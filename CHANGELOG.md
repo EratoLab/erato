@@ -54,6 +54,8 @@ Typical "Notable changes" categories to copy & paste:
 
 **Glass on the navigation layer inside an app with system glass.** Where the page runs inside an app that offers the `systemGlass` capability of `window.ERATO_SHELL` (the iPhone app, unless Reduce Transparency is on), the composer at the foot of a chat, the floating sidebar button, the dialog close and back buttons and the menus become frosted glass mixed from the theme's colours, and the chat scrolls on under the composer. Buttons there become capsules and circles, menus and dialogs take larger corners; a theme keeps its own corners with `"shapes": "theme"` in `theme.json`. Messages and cards stay solid. Phone browsers and desktop are unchanged.
 
+**Inside the phone app, a start can reopen the last chat.** Where the page runs inside an app that offers version 2 of the `startScreen` capability of `window.ERATO_SHELL`, the page tells the app whether its next start may open the chat the person last had open instead of the start page. It says so only while neither the person (the "Start screen" setting, including keeping the welcome screen on purpose) nor the organization (a default starting assistant) chose what a start shows; a change to that setting reaches the app at once. Apps with version 1 and browsers see no change.
+
 **On a phone, voice mode's button is filled like send.** In the one-line composer the button that starts voice mode, which stands in send's place while the field is empty, takes the theme's primary colour as send does.
 
 #### Bug fixes
