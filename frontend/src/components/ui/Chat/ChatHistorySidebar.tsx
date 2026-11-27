@@ -69,6 +69,7 @@ import {
 import { SidebarToggle } from "./SidebarToggle";
 import { useSidebarPushesPage } from "./sidebarPage";
 import { useSidebarDrawerSwipe } from "./useSidebarDrawerSwipe";
+import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import {
@@ -428,18 +429,46 @@ const ScheduledNavigationItem = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ScheduledNavigationItem.displayName = "ScheduledNavigationItem";
 
+/**
+ * New Chat where a thumb reaches it, for the drawer on a narrow screen; the
+ * row at the top stays for the sidebar beside the page.
+ */
+const NewChatButton = ({ onNewChat }: { onNewChat: () => void }) => {
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifiers, not user-facing text
+  const newChatIconId = useThemedIcon("navigation", "newChat");
+  return (
+    <Button
+      variant="primary"
+      shape="pill"
+      icon={
+        <ResolvedIcon
+          iconId={newChatIconId}
+          fallbackIcon={PlusIcon}
+          className="size-4"
+        />
+      }
+      onClick={onNewChat}
+      data-ui="sidebar-new-chat-button"
+    >
+      {t`New Chat`}
+    </Button>
+  );
+};
+
 const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
   onSignOut: () => void;
+  onNewChat?: () => void;
   isSlimMode?: boolean;
-}>(({ userProfile, onSignOut }) => (
-  <SidebarBand edge="footer" className="items-center">
+}>(({ userProfile, onSignOut, onNewChat }) => (
+  <SidebarBand edge="footer" className="items-center gap-2">
+    {onNewChat && <NewChatButton onNewChat={onNewChat} />}
     {/* The trigger's rail-column margin holds in both modes, so the slim
         rail needs no extra centering here. */}
     <UserProfileThemeDropdown
       userProfile={userProfile}
       onSignOut={onSignOut}
-      className="flex w-full items-center"
+      className={clsx("flex items-center", onNewChat ? "ml-auto" : "w-full")}
     />
   </SidebarBand>
 ));
@@ -936,9 +965,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           )}
 
           {/* On a narrow screen the open sidebar pushes the page aside, and
-              this dims what stays in view of it. A tap there lands here and
-              only closes the sidebar; the control underneath never gets that
-              tap. */}
+              this lies over what stays in view of it. A tap there lands here
+              and only closes the sidebar; the control underneath never gets
+              that tap. */}
           {isNarrowScreen && (
             <div
               ref={scrimRef}
@@ -949,8 +978,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               onMouseDown={(event) => event.preventDefault()}
               onClick={dismissDrawer}
               className={clsx(
-                "drawer-overlay-skin viewport-layer fixed inset-0 z-40 touch-pan-y",
-                ERATO_GEOMETRY_CLASS.sidebarPageGeometry,
+                // Over the pushed page, which stands over the sidebar.
+                "viewport-layer fixed inset-0 z-[42] touch-pan-y",
+                ERATO_GEOMETRY_CLASS.sidebarScrimSkin,
                 "transition-[opacity,transform] duration-300 ease-in-out motion-reduce:transition-none",
                 isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0",
               )}
@@ -963,7 +993,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           <aside
             ref={ref}
             className={clsx(
-              "flex h-full flex-col border-r",
+              "flex h-full flex-col",
+              // On a narrow screen the pushed page's shadow is the edge.
+              !isNarrowScreen && "border-r",
               // Fixed, so the app's safe-area padding does not reach it. It
               // starts beside the left inset, where the page's margin for it
               // starts too.
@@ -995,10 +1027,12 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             />
             <div className="flex min-h-0 flex-1 flex-col">
               {/* New Chat Item */}
-              <NewChatItem
-                onNewChat={handleNewChatPick}
-                isSlimMode={isSlimMode}
-              />
+              {!isNarrowScreen && (
+                <NewChatItem
+                  onNewChat={handleNewChatPick}
+                  isSlimMode={isSlimMode}
+                />
+              )}
 
               {/* Search Navigation Item */}
               <SearchNavigationItem
@@ -1219,6 +1253,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             <ChatHistoryFooter
               userProfile={userProfile}
               onSignOut={handleSignOut}
+              onNewChat={isNarrowScreen ? handleNewChatPick : undefined}
               isSlimMode={isSlimMode}
             />
             {!collapsed && <SidebarResizeHandle />}

@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 
+import { playHaptic } from "@/lib/shellHaptics";
+
 import type { RefObject } from "react";
 
 /** Movement before a touch counts as a drag in one direction. */
@@ -124,7 +126,6 @@ export function attachDrawerSwipe(
     }
   };
   const releasePage = () => {
-    delete scrim.dataset.sidebarMoving;
     if (movedPage) {
       movedPage.style.transform = "";
       movedPage.style.transition = "";
@@ -183,7 +184,6 @@ export function attachDrawerSwipe(
       movedPage = target;
     }
     target.dataset.sidebarMoving = "";
-    scrim.dataset.sidebarMoving = "";
     sliding = true;
     window.clearTimeout(settleTimer);
     settleTimer = window.setTimeout(() => {
@@ -223,6 +223,8 @@ export function attachDrawerSwipe(
     // The slide starts now. The page's switch costs a frame or two of work,
     // and doing it here would hold the slide's first frame back.
     place(open ? 1 : 0, ended.width);
+    // Felt as the drawer gives way; a pull that springs back stays silent.
+    playHaptic("light");
     drawer.style.opacity = open ? "1" : "0";
     const pointerEvents = open ? "auto" : "none";
     drawer.style.pointerEvents = pointerEvents;
@@ -306,7 +308,6 @@ export function attachDrawerSwipe(
       drawer.style.transition = "none";
       drawer.style.opacity = "1";
       scrim.style.transition = "none";
-      scrim.dataset.sidebarMoving = "";
       if (movedPage) {
         movedPage.style.transition = "none";
         movedPage.dataset.sidebarMoving = "";

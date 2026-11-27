@@ -1281,23 +1281,53 @@ body {
     block-size: 0.25rem;
   }
 
-  /* The page beside the sidebar and the scrim that dims it. On a narrow
-     screen the open sidebar pushes both aside by its own width, and the part
-     of the page still in view becomes a card; [data-sidebar-moving] keeps
-     that shape while they follow a finger or slide back. */
+  /* The page beside the sidebar. On a narrow screen the open sidebar pushes
+     it aside by the sidebar's width, and it shows as a card over the
+     sidebar: from the screen's top to its bottom, system bars included, with
+     the card's corners clipping it. [data-sidebar-moving] keeps that shape
+     while it follows a finger or slides back. */
   .sidebar-page-geometry[data-sidebar-pushed],
   .sidebar-page-geometry[data-sidebar-moving] {
-    overflow: clip;
-    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+    position: relative;
+    /* Over the sidebar (z-40): the corners and the edge's shadow fall on it. */
+    z-index: 41;
+    clip-path: inset(
+      calc(-1 * var(--safe-area-top, 0px)) 0
+        calc(-1 * var(--safe-area-bottom, 0px)) 0 round
+        var(--sidebar-page-radius, var(--theme-radius-card))
+    );
   }
 
-  /* The pushed page reaches past the screen's right edge. Clipped there, it
-     gives a scrollIntoView inside it nothing to scroll sideways. */
+  /* The card behind the page, reaching under the system bars, where the
+     page's own box stops. */
+  .sidebar-page-geometry[data-sidebar-pushed]::before,
+  .sidebar-page-geometry[data-sidebar-moving]::before {
+    content: "";
+    position: absolute;
+    inset: calc(-1 * var(--safe-area-top, 0px)) 0
+      calc(-1 * var(--safe-area-bottom, 0px));
+    z-index: -1;
+    pointer-events: none;
+    background-color: var(--theme-shell-page);
+  }
+
+  /* Round the card's corners the sidebar's colour shows, wherever the page's
+     parent or the body would otherwise show through. The pushed page also
+     reaches past the screen's right edge; clipped there, it gives a
+     scrollIntoView inside it nothing to scroll sideways. */
   :has(
     > .sidebar-page-geometry[data-sidebar-pushed],
     > .sidebar-page-geometry[data-sidebar-moving]
   ) {
     overflow-x: clip;
+    background-color: var(--theme-shell-sidebar);
+  }
+
+  body:has(
+      .sidebar-page-geometry[data-sidebar-pushed],
+      .sidebar-page-geometry[data-sidebar-moving]
+    ) {
+    background-color: var(--theme-shell-sidebar);
   }
 
   .sidebar-page-geometry[data-sidebar-pushed] {
@@ -1516,6 +1546,20 @@ body:has(.app-viewport) {
    the panel's edge already carries the depth cue. */
 .drawer-overlay-skin {
   background-color: var(--theme-overlay-modal);
+}
+
+/* Over the page the open sidebar pushes aside on a narrow screen: it takes
+   the tap that closes the sidebar and draws the card's edge. Clear, so the
+   page reads as it is; a theme can tint it. */
+.sidebar-scrim-skin {
+  border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+  box-shadow: 0 0 32px rgb(0 0 0 / 0.18);
+}
+
+.sidebar-scrim-skin[data-sidebar-pushed] {
+  transform: translateX(
+    var(--sidebar-width-override, var(--theme-layout-sidebar-width))
+  );
 }
 
 .modal-shell-skin {
@@ -2569,6 +2613,9 @@ html[data-system-glass] {
 html[data-system-glass]:not([data-theme-shapes="theme"]) {
   --theme-radius-dropdown: 26px;
   --theme-radius-modal: 28px;
+  /* The card of the page the open sidebar pushes aside follows the screen's
+     own corners. */
+  --sidebar-page-radius: 55px;
 }
 
 :where(html[data-system-glass]:not([data-theme-shapes="theme"]))
