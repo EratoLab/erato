@@ -1,0 +1,526 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EratoLab/erato/blob/main/frontend/src/lib/shell/contract/systemMenus.v1.schema.json",
+  "title": "systemMenus 1",
+  "description": "What the page sends to a host app that offers `systemMenus: 1`, and what the app sends back. A host draws these menus the system's way; the page draws its own web menu when the capability is missing or the app answers `unsupported`. A document is either a request from the page or a message from the app.",
+  "oneOf": [{ "$ref": "#/$defs/Request" }, { "$ref": "#/$defs/AppMessage" }],
+  "$defs": {
+    "Request": {
+      "description": "A call the page makes with `request(method, params)`.",
+      "oneOf": [
+        { "$ref": "#/$defs/ShowRequest" },
+        { "$ref": "#/$defs/AttachRequest" },
+        { "$ref": "#/$defs/UpdateRequest" },
+        { "$ref": "#/$defs/DetachRequest" },
+        { "$ref": "#/$defs/ConfirmRequest" }
+      ]
+    },
+    "AppMessage": {
+      "description": "A result the app resolves a request with, or an event it sends.",
+      "oneOf": [
+        { "$ref": "#/$defs/ShowResultMessage" },
+        { "$ref": "#/$defs/AttachResultMessage" },
+        { "$ref": "#/$defs/UpdateResultMessage" },
+        { "$ref": "#/$defs/ConfirmResultMessage" },
+        { "$ref": "#/$defs/ChosenEventMessage" },
+        { "$ref": "#/$defs/ToggledEventMessage" },
+        { "$ref": "#/$defs/ClosedEventMessage" }
+      ]
+    },
+
+    "ShowRequest": {
+      "type": "object",
+      "required": ["method", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "const": "systemMenus.show" },
+        "params": { "$ref": "#/$defs/ShowParams" }
+      }
+    },
+    "AttachRequest": {
+      "type": "object",
+      "required": ["method", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "const": "systemMenus.attach" },
+        "params": { "$ref": "#/$defs/AttachParams" }
+      }
+    },
+    "UpdateRequest": {
+      "type": "object",
+      "required": ["method", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "const": "systemMenus.update" },
+        "params": { "$ref": "#/$defs/UpdateParams" }
+      }
+    },
+    "DetachRequest": {
+      "type": "object",
+      "required": ["method", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "const": "systemMenus.detach" },
+        "params": { "$ref": "#/$defs/DetachParams" }
+      }
+    },
+    "ConfirmRequest": {
+      "type": "object",
+      "required": ["method", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "const": "systemMenus.confirm" },
+        "params": { "$ref": "#/$defs/ConfirmParams" }
+      }
+    },
+
+    "ShowResultMessage": {
+      "type": "object",
+      "required": ["result", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "result": { "const": "systemMenus.show" },
+        "value": { "$ref": "#/$defs/ShowResult" }
+      }
+    },
+    "AttachResultMessage": {
+      "type": "object",
+      "required": ["result", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "result": { "const": "systemMenus.attach" },
+        "value": { "$ref": "#/$defs/AttachResult" }
+      }
+    },
+    "UpdateResultMessage": {
+      "type": "object",
+      "required": ["result", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "result": { "const": "systemMenus.update" },
+        "value": { "$ref": "#/$defs/UpdateResult" }
+      }
+    },
+    "ConfirmResultMessage": {
+      "type": "object",
+      "required": ["result", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "result": { "const": "systemMenus.confirm" },
+        "value": { "$ref": "#/$defs/ConfirmResult" }
+      }
+    },
+    "ChosenEventMessage": {
+      "type": "object",
+      "required": ["event", "payload"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "systemMenus.chosen" },
+        "payload": { "$ref": "#/$defs/ChosenEvent" }
+      }
+    },
+    "ToggledEventMessage": {
+      "type": "object",
+      "required": ["event", "payload"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "systemMenus.toggled" },
+        "payload": { "$ref": "#/$defs/ToggledEvent" }
+      }
+    },
+    "ClosedEventMessage": {
+      "type": "object",
+      "required": ["event", "payload"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "systemMenus.closed" },
+        "payload": { "$ref": "#/$defs/ClosedEvent" }
+      }
+    },
+
+    "MenuId": {
+      "description": "Chosen by the page; names one menu while it is shown or attached.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "ItemId": {
+      "description": "Unique within the whole menu, sub-menus and sections included.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "Text": {
+      "description": "Plain text in the person's language, as the page shows it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "Anchor": {
+      "description": "The element the menu belongs to, in CSS pixels as `getBoundingClientRect()` gives them.",
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "minimum": 0 },
+        "height": { "type": "number", "minimum": 0 }
+      }
+    },
+    "Icon": {
+      "description": "The page's own icon, drawn by the page. The app uses only its shape (the alpha channel) and tints it the system's way.",
+      "type": "object",
+      "required": ["png"],
+      "additionalProperties": false,
+      "properties": {
+        "png": {
+          "description": "A square PNG, base64 without a `data:` prefix, at least 48 pixels on a side.",
+          "type": "string",
+          "contentEncoding": "base64",
+          "contentMediaType": "image/png",
+          "minLength": 8,
+          "maxLength": 100000,
+          "pattern": "^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$"
+        }
+      }
+    },
+
+    "MenuItem": {
+      "description": "An entry, or with `children` a sub-menu or (with `inline`) a section. A tap on an entry that is not `keepOpen` closes the menu; on a `keepOpen` entry it flips the entry and the menu stays open.",
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "label": { "$ref": "#/$defs/Text" },
+        "subtitle": {
+          "description": "A second line: the current value of a sub-menu (\"All\", the chosen model), or what an entry changes.",
+          "$ref": "#/$defs/Text"
+        },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "state": {
+          "description": "A tick. Every child of a parent with `selection` has one.",
+          "enum": ["on", "off"]
+        },
+        "selection": {
+          "description": "On a parent: its children are one choice (`single`, at most one on) or several (`multiple`).",
+          "enum": ["single", "multiple"]
+        },
+        "disabled": { "type": "boolean" },
+        "disabledReason": {
+          "description": "Why the entry is off; shown in place of `subtitle` and read by VoiceOver.",
+          "$ref": "#/$defs/Text"
+        },
+        "keepOpen": {
+          "description": "The menu stays open after a tap on this entry; the app sends `systemMenus.toggled` instead of choosing it.",
+          "type": "boolean"
+        },
+        "inline": {
+          "description": "On a parent: its children are a section of this menu (with `label` as its header), not a sub-menu.",
+          "type": "boolean"
+        },
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/MenuItem" }
+        }
+      },
+      "dependentRequired": {
+        "disabledReason": ["disabled"],
+        "keepOpen": ["state"]
+      },
+      "allOf": [
+        {
+          "if": { "required": ["children"] },
+          "then": {
+            "not": {
+              "anyOf": [{ "required": ["state"] }, { "required": ["keepOpen"] }]
+            }
+          },
+          "else": {
+            "required": ["label"],
+            "not": {
+              "anyOf": [
+                { "required": ["selection"] },
+                { "required": ["inline"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["children"],
+            "not": {
+              "properties": { "inline": { "const": true } },
+              "required": ["inline"]
+            }
+          },
+          "then": { "required": ["label"] }
+        },
+        {
+          "if": {
+            "properties": { "inline": { "const": true } },
+            "required": ["inline"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["subtitle"] },
+                { "required": ["icon"] },
+                { "required": ["disabled"] },
+                { "required": ["disabledReason"] }
+              ]
+            },
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "not": {
+                    "properties": { "inline": { "const": true } },
+                    "required": ["inline"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["selection"] },
+          "then": {
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["state"],
+                  "not": { "required": ["children"] }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["selection"],
+            "properties": { "selection": { "const": "single" } }
+          },
+          "then": {
+            "properties": {
+              "children": {
+                "type": "array",
+                "contains": {
+                  "type": "object",
+                  "properties": { "state": { "const": "on" } },
+                  "required": ["state"]
+                },
+                "minContains": 0,
+                "maxContains": 1
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["disabledReason"] },
+          "then": { "properties": { "disabled": { "const": true } } }
+        }
+      ]
+    },
+    "Items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/MenuItem" }
+    },
+
+    "ShowParams": {
+      "description": "Shows a menu for a tap the page received (a chat row, anything that scrolls). Resolves when the menu closes.",
+      "type": "object",
+      "required": ["id", "anchor", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/MenuId" },
+        "anchor": { "$ref": "#/$defs/Anchor" },
+        "title": { "$ref": "#/$defs/Text" },
+        "items": { "$ref": "#/$defs/Items" }
+      }
+    },
+    "ShowResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["shown", "chosen"],
+          "additionalProperties": false,
+          "properties": {
+            "shown": { "const": true },
+            "chosen": {
+              "description": "The entry that closed the menu, or null when it was dismissed.",
+              "oneOf": [{ "$ref": "#/$defs/ItemId" }, { "type": "null" }]
+            }
+          }
+        },
+        { "$ref": "#/$defs/Unsupported" }
+      ]
+    },
+    "Unsupported": {
+      "description": "The app cannot draw the description; the page shows its web menu instead.",
+      "type": "object",
+      "required": ["shown", "unsupported"],
+      "additionalProperties": false,
+      "properties": {
+        "shown": { "const": false },
+        "unsupported": { "$ref": "#/$defs/UnsupportedPaths" }
+      }
+    },
+    "UnsupportedPaths": {
+      "description": "Where the description has something this app does not draw, as JSON paths (`items[2].badge`).",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+
+    "AttachParams": {
+      "description": "Puts the app's own touch over a page button that stays put (the composer's \"+\", the account button), so press-and-slide works. Lasts until `detach` or until another page starts to show.",
+      "type": "object",
+      "required": ["id", "anchor", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/MenuId" },
+        "anchor": { "$ref": "#/$defs/Anchor" },
+        "items": { "$ref": "#/$defs/Items" }
+      }
+    },
+    "AttachResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["attached"],
+          "additionalProperties": false,
+          "properties": { "attached": { "const": true } }
+        },
+        {
+          "type": "object",
+          "required": ["attached", "unsupported"],
+          "additionalProperties": false,
+          "properties": {
+            "attached": { "const": false },
+            "unsupported": { "$ref": "#/$defs/UnsupportedPaths" }
+          }
+        }
+      ]
+    },
+
+    "UpdateParams": {
+      "description": "New entries or a new place for a shown or attached menu; an open menu changes in place.",
+      "type": "object",
+      "required": ["id"],
+      "minProperties": 2,
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/MenuId" },
+        "anchor": { "$ref": "#/$defs/Anchor" },
+        "items": { "$ref": "#/$defs/Items" }
+      }
+    },
+    "UpdateResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["updated"],
+          "additionalProperties": false,
+          "properties": {
+            "updated": {
+              "description": "False when no menu has this id (it closed, or was detached).",
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["updated", "unsupported"],
+          "additionalProperties": false,
+          "properties": {
+            "updated": { "const": false },
+            "unsupported": { "$ref": "#/$defs/UnsupportedPaths" }
+          }
+        }
+      ]
+    },
+
+    "DetachParams": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": { "id": { "$ref": "#/$defs/MenuId" } }
+    },
+
+    "ConfirmParams": {
+      "description": "Asks before an action takes effect, as the system's action sheet. The app adds the cancel button with `cancelLabel`.",
+      "type": "object",
+      "required": ["title", "actions", "cancelLabel"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "$ref": "#/$defs/Text" },
+        "message": { "$ref": "#/$defs/Text" },
+        "anchor": { "$ref": "#/$defs/Anchor" },
+        "cancelLabel": { "$ref": "#/$defs/Text" },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["id", "label"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/ItemId" },
+              "label": { "$ref": "#/$defs/Text" }
+            }
+          }
+        }
+      }
+    },
+    "ConfirmResult": {
+      "type": "object",
+      "required": ["chosen"],
+      "additionalProperties": false,
+      "properties": {
+        "chosen": {
+          "description": "The action picked, or null for cancel.",
+          "oneOf": [{ "$ref": "#/$defs/ItemId" }, { "type": "null" }]
+        }
+      }
+    },
+
+    "ChosenEvent": {
+      "description": "An entry closed an attached menu.",
+      "type": "object",
+      "required": ["id", "itemId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/MenuId" },
+        "itemId": { "$ref": "#/$defs/ItemId" }
+      }
+    },
+    "ToggledEvent": {
+      "description": "A `keepOpen` entry of a shown or attached menu was tapped; `on` is the state the person asked for. The menu shows it until the page sends `update`.",
+      "type": "object",
+      "required": ["id", "itemId", "on"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/MenuId" },
+        "itemId": { "$ref": "#/$defs/ItemId" },
+        "on": { "type": "boolean" }
+      }
+    },
+    "ClosedEvent": {
+      "description": "An attached menu closed, by a choice or a dismissal.",
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": { "id": { "$ref": "#/$defs/MenuId" } }
+    }
+  }
+}

@@ -1,4 +1,3 @@
-import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
 import { memo, useCallback, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -8,6 +7,11 @@ import {
   settingsClosedLocation,
 } from "@/lib/disclaimersSettingsLink";
 import {
+  ACCOUNT_MENU_ID,
+  describeAccountMenu,
+} from "@/lib/shell/menus/describeAccountMenu";
+import { menuEntryDropdownItems } from "@/lib/shell/menus/web/dropdownItems";
+import {
   useAuthFeature,
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
@@ -15,7 +19,6 @@ import {
 import { DropdownMenu } from "./DropdownMenu";
 import { Avatar } from "../Feedback/Avatar";
 import { UserPreferencesDialog } from "../Settings/UserPreferencesDialog";
-import { LogOutIcon, SettingsIcon } from "../icons";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -58,26 +61,15 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           "serversTools"
         : undefined;
 
-    // Create dropdown items array
-    const dropdownItems = [
+    const dropdownItems = menuEntryDropdownItems(
+      describeAccountMenu({ showLogout }),
       {
-        label: t({
-          id: "profile.menu.preferences",
-          message: "Settings",
-        }),
-        icon: <SettingsIcon className="size-4" />,
-        onClick: () => setOpenFromMenu(true),
+        onSelect: {
+          [ACCOUNT_MENU_ID.settings]: () => setOpenFromMenu(true),
+          [ACCOUNT_MENU_ID.signOut]: onSignOut,
+        },
       },
-      ...(showLogout
-        ? [
-            {
-              label: t`Sign out`,
-              icon: <LogOutIcon className="size-4" />,
-              onClick: onSignOut,
-            },
-          ]
-        : []),
-    ];
+    );
 
     return (
       <div className={clsx("flex items-center", className)}>

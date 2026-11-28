@@ -10,7 +10,6 @@
  * in their own tree — the hidden dropzone input and the cloud picker modal —
  * using the props this hook returns.
  */
-import { t } from "@lingui/core/macro";
 import { Cloud, Computer } from "iconoir-react";
 import {
   useCallback,
@@ -33,6 +32,7 @@ import {
   useCreateChat,
   useLinkFile,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { uploadSourceLabel } from "@/lib/shell/menus/addMenuTexts";
 import {
   useCloudProvidersFeature,
   useUploadFeature,
@@ -345,10 +345,7 @@ export function useChatFileSources({
     () => [
       {
         id: "computer",
-        label: t({
-          id: "fileSourceSelector.uploadFromComputer",
-          message: "Upload from Computer",
-        }),
+        label: uploadSourceLabel("computer"),
         icon: <Computer className="size-4" />,
         onSelect: handleSelectDisk,
         disabled,
@@ -357,10 +354,7 @@ export function useChatFileSources({
         ? [
             {
               id: "sharepoint",
-              label: t({
-                id: "fileSourceSelector.uploadFromOneDrive",
-                message: "Upload from Sharepoint",
-              }),
+              label: uploadSourceLabel("sharepoint"),
               icon: <Cloud className="size-4" />,
               onSelect: () => handleSelectCloud("sharepoint"),
               disabled,

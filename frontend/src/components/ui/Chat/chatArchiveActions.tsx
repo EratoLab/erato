@@ -1,8 +1,16 @@
 import { t } from "@lingui/core/macro";
 
+import {
+  describeArchiveEntries,
+  unarchiveActionLabel as describedUnarchiveLabel,
+} from "@/lib/shell/menus/describeRowMenu";
+import {
+  rowMenuDropdownItems,
+  rowMenuHandles,
+} from "@/lib/shell/menus/web/rowMenuDropdownItems";
+
 import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
 import { CHAT_HISTORY_ROW_TEST_ID } from "./chatHistoryRowTestIds";
-import { ArchiveIcon, UndoIcon } from "../icons";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
@@ -10,8 +18,7 @@ import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 export const archivedChatLabel = () =>
   t({ id: "chat.history.item.archived", message: "Archived" });
 
-export const unarchiveActionLabel = () =>
-  t({ id: "chat.history.menu.unarchive", message: "Unarchive" });
+export const unarchiveActionLabel = (): string => describedUnarchiveLabel();
 
 // No retention period in the copy: the cleanup setting reaches no API.
 export const archivedNoticeText = (variant: "chat" | "run" = "chat") =>
@@ -54,58 +61,17 @@ export const buildArchiveMenuItems = ({
 }): DropdownMenuItem[] => {
   // Gated on the handler like every other item: a caller that forgets to
   // forward one would otherwise ship a visible, clickable, inert action.
-  if (archived) {
-    return onUnarchive
-      ? [
-          {
-            id: CHAT_HISTORY_ROW_MENU_ID.unarchive,
-            label: unarchiveActionLabel(),
-            icon: <UndoIcon className="size-4" />,
-            onClick: onUnarchive,
-            testId: "chat-history-menu-unarchive",
-          },
-        ]
-      : [];
-  }
-
-  // Archiving is reversible, so only work already under way is worth asking
-  // about — that is the part unarchiving cannot put back.
-  const warning =
-    status === "running"
-      ? t({
-          id: "chat.history.menu.confirm_archive.running",
-          message:
-            "This chat is still generating. Archiving will not stop the response.",
-        })
-      : status === "action_required"
-        ? t({
-            id: "chat.history.menu.confirm_archive.action_required",
-            message:
-              "This chat is waiting for a tool approval. Archiving abandons it, and unarchiving will not resume the response.",
-          })
-        : waitingOnly
-          ? t({
-              id: "chat.history.menu.confirm_archive.waiting",
-              message:
-                "This chat is waiting for a connected app or for its tasks. Archiving abandons the wait, and unarchiving will not resume the response.",
-            })
-          : null;
-
-  return onArchive
-    ? [
-        {
-          id: CHAT_HISTORY_ROW_MENU_ID.archive,
-          label: t({ id: "chat.history.menu.remove", message: "Archive" }),
-          icon: <ArchiveIcon className="size-4" />,
-          onClick: onArchive,
-          testId: "chat-history-menu-archive",
-          confirmAction: warning != null,
-          confirmTitle: t({
-            id: "chat.history.menu.confirm_remove.title",
-            message: "Archive this chat?",
-          }),
-          confirmMessage: warning ?? undefined,
-        },
-      ]
-    : [];
+  const handlers = {
+    [CHAT_HISTORY_ROW_MENU_ID.archive]: onArchive,
+    [CHAT_HISTORY_ROW_MENU_ID.unarchive]: onUnarchive,
+  };
+  return rowMenuDropdownItems(
+    describeArchiveEntries({
+      archived,
+      status,
+      waitingOnly,
+      handles: rowMenuHandles(handlers),
+    }),
+    handlers,
+  );
 };

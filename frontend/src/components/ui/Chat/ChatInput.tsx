@@ -110,6 +110,7 @@ import {
   useFacets,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { compactChatLabel } from "@/lib/shell/menus/addMenuTexts";
 import { playHaptic } from "@/lib/shellHaptics";
 import { primaryLanguage } from "@/lib/toolCallGist/spokenLanguageData";
 import { useChatSession } from "@/providers/ChatProvider";
@@ -4051,10 +4052,7 @@ export const ChatInput = ({
                             items: [
                               {
                                 id: "compact",
-                                label: t({
-                                  id: "chat.compaction.action",
-                                  message: "Compact chat history",
-                                }),
+                                label: compactChatLabel(),
                                 description: compactionDescription,
                                 onSelect: compaction.compact,
                                 disabled: compaction.isPending,
@@ -4110,10 +4108,7 @@ export const ChatInput = ({
                         onClick={compaction.compact}
                         title={compactionDescription}
                       >
-                        {t({
-                          id: "chat.compaction.action",
-                          message: "Compact chat history",
-                        })}
+                        {compactChatLabel()}
                       </Button>
                     )}
                     {/* File Upload Button with Token Check */}

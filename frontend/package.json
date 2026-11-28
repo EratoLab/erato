@@ -81,7 +81,8 @@
     "i18n:extract:clean": "lingui extract --clean",
     "i18n:extract:check": "./scripts/check-i18n-extract.sh",
     "i18n:compile": "lingui compile",
-    "i18n:watch": "lingui extract --watch"
+    "i18n:watch": "lingui extract --watch",
+    "shell:catalogue": "lingui compile && node scripts/shell-catalogue.mjs"
   },
   "dependencies": {
     "@erato/desktop-sidecar-protocol": "file:../desktop-sidecar-protocol",
@@ -183,6 +184,7 @@
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.60.0",
     "@vitest/coverage-v8": "^4.1.0",
+    "ajv": "8.20.0",
     "eslint": "^9.39.4",
     "eslint-import-resolver-typescript": "^4.4.3",
     "eslint-plugin-import": "^2.31.0",
