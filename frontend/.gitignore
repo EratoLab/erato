@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/shell-catalogue
 
 # next.js
 /.next/

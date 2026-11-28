@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -10,10 +11,7 @@ import {
 } from "react";
 
 import {
-  CHAT_HISTORY_SOURCE_VALUES,
   hasActiveFilters,
-  isSourceFilterActive,
-  isSourceFilterAvailable,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterStore,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
@@ -22,6 +20,11 @@ import {
   observePopoverViewport,
   resolvePopoverViewport,
 } from "@/lib/popoverViewport";
+import {
+  applyFilterMenuChoice,
+  describeFilterMenu,
+  filterMenuChoice,
+} from "@/lib/shell/menus/describeFilterMenu";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
@@ -35,14 +38,11 @@ import { Row } from "../Controls/Row";
 import { CheckIcon, ChevronRightIcon, FilterSortIcon } from "../icons";
 
 import type {
-  ChatHistoryDelegatedFilter,
   ChatHistoryFilterStoreHook,
-  ChatHistoryGroupBy,
   ChatHistorySource,
-  ChatHistorySourceMode,
-  ChatHistoryStatusFilter,
-  ChatHistoryTypeFilter,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
+import type { FilterMenuRowKey } from "@/lib/shell/menus/describeFilterMenu";
+import type { MenuEntry } from "@/lib/shell/menus/menuEntry";
 import type React from "react";
 
 export interface ChatHistoryFilterMenuProps {
@@ -69,7 +69,7 @@ export interface ChatHistoryFilterMenuProps {
   store?: ChatHistoryFilterStoreHook;
 }
 
-type SubmenuKey = "type" | "status" | "delegated" | "source" | "groupBy";
+type SubmenuKey = FilterMenuRowKey;
 
 const SUBMENU_KEYS: readonly string[] = [
   "type",
@@ -119,24 +119,40 @@ const SUBMENU_OVERLAP_PX = 4;
 // visible for a beat (checkmark moves) before the menu dismisses.
 const CLOSE_ON_SELECT_DELAY_MS = 100;
 
-function buildRow<V extends string>(
-  key: SubmenuKey,
-  label: string,
-  options: { value: V; label: string }[],
-  current: V,
-  onSelect: (value: V) => void,
+function submenuRowFromEntry(
+  entry: MenuEntry,
+  choose: (entry: MenuEntry) => void,
 ): SubmenuRow {
-  const currentOption = options.find((option) => option.value === current);
+  const option = (child: MenuEntry): SubmenuOption => {
+    const choice = filterMenuChoice(child.id);
+    return {
+      id: choice && "value" in choice ? choice.value : child.id,
+      label: child.label ?? "",
+      selected: child.state === "on",
+      disabled: child.disabled,
+      onSelect: () => choose(child),
+    };
+  };
+  const children = entry.children ?? [];
+  const single =
+    entry.selection === "single"
+      ? children
+      : (children.find((child) => child.selection === "single")?.children ??
+        []);
+  const multiple = children.find((child) => child.selection === "multiple");
   return {
-    key,
-    label,
-    valueLabel: currentOption?.label ?? "",
-    options: options.map((option) => ({
-      id: option.value,
-      label: option.label,
-      selected: option.value === current,
-      onSelect: () => onSelect(option.value),
-    })),
+    key: entry.id as SubmenuKey,
+    label: entry.label ?? "",
+    valueLabel: entry.subtitle ?? "",
+    options: single.map(option),
+    ...(multiple
+      ? {
+          checkboxGroup: {
+            label: multiple.label ?? "",
+            options: (multiple.children ?? []).map(option),
+          },
+        }
+      : {}),
   };
 }
 
@@ -195,12 +211,19 @@ export function ChatHistoryFilterMenu({
   const toggleSource = store((state) => state.toggleSource);
   const resetToDefaults = store((state) => state.resetToDefaults);
 
-  const showDelegatedRow = assistantsEnabled && delegationEnabled;
-  const showSourceRow = isSourceFilterAvailable(availableSources);
-  const filters = sanitizeChatHistoryFilters(
-    { typeFilter, statusFilter, delegatedFilter, groupBy, sourceFilter },
-    { assistantsEnabled, delegationEnabled, availableSources },
-  );
+  const filterValues = {
+    typeFilter,
+    statusFilter,
+    delegatedFilter,
+    groupBy,
+    sourceFilter,
+  };
+  const filterCapabilities = {
+    assistantsEnabled,
+    delegationEnabled,
+    availableSources,
+  };
+  const filters = sanitizeChatHistoryFilters(filterValues, filterCapabilities);
 
   const clearHoverTimers = useCallback(() => {
     clearTimeout(hoverOpenTimerRef.current);
@@ -382,228 +405,34 @@ export function ChatHistoryFilterMenu({
     [closeSubmenu, openSubmenu, openSubmenuFor],
   );
 
-  const typeOptions: { value: ChatHistoryTypeFilter; label: string }[] = [
-    {
-      value: "all",
-      label: t({ id: "chat.history.filterMenu.type.all", message: "All" }),
-    },
-    {
-      value: "chat",
-      label: t({ id: "chat.history.filterMenu.type.chat", message: "Chat" }),
-    },
-    {
-      value: "assistant",
-      label: t({
-        id: "chat.history.filterMenu.type.assistant",
-        message: "Assistant",
-      }),
-    },
-  ];
-
-  const statusOptions: { value: ChatHistoryStatusFilter; label: string }[] = [
-    {
-      value: "active",
-      label: t({
-        id: "chat.history.filterMenu.status.active",
-        message: "Active",
-      }),
-    },
-    {
-      value: "all",
-      label: t({ id: "chat.history.filterMenu.status.all", message: "All" }),
-    },
-  ];
-
-  const delegatedOptions: {
-    value: ChatHistoryDelegatedFilter;
-    label: string;
-  }[] = [
-    {
-      value: "hidden",
-      label: t({
-        id: "chat.history.filterMenu.delegated.hidden",
-        message: "Hidden",
-      }),
-    },
-    {
-      value: "shown",
-      label: t({
-        id: "chat.history.filterMenu.delegated.shown",
-        message: "Shown",
-      }),
-    },
-  ];
-
-  const groupByOptions: { value: ChatHistoryGroupBy; label: string }[] = [
-    {
-      value: "date",
-      label: t({ id: "chat.history.filterMenu.groupBy.date", message: "Date" }),
-    },
-    ...(assistantsEnabled
-      ? [
-          {
-            value: "type" as const,
-            label: t({
-              id: "chat.history.filterMenu.groupBy.type",
-              message: "Type",
-            }),
-          },
-        ]
-      : []),
-    {
-      value: "unread",
-      label: t({
-        id: "chat.history.filterMenu.groupBy.unread",
-        message: "Unread",
-      }),
-    },
-    {
-      value: "none",
-      label: t({ id: "chat.history.filterMenu.groupBy.none", message: "None" }),
-    },
-  ];
-
-  const sourceModeOptions: {
-    value: ChatHistorySourceMode;
-    label: string;
-  }[] = [
-    {
-      value: "all",
-      label: t({
-        id: "chat.history.filterMenu.source.mode.all",
-        message: "All",
-      }),
-    },
-    {
-      value: "only",
-      label: t({
-        id: "chat.history.filterMenu.source.mode.only",
-        message: "Only selected",
-      }),
-    },
-    {
-      value: "hide",
-      label: t({
-        id: "chat.history.filterMenu.source.mode.hide",
-        message: "Hide selected",
-      }),
-    },
-  ];
-
-  const sourceLabels: Record<ChatHistorySource, string> = {
-    web: t({ id: "chat.history.filterMenu.source.web", message: "Web app" }),
-    outlook: t({
-      id: "chat.history.filterMenu.source.outlook",
-      message: "Outlook",
-    }),
-    word: t({ id: "chat.history.filterMenu.source.word", message: "Word" }),
-    officeAddin: t({
-      id: "chat.history.filterMenu.source.officeAddin",
-      message: "Office add-in",
-    }),
-    teams: t({ id: "chat.history.filterMenu.source.teams", message: "Teams" }),
-    legacy: t({
-      id: "chat.history.filterMenu.source.legacy",
-      message: "Older chats",
-    }),
+  const setters = {
+    setTypeFilter,
+    setStatusFilter,
+    setDelegatedFilter,
+    setGroupBy,
+    setSourceMode,
+    toggleSource,
+    resetToDefaults,
   };
-
-  const buildSourceRow = (): SubmenuRow => {
-    const { mode, sources } = filters.sourceFilter;
-    const selectedLabels = sources
-      .map((source) => sourceLabels[source])
-      .join(", ");
-    let valueLabel = sourceModeOptions[0].label;
-    if (isSourceFilterActive(filters.sourceFilter)) {
-      valueLabel =
-        mode === "only"
-          ? t({
-              id: "chat.history.filterMenu.source.onlyValue",
-              message: `Only: ${selectedLabels}`,
-            })
-          : t({
-              id: "chat.history.filterMenu.source.hideValue",
-              message: `Hiding: ${selectedLabels}`,
-            });
+  const choose = (entry: MenuEntry) => {
+    const choice = filterMenuChoice(entry.id);
+    if (!choice) return;
+    if (entry.keepOpen) {
+      applyFilterMenuChoice(choice, setters);
+    } else {
+      applyAndClose(() => applyFilterMenuChoice(choice, setters));
     }
-    return {
-      key: "source",
-      label: t({ id: "chat.history.filterMenu.source", message: "Source" }),
-      valueLabel,
-      options: sourceModeOptions.map((option) => ({
-        id: option.value,
-        label: option.label,
-        selected: option.value === mode,
-        onSelect: () => setSourceMode(option.value),
-      })),
-      checkboxGroup: {
-        label: t({
-          id: "chat.history.filterMenu.source.sources",
-          message: "Sources",
-        }),
-        options: CHAT_HISTORY_SOURCE_VALUES.filter((source) =>
-          availableSources.includes(source),
-        ).map((source) => ({
-          id: source,
-          label: sourceLabels[source],
-          selected: sources.includes(source),
-          disabled: mode === "all",
-          onSelect: () => toggleSource(source),
-        })),
-      },
-    };
   };
-
-  const typeRow = assistantsEnabled
-    ? buildRow(
-        "type",
-        t({ id: "chat.history.filterMenu.type", message: "Type" }),
-        typeOptions,
-        filters.typeFilter,
-        (value) => applyAndClose(() => setTypeFilter(value)),
-      )
-    : null;
-
-  const statusRow = buildRow(
-    "status",
-    t({ id: "chat.history.filterMenu.status", message: "Status" }),
-    statusOptions,
-    filters.statusFilter,
-    (value) => applyAndClose(() => setStatusFilter(value)),
+  const sections = describeFilterMenu(filterValues, filterCapabilities).map(
+    (section) => section.children ?? [],
   );
-
-  const delegatedRow = showDelegatedRow
-    ? buildRow(
-        "delegated",
-        t({
-          id: "chat.history.filterMenu.delegated",
-          message: "Delegated runs",
-        }),
-        delegatedOptions,
-        filters.delegatedFilter,
-        (value) => applyAndClose(() => setDelegatedFilter(value)),
-      )
-    : null;
-
-  const sourceRow = showSourceRow ? buildSourceRow() : null;
-
-  const groupByRow = buildRow(
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- submenu key, not user-facing
-    "groupBy",
-    t({ id: "chat.history.filterMenu.groupBy", message: "Group by" }),
-    groupByOptions,
-    filters.groupBy,
-    (value) => applyAndClose(() => setGroupBy(value)),
+  const rowsByKey: Partial<Record<SubmenuKey, SubmenuRow>> = Object.fromEntries(
+    sections
+      .flat()
+      .filter((entry) => entry.children)
+      .map((entry) => [entry.id, submenuRowFromEntry(entry, choose)]),
   );
-
-  const rowsByKey: Record<SubmenuKey, SubmenuRow | null> = {
-    type: typeRow,
-    status: statusRow,
-    delegated: delegatedRow,
-    source: sourceRow,
-    groupBy: groupByRow,
-  };
-  const activeRow = openSubmenu ? rowsByKey[openSubmenu] : null;
+  const activeRow = openSubmenu ? (rowsByKey[openSubmenu] ?? null) : null;
 
   const renderSubmenuRow = (row: SubmenuRow) => (
     <Row
@@ -721,29 +550,29 @@ export function ChatHistoryFilterMenu({
         onKeyDown={handlePanelKeyDown}
         dataUi="chat-history-filter-menu-content"
       >
-        {typeRow && renderSubmenuRow(typeRow)}
-        {renderSubmenuRow(statusRow)}
-        {delegatedRow && renderSubmenuRow(delegatedRow)}
-        {sourceRow && renderSubmenuRow(sourceRow)}
-        <PopoverSeparator />
-        {renderSubmenuRow(groupByRow)}
-        <PopoverSeparator />
-        <Row
-          variant="menu"
-          role="menuitem"
-          tabIndex={-1}
-          data-filter-menu-row="reset"
-          data-testid="chat-history-filter-menu-reset"
-          onClick={() => applyAndClose(resetToDefaults)}
-          onPointerEnter={handleSubmenuHoverAway}
-        >
-          <span className="min-w-0 flex-1 truncate">
-            {t({
-              id: "chat.history.filterMenu.reset",
-              message: "Reset to defaults",
+        {sections.map((entries, index) => (
+          <Fragment key={index}>
+            {index > 0 && <PopoverSeparator />}
+            {entries.map((entry) => {
+              const row = rowsByKey[entry.id as SubmenuKey];
+              if (row) return renderSubmenuRow(row);
+              return (
+                <Row
+                  key={entry.id}
+                  variant="menu"
+                  role="menuitem"
+                  tabIndex={-1}
+                  data-filter-menu-row={entry.id}
+                  data-testid={`chat-history-filter-menu-${entry.id}`}
+                  onClick={() => choose(entry)}
+                  onPointerEnter={handleSubmenuHoverAway}
+                >
+                  <span className="min-w-0 flex-1 truncate">{entry.label}</span>
+                </Row>
+              );
             })}
-          </span>
-        </Row>
+          </Fragment>
+        ))}
 
         {activeRow && (
           <PopoverPanel

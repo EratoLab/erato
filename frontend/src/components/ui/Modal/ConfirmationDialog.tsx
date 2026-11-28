@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { confirmLabels } from "@/lib/shell/menus/confirmLabels";
 
 import { ModalBase } from "./ModalBase";
 import { Button } from "../Controls/Button"; // Assuming ButtonVariant is exported
@@ -23,8 +23,8 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   onConfirm,
   title,
   message,
-  confirmButtonText = t`Confirm`,
-  cancelButtonText = t`Cancel`,
+  confirmButtonText = confirmLabels().confirmLabel,
+  cancelButtonText = confirmLabels().cancelLabel,
   confirmButtonVariant = "primary",
 }) => {
   if (!isOpen) {

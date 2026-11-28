@@ -7,7 +7,7 @@
 import { t } from "@lingui/core/macro";
 import { useMemo, useState } from "react";
 
-import { getOptionalTranslation } from "@/hooks/i18n";
+import { modelDescription } from "@/lib/shell/menus/describeModelMenu";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { ChevronDownIcon, ResolvedIcon } from "../icons";
@@ -39,16 +39,6 @@ interface ModelSelectorProps {
   align?: "left" | "right";
 }
 
-function resolveModelDescription(model: ChatModel): string | null {
-  if (!model.model_description) {
-    return null;
-  }
-
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by chat provider ID
-  const translationId = `chat_models.${model.chat_provider_id}.description`;
-  return getOptionalTranslation(translationId) ?? model.model_description;
-}
-
 export function ModelSelectorOptionContent({
   model,
   compact = false,
@@ -58,7 +48,7 @@ export function ModelSelectorOptionContent({
   compact?: boolean;
   reserveIconSpace?: boolean;
 }) {
-  const description = resolveModelDescription(model);
+  const description = modelDescription(model);
   const shouldShowIconSlot = reserveIconSpace || Boolean(model.model_icon);
 
   return (

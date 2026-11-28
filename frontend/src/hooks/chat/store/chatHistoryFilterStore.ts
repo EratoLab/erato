@@ -77,7 +77,7 @@ export const CHAT_HISTORY_SOURCE_VALUES: readonly ChatHistorySource[] = [
   "teams",
   "legacy",
 ];
-const SOURCE_MODE_VALUES: readonly ChatHistorySourceMode[] = [
+export const SOURCE_MODE_VALUES: readonly ChatHistorySourceMode[] = [
   "all",
   "only",
   "hide",
@@ -171,20 +171,20 @@ function coerceSourceFilter(value: unknown): ChatHistorySourceFilter {
   };
 }
 
-const TYPE_FILTER_VALUES: readonly ChatHistoryTypeFilter[] = [
+export const TYPE_FILTER_VALUES: readonly ChatHistoryTypeFilter[] = [
   "all",
   "chat",
   "assistant",
 ];
-const STATUS_FILTER_VALUES: readonly ChatHistoryStatusFilter[] = [
+export const STATUS_FILTER_VALUES: readonly ChatHistoryStatusFilter[] = [
   "active",
   "all",
 ];
-const DELEGATED_FILTER_VALUES: readonly ChatHistoryDelegatedFilter[] = [
+export const DELEGATED_FILTER_VALUES: readonly ChatHistoryDelegatedFilter[] = [
   "hidden",
   "shown",
 ];
-const GROUP_BY_VALUES: readonly ChatHistoryGroupBy[] = [
+export const GROUP_BY_VALUES: readonly ChatHistoryGroupBy[] = [
   "date",
   "type",
   "unread",

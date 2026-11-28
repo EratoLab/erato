@@ -2051,8 +2051,7 @@ msgid "chat.audio.transcriptPlaceholder"
 msgstr "Das Transkript erscheint hier…"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/CompactionSuggestion.tsx
+#: src/lib/shell/menus/addMenuTexts.ts
 msgid "chat.compaction.action"
 msgstr "Chatverlauf komprimieren"
 
@@ -2268,42 +2267,42 @@ msgid "chat.history.files.count"
 msgstr "{count, plural, =0 {Keine Dateien} one {# Datei} other {# Dateien}}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.delegated"
 msgstr "Delegierte Ausführungen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.delegated.hidden"
 msgstr "Ausgeblendet"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.delegated.shown"
 msgstr "Eingeblendet"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.groupBy"
 msgstr "Gruppieren nach"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.groupBy.date"
 msgstr "Datum"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.groupBy.none"
 msgstr "Keine"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.groupBy.type"
 msgstr "Typ"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.groupBy.unread"
 msgstr "Ungelesen"
 
@@ -2313,87 +2312,87 @@ msgid "chat.history.filterMenu.noMatches"
 msgstr "Keine Chats entsprechen den aktuellen Filtern"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.reset"
 msgstr "Auf Standard zurücksetzen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source"
 msgstr "Quelle"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.hideValue"
 msgstr "Ausgeblendet: {selectedLabels}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.legacy"
 msgstr "Ältere Chats"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.mode.all"
 msgstr "Alle"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.mode.hide"
 msgstr "Auswahl ausblenden"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.mode.only"
 msgstr "Nur Auswahl"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.officeAddin"
 msgstr "Office-Add-in"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.onlyValue"
 msgstr "Nur: {selectedLabels}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.outlook"
 msgstr "Outlook"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.sources"
 msgstr "Quellen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.teams"
 msgstr "Teams"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.web"
 msgstr "Web-App"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.source.word"
 msgstr "Word"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.status"
 msgstr "Status"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.status.active"
 msgstr "Aktiv"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.status.all"
 msgstr "Alle"
 
@@ -2403,22 +2402,22 @@ msgid "chat.history.filterMenu.trigger"
 msgstr "Chats filtern und sortieren"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.type"
 msgstr "Typ"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.type.all"
 msgstr "Alle"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.type.assistant"
 msgstr "Assistent"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+#: src/lib/shell/menus/describeFilterMenu.ts
 msgid "chat.history.filterMenu.type.chat"
 msgstr "Chat"
 
@@ -2499,55 +2498,55 @@ msgid "chat.history.loading_more"
 msgstr "Laden..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/chatArchiveActions.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.confirm_archive.action_required"
 msgstr "Dieser Chat wartet auf eine Tool-Genehmigung. Durch das Archivieren geht sie verloren, und das Aufheben der Archivierung setzt die Antwort nicht fort."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/chatArchiveActions.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.confirm_archive.running"
 msgstr "Dieser Chat generiert noch. Das Archivieren stoppt die Antwort nicht."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/chatArchiveActions.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.confirm_archive.waiting"
 msgstr "Dieser Chat wartet auf eine verbundene App oder seine Aufgaben. Durch das Archivieren wird das Warten abgebrochen, und das Aufheben der Archivierung setzt die Antwort nicht fort."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/chatArchiveActions.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.confirm_remove.title"
 msgstr "Diesen Chat archivieren?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.pin"
 msgstr "Anheften"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.pinLimitReached"
 msgstr "Anheftlimit erreicht"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/chatArchiveActions.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.remove"
 msgstr "Archivieren"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.rename"
 msgstr "Umbenennen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/chatArchiveActions.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.unarchive"
 msgstr "Archivierung aufheben"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.history.menu.unpin"
 msgstr "Lösen"
 
@@ -3190,7 +3189,7 @@ msgstr "Dieser Entwurf ist zu lang, damit die KI ihn verarbeiten kann ({actualKb
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/lib/shell/menus/describeRowMenu.ts
 msgid "chat.share.button"
 msgstr "Teilen"
 
@@ -3341,6 +3340,7 @@ msgstr "Das Budget konnte nicht aktualisiert werden. Die Zahlen sind möglicherw
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+#: src/lib/shell/menus/describeAddMenu.ts
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Modell"
 
@@ -3351,6 +3351,7 @@ msgstr "Zurück:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
+#: src/lib/shell/menus/describeAddMenu.ts
 msgid "chatInput.addMenu.toolsHeader"
 msgstr "Tools"
 
@@ -4745,13 +4746,13 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
-#: src/hooks/files/useChatFileSources.tsx
+#: src/lib/shell/menus/addMenuTexts.ts
 msgid "fileSourceSelector.uploadFromComputer"
 msgstr "Vom Computer hochladen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
-#: src/hooks/files/useChatFileSources.tsx
+#: src/lib/shell/menus/addMenuTexts.ts
 msgid "fileSourceSelector.uploadFromOneDrive"
 msgstr "Von Sharepoint hochladen"
 
@@ -7529,7 +7530,7 @@ msgid "preferences.dialog.tools.descriptionToggle"
 msgstr "Beschreibung von {toolTitle}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Controls/UserProfileDropdown.tsx
+#: src/lib/shell/menus/describeAccountMenu.ts
 msgid "profile.menu.preferences"
 msgstr "Einstellungen"
 
@@ -12554,7 +12555,7 @@ msgid "Browser Language:"
 msgstr "Browsersprache:"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
-#: src/components/ui/Modal/ConfirmationDialog.tsx
+#: src/lib/shell/menus/confirmLabels.ts
 msgid "Cancel"
 msgstr "Abbrechen"
 
@@ -12688,7 +12689,7 @@ msgstr "Seitenleiste einklappen"
 #~ msgid "Configure a custom assistant with specific instructions and capabilities"
 #~ msgstr "Konfigurieren Sie einen benutzerdefinierten Assistenten mit spezifischen Anweisungen und Fähigkeiten"
 
-#: src/components/ui/Modal/ConfirmationDialog.tsx
+#: src/lib/shell/menus/confirmLabels.ts
 msgid "Confirm"
 msgstr "Bestätigen"
 
@@ -13646,7 +13647,7 @@ msgstr "Tool-Aufrufe anzeigen"
 msgid "Showing {resultsCount} recent chats"
 msgstr "Zeigt {resultsCount} aktuelle Chats"
 
-#: src/components/ui/Controls/UserProfileDropdown.tsx
+#: src/lib/shell/menus/describeAccountMenu.ts
 msgid "Sign out"
 msgstr "Abmelden"
 

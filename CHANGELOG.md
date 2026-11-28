@@ -96,6 +96,10 @@ Typical "Notable changes" categories to copy & paste:
 
 **An answer that finished during a network break shows by itself.** When the connection dropped for longer than the rest of an answer took, the half-written answer disappeared once the network was back, and the finished one showed only after a reload or leaving the app and coming back. Now the streamed text stays until the stored answer replaces it, also when the person moved to another chat meanwhile; if the stored answer cannot be read yet, it is read again once the network is back or the page is shown again. A reattach that is turned away by a proxy no longer shows the proxy's HTML page as the error text, and the server answers 503 instead of 404 when it cannot tell whether an answer is still running. [#1695](https://github.com/EratoLab/erato/pull/1695)
 
+#### Chores & Developer experience
+
+**A host app can test what the page may send to its system menus.** The "+", model, chat row, history filter and account menus are each described as data by a pure function (`frontend/src/lib/shell/menus/`), and the row, filter and account web menus draw from that description. `frontend/src/lib/shell/contract/systemMenus.v1.schema.json` is the shape a host app that offers `systemMenus: 1` in `window.ERATO_SHELL` may be sent, and `pnpm shell:catalogue` writes every menu in every fixture setting as the request the page would send, for the host's own tests. Nothing changes in the web app.
+
 #### Deprecations and upgrade notes
 
 - **Hover rules in a theme's `theme.css` should be limited to a mouse or trackpad.** The app's own hover looks now apply only inside `@media (hover: hover) and (pointer: fine)` and show while pressed on a touch screen. A `:hover` rule in `theme.css` still applies on a touch screen and stays on whatever was tapped last; put it inside that media query and add an `:active` twin inside `@media not all and (hover: hover) and (pointer: fine)` (see Theming).

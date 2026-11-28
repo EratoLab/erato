@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 
 import { env } from "@/app/env";
+import { compactChatLabel } from "@/lib/shell/menus/addMenuTexts";
 
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -37,7 +38,7 @@ export function CompactionSuggestion({
         onClick={onCompact}
         disabled={pending}
       >
-        {t({ id: "chat.compaction.action", message: "Compact chat history" })}
+        {compactChatLabel()}
       </Button>
     </Alert>
   );

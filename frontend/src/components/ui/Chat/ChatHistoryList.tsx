@@ -7,6 +7,11 @@ import { useChatWaitsOnly } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
 import { useThemedIcon } from "@/hooks/ui";
+import { describeRowMenu } from "@/lib/shell/menus/describeRowMenu";
+import {
+  rowMenuDropdownItems,
+  rowMenuHandles,
+} from "@/lib/shell/menus/web/rowMenuDropdownItems";
 import { delegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
 import {
   DELEGATION_PROVENANCE_KIND,
@@ -17,27 +22,17 @@ import { chatAttentionStatusLabel } from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
-import {
-  ArchivedChatPill,
-  archivedChatLabel,
-  buildArchiveMenuItems,
-} from "./chatArchiveActions";
+import { ArchivedChatPill, archivedChatLabel } from "./chatArchiveActions";
 import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
 import { CHAT_HISTORY_ROW_TEST_ID } from "./chatHistoryRowTestIds";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { Row } from "../Controls/Row";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
-import {
-  EditIcon,
-  ResolvedIcon,
-  MultiplePagesIcon,
-  PinIcon,
-  PinSlashIcon,
-  ShareIcon,
-} from "../icons";
+import { ResolvedIcon, MultiplePagesIcon } from "../icons";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
+import type { RowMenuState } from "@/lib/shell/menus/describeRowMenu";
 import type { ChatSession } from "@/types/chat";
 import type { DelegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
@@ -167,15 +162,7 @@ export interface ChatHistoryRowMenuOptions extends ChatHistoryRowMenuHandlers {
   session: ChatSession;
 }
 
-/** What the gates read, for a row that is not a `ChatSession`. */
-export interface ChatHistoryRowMenuState {
-  archived: boolean;
-  isPinned: boolean;
-  canEdit: boolean;
-  isRun: boolean;
-  status: ChatAttentionStatus | null;
-  waitingOnly: boolean;
-}
+export type ChatHistoryRowMenuState = RowMenuState;
 
 /**
  * The row's dropdown items, already gated. A caller renders the array as it
@@ -185,14 +172,7 @@ export interface ChatHistoryRowMenuState {
  * the state by hand loses the run and pending-confirmation gates.
  */
 export const buildChatHistoryRowMenuItems = (
-  {
-    archived,
-    isPinned,
-    canEdit,
-    isRun,
-    status,
-    waitingOnly,
-  }: ChatHistoryRowMenuState,
+  state: ChatHistoryRowMenuState,
   {
     pinnedChatsCount,
     pinnedChatsLimit,
@@ -203,78 +183,21 @@ export const buildChatHistoryRowMenuItems = (
     onPin,
   }: ChatHistoryRowMenuHandlers,
 ): DropdownMenuItem[] => {
-  const isPinLimitReached = !isPinned && pinnedChatsCount >= pinnedChatsLimit;
-  const pinMenuLabel = isPinLimitReached
-    ? t({
-        id: "chat.history.menu.pinLimitReached",
-        message: "Pin limit reached",
-      })
-    : isPinned
-      ? t({
-          id: "chat.history.menu.unpin",
-          message: "Unpin",
-        })
-      : t({
-          id: "chat.history.menu.pin",
-          message: "Pin",
-        });
-
-  return [
-    ...(onPin && !archived
-      ? [
-          {
-            id: CHAT_HISTORY_ROW_MENU_ID.pin,
-            label: pinMenuLabel,
-            icon: isPinned ? (
-              <PinSlashIcon className="size-4" />
-            ) : (
-              <PinIcon className="size-4" />
-            ),
-            onClick: onPin,
-            disabled: !canEdit || isPinLimitReached,
-          },
-        ]
-      : []),
-    ...(onShare && !archived
-      ? [
-          {
-            id: CHAT_HISTORY_ROW_MENU_ID.share,
-            label: t({
-              id: "chat.share.button",
-              message: "Share",
-            }),
-            icon: <ShareIcon className="size-4" />,
-            onClick: onShare,
-            disabled: !canEdit,
-          },
-        ]
-      : []),
-    ...(onEditTitle
-      ? [
-          {
-            id: CHAT_HISTORY_ROW_MENU_ID.rename,
-            label: t({
-              id: "chat.history.menu.rename",
-              message: "Rename",
-            }),
-            icon: <EditIcon className="size-4" />,
-            onClick: onEditTitle,
-            disabled: !canEdit,
-          },
-        ]
-      : []),
-    // Runs get neither: archiving cannot cancel a live generation or free a
-    // parked approval, and cleanup re-archives unadopted runs.
-    ...(isRun
-      ? []
-      : buildArchiveMenuItems({
-          archived,
-          status,
-          waitingOnly,
-          onArchive,
-          onUnarchive,
-        })),
-  ];
+  const handlers = {
+    [CHAT_HISTORY_ROW_MENU_ID.pin]: onPin,
+    [CHAT_HISTORY_ROW_MENU_ID.share]: onShare,
+    [CHAT_HISTORY_ROW_MENU_ID.rename]: onEditTitle,
+    [CHAT_HISTORY_ROW_MENU_ID.archive]: onArchive,
+    [CHAT_HISTORY_ROW_MENU_ID.unarchive]: onUnarchive,
+  };
+  return rowMenuDropdownItems(
+    describeRowMenu(state, {
+      pinnedChatsCount,
+      pinnedChatsLimit,
+      handles: rowMenuHandles(handlers),
+    }),
+    handlers,
+  );
 };
 
 const chatHistoryRowMenuOptions = (
