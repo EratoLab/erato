@@ -1,5 +1,7 @@
 import { hostShellWithCapability } from "@/lib/hostShell";
 
+import type { HostShell } from "@/lib/hostShell";
+
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const START_SCREEN_CAPABILITY = "startScreen";
 
@@ -13,6 +15,10 @@ let inFlight = 0;
 let stopCounting: (() => void) | null = null;
 const onRequestEnd = new Set<() => void>();
 let reported = false;
+/** What a start may do next, as last told; sent with the report. */
+let startMayResume = false;
+/** The `resume` the shell last heard, once it heard one. */
+let reportedResume: boolean | undefined;
 
 /**
  * A host app may cover the page while it starts, so a person sees one calm
@@ -64,12 +70,41 @@ export function reportDrawnWhenSettled(limitMs = SETTLE_LIMIT_MS): () => void {
     if (controller.signal.aborted || reported) return;
     reported = true;
     stopCounting?.();
-    void shell
-      // eslint-disable-next-line lingui/no-unlocalized-strings
-      .request("startScreen.ready", { background: pageBackground() ?? null })
-      .catch(() => {});
+    sendReady(shell);
   });
   return () => controller.abort();
+}
+
+/**
+ * Whether the next start of the app may reopen the page on screen instead of
+ * the start address: only while no start screen was chosen, by the person or
+ * the organization. A shell that keeps pages (`startScreen` 2) hears it with
+ * the report, and again when it changes after the report, so that a choice
+ * made in the settings holds on the very next start.
+ */
+export function setStartMayResume(mayResume: boolean): void {
+  startMayResume = mayResume;
+  if (reportedResume === undefined || reportedResume === mayResume) return;
+  const shell = hostShellWithCapability(START_SCREEN_CAPABILITY, 2);
+  if (shell) sendReady(shell);
+}
+
+/** Whether the shell may reopen a page on its next start (`startScreen` 2). */
+export function shellKeepsStartPage(): boolean {
+  return hostShellWithCapability(START_SCREEN_CAPABILITY, 2) !== null;
+}
+
+function sendReady(shell: HostShell): void {
+  const background = pageBackground() ?? null;
+  const keepsPages = shellKeepsStartPage();
+  const params = keepsPages
+    ? { background, resume: startMayResume }
+    : { background };
+  if (keepsPages) reportedResume = startMayResume;
+  void shell
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    .request("startScreen.ready", params)
+    .catch(() => {});
 }
 
 /**
