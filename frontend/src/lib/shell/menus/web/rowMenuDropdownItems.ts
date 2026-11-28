@@ -1,7 +1,9 @@
 import { CHAT_HISTORY_ROW_MENU_ID } from "@/components/ui/Chat/chatHistoryRowMenuIds";
 
 import { menuEntryDropdownItems } from "./dropdownItems";
+import { describeRowMenu } from "../describeRowMenu";
 
+import type { RowMenuState } from "../describeRowMenu";
 import type { MenuEntry } from "../menuEntry";
 import type { ChatHistoryRowMenuId } from "@/components/ui/Chat/chatHistoryRowMenuIds";
 import type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
@@ -24,6 +26,47 @@ export const rowMenuHandles = (
       handlers[id] !== undefined,
     ]),
   );
+
+export interface RowMenuOptions {
+  pinnedChatsCount: number;
+  pinnedChatsLimit: number;
+  onPin?: () => void;
+  onShare?: () => void;
+  onEditTitle?: () => void;
+  onArchive?: () => void;
+  onUnarchive?: () => void;
+}
+
+/**
+ * A chat row's menu, gated: its description, the web menu's items drawn
+ * from it, and what a pick of each entry does, for either drawing.
+ */
+export function rowMenu(
+  state: RowMenuState,
+  { pinnedChatsCount, pinnedChatsLimit, ...actions }: RowMenuOptions,
+): {
+  entries: MenuEntry[];
+  items: DropdownMenuItem[];
+  choose: (id: string) => void;
+} {
+  const handlers: RowMenuHandlers = {
+    [CHAT_HISTORY_ROW_MENU_ID.pin]: actions.onPin,
+    [CHAT_HISTORY_ROW_MENU_ID.share]: actions.onShare,
+    [CHAT_HISTORY_ROW_MENU_ID.rename]: actions.onEditTitle,
+    [CHAT_HISTORY_ROW_MENU_ID.archive]: actions.onArchive,
+    [CHAT_HISTORY_ROW_MENU_ID.unarchive]: actions.onUnarchive,
+  };
+  const entries = describeRowMenu(state, {
+    pinnedChatsCount,
+    pinnedChatsLimit,
+    handles: rowMenuHandles(handlers),
+  });
+  return {
+    entries,
+    items: rowMenuDropdownItems(entries, handlers),
+    choose: (id) => handlers[id as ChatHistoryRowMenuId]?.(),
+  };
+}
 
 /** The web drawing of a row menu description, for `DropdownMenu`. */
 export const rowMenuDropdownItems = (

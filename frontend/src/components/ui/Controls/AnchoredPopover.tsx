@@ -24,6 +24,7 @@ import { isImeComposing } from "@/utils/isImeComposing";
 import { PopoverPanel } from "./PopoverPanel";
 
 import type { PopoverWidth } from "./PopoverPanel";
+import type { NativeMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 
 type Orientation = {
   vertical: "top" | "bottom";
@@ -53,6 +54,11 @@ export interface AnchoredPopoverTriggerProps {
 export interface AnchoredPopoverProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * The host app's system menu for this trigger (`useSystemMenu`): it opens
+   * in place of the panel, which still opens where the app draws none.
+   */
+  nativeMenu?: NativeMenu;
   /** Omitted when the panel is anchored to `anchorRect`. */
   trigger?: (props: AnchoredPopoverTriggerProps) => ReactNode;
   /**
@@ -97,6 +103,7 @@ function clamp(value: number, min: number, max: number) {
 export function AnchoredPopover({
   isOpen,
   onOpenChange,
+  nativeMenu,
   trigger,
   anchorRect,
   anchorGap = 0,
@@ -332,6 +339,14 @@ export function AnchoredPopover({
     wasOpenRef.current = isOpen;
   }, [isOpen, manageFocus]);
 
+  const openPanel = () => onOpenChange(true);
+
+  useEffect(() => {
+    if (!nativeMenu) return;
+    nativeMenu.attachTo(triggerRef.current);
+    return () => nativeMenu.attachTo(null);
+  }, [nativeMenu]);
+
   const triggerProps: AnchoredPopoverTriggerProps = {
     ref: triggerRef,
     id: triggerId,
@@ -342,6 +357,7 @@ export function AnchoredPopover({
       // Space/Enter dispatch a synthetic click; detail === 0 marks a
       // keyboard-driven activation (a real pointer click has detail >= 1).
       openViaKeyboardRef.current = event.detail === 0;
+      if (!isOpen && nativeMenu?.open(event.currentTarget, openPanel)) return;
       onOpenChange(!isOpen);
     },
     onKeyDown: (event) => {
@@ -350,6 +366,7 @@ export function AnchoredPopover({
       if (!isOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
         event.preventDefault();
         openViaKeyboardRef.current = true;
+        if (nativeMenu?.open(event.currentTarget, openPanel)) return;
         onOpenChange(true);
       }
     },

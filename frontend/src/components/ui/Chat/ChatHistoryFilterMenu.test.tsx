@@ -6,11 +6,17 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatHistoryFilterStore } from "@/hooks/chat/store/chatHistoryFilterStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import {
+  emitHostShellEvent,
+  installHostShell,
+  removeHostShell,
+} from "@/test/hostShellStub";
 
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
 
@@ -518,6 +524,64 @@ describe("ChatHistoryFilterMenu", () => {
       setUp(200);
 
       expect(openStatusFlyout().style.top).toBe("0px");
+    });
+  });
+
+  describe("in an app with system menus", () => {
+    afterEach(() => removeHostShell());
+
+    it("shows the system's menu with each row's value, and applies a flip at once", async () => {
+      let close: (answer: unknown) => void = () => {};
+      const request = installHostShell(
+        { systemMenus: 1 },
+        vi.fn((method: string) =>
+          method === "systemMenus.show"
+            ? new Promise((resolve) => (close = resolve))
+            : Promise.resolve({ updated: true }),
+        ),
+      );
+      renderMenu(true, true, ["web", "outlook"]);
+      openMenu();
+
+      expect(
+        screen.queryByTestId("chat-history-filter-menu-row-type"),
+      ).toBeNull();
+      await waitFor(() =>
+        expect(request).toHaveBeenCalledWith(
+          "systemMenus.show",
+          expect.objectContaining({ id: "chat-history-filter" }),
+        ),
+      );
+      const { items } = request.mock.calls[0][1] as {
+        items: { children: { id: string; subtitle?: string }[] }[];
+      };
+      expect(items[0].children.map((row) => [row.id, row.subtitle])).toEqual([
+        ["type", "All"],
+        ["status", "Active"],
+        ["delegated", "Hidden"],
+        ["source", "All"],
+      ]);
+
+      act(() =>
+        emitHostShellEvent("systemMenus.toggled", {
+          id: "chat-history-filter",
+          itemId: "sourceMode:only",
+          on: true,
+        }),
+      );
+      expect(useChatHistoryFilterStore.getState().sourceFilter.mode).toBe(
+        "only",
+      );
+      await waitFor(() =>
+        expect(request).toHaveBeenCalledWith(
+          "systemMenus.update",
+          expect.objectContaining({ id: "chat-history-filter" }),
+        ),
+      );
+      close({ shown: true, chosen: "groupBy:none" });
+      await waitFor(() =>
+        expect(useChatHistoryFilterStore.getState().groupBy).toBe("none"),
+      );
     });
   });
 });

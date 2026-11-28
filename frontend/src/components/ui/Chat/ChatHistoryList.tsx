@@ -7,11 +7,8 @@ import { useChatWaitsOnly } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
 import { useThemedIcon } from "@/hooks/ui";
-import { describeRowMenu } from "@/lib/shell/menus/describeRowMenu";
-import {
-  rowMenuDropdownItems,
-  rowMenuHandles,
-} from "@/lib/shell/menus/web/rowMenuDropdownItems";
+import { rowMenu } from "@/lib/shell/menus/web/rowMenuDropdownItems";
+import { useSystemMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 import { delegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
 import {
   DELEGATION_PROVENANCE_KIND,
@@ -23,7 +20,6 @@ import { createLogger } from "@/utils/debugLogger";
 
 import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
 import { ArchivedChatPill, archivedChatLabel } from "./chatArchiveActions";
-import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
 import { CHAT_HISTORY_ROW_TEST_ID } from "./chatHistoryRowTestIds";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
@@ -173,32 +169,8 @@ export type ChatHistoryRowMenuState = RowMenuState;
  */
 export const buildChatHistoryRowMenuItems = (
   state: ChatHistoryRowMenuState,
-  {
-    pinnedChatsCount,
-    pinnedChatsLimit,
-    onArchive,
-    onUnarchive,
-    onEditTitle,
-    onShare,
-    onPin,
-  }: ChatHistoryRowMenuHandlers,
-): DropdownMenuItem[] => {
-  const handlers = {
-    [CHAT_HISTORY_ROW_MENU_ID.pin]: onPin,
-    [CHAT_HISTORY_ROW_MENU_ID.share]: onShare,
-    [CHAT_HISTORY_ROW_MENU_ID.rename]: onEditTitle,
-    [CHAT_HISTORY_ROW_MENU_ID.archive]: onArchive,
-    [CHAT_HISTORY_ROW_MENU_ID.unarchive]: onUnarchive,
-  };
-  return rowMenuDropdownItems(
-    describeRowMenu(state, {
-      pinnedChatsCount,
-      pinnedChatsLimit,
-      handles: rowMenuHandles(handlers),
-    }),
-    handlers,
-  );
-};
+  handlers: ChatHistoryRowMenuHandlers,
+): DropdownMenuItem[] => rowMenu(state, handlers).items;
 
 const chatHistoryRowMenuOptions = (
   {
@@ -267,16 +239,24 @@ export const useChatHistoryRow = (
   props: ChatHistoryListProps,
   session: ChatSession,
 ): ChatHistoryRow => {
+  const { menu: _menu, ...row } = useRow(props, session);
+  return row;
+};
+
+/** The row with its menu as data, for the app's system menu. */
+const useRow = (props: ChatHistoryListProps, session: ChatSession) => {
   const title = useRowTitle(session);
   const status = useChatRowStatus(session.id, session);
   const waitingOnly = useChatWaitsOnly(session.id);
+  const menu = rowMenu(
+    rowMenuState(session, status, waitingOnly),
+    chatHistoryRowMenuOptions(props, session),
+  );
 
   return {
     ...rowPresentation(session, title, status),
-    menuItems: buildChatHistoryRowMenuItems(
-      rowMenuState(session, status, waitingOnly),
-      chatHistoryRowMenuOptions(props, session),
-    ),
+    menuItems: menu.items,
+    menu,
   };
 };
 
@@ -350,7 +330,15 @@ const ChatHistoryListItem = memo<{
       subline,
       ariaLabel: rowAriaLabel,
       menuItems,
-    } = useChatHistoryRow(listProps, session);
+      menu,
+    } = useRow(listProps, session);
+    const nativeMenu = useSystemMenu({
+      id: `chat-row:${session.id}`,
+      mode: "show",
+      entries: menu.entries,
+      title: rowTitle,
+      onChoose: menu.choose,
+    });
     // A stable Date instance: an inline `new Date(...)` would defeat
     // MessageTimestamp's shallow memo on every list render.
     const updatedAtDate = useMemo(
@@ -391,6 +379,7 @@ const ChatHistoryListItem = memo<{
             <DropdownMenu
               triggerButtonVariant="sidebar-icon"
               items={menuItems}
+              nativeMenu={nativeMenu}
             />
           </div>
         </div>

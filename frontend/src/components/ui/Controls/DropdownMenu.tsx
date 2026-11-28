@@ -26,6 +26,7 @@ import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 import { MoreVertical, CheckIcon } from "../icons";
 
 import type { ButtonGeometry, ButtonVariant } from "./Button";
+import type { NativeMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 import type React from "react";
 
 export interface DropdownMenuItem {
@@ -95,6 +96,8 @@ export interface DropdownMenuProps {
   onOpenChange?: (isOpen: boolean) => void;
   /** Panel theme hook; override to keep a menu out of the family's rules. */
   dataUi?: string;
+  /** The host app's system menu for the same entries; see AnchoredPopover. */
+  nativeMenu?: NativeMenu;
 }
 
 // Navigable rows for roving focus and initial keyboard focus; natively-disabled
@@ -194,6 +197,7 @@ export const DropdownMenu = memo(
     autoFocusFirstItem = true,
     onOpenChange,
     dataUi = "dropdown-panel",
+    nativeMenu,
   }: DropdownMenuProps) => {
     const [isOpen, setIsOpenState] = useState(false);
 
@@ -324,6 +328,7 @@ export const DropdownMenu = memo(
           id={id}
           isOpen={isOpen}
           onOpenChange={setIsOpen}
+          nativeMenu={nativeMenu}
           className={className}
           role="menu"
           ariaHasPopup="menu"

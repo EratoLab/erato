@@ -52,13 +52,14 @@ import {
 } from "@/test/teamsTranscriptFixtures";
 
 import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
+import { buildAssistantMentionSection } from "./assistantMentionSection";
 import { useToastStore } from "../Toast/toastStore";
 
 import type {
-  AddMenuActionItem,
-  AddMenuSection,
-  AddMenuToolItem,
-} from "./ChatInputAddMenu";
+  ChatInputAddMenuActions,
+  ChatInputAddMenuData,
+} from "./ChatInputAddControls";
+import type { AddMenuActionItem, AddMenuSection } from "./ChatInputAddMenu";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type {
   ComposerContextChipFaceProps,
@@ -1379,9 +1380,9 @@ describe("ChatInput", () => {
 
     const addControlsProps = () =>
       mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
-        modelSection?: AddMenuSection;
+        menu: ChatInputAddMenuData;
+        actions: ChatInputAddMenuActions;
         selectedToolCount?: number;
-        toolsDisabledReason?: string;
       };
 
     it("marks the shell one-line, drops the tool chips and model picker, and hands the model and tool count to the + menu", async () => {
@@ -1397,15 +1398,14 @@ describe("ChatInput", () => {
         container.querySelector('[data-ui="composer-tool-chips"]'),
       ).toBeNull();
 
-      const { modelSection, selectedToolCount } = addControlsProps();
+      const { menu, actions, selectedToolCount } = addControlsProps();
       expect(selectedToolCount).toBe(1);
-      expect(modelSection?.submenu?.summary).toBe("Model A");
-      const items = modelSection?.items as AddMenuToolItem[];
-      expect(items.map((item) => [item.checked, item.exclusive])).toEqual([
-        [true, true],
-        [false, true],
-      ]);
-      items[1].onToggle();
+      expect(menu.model).toEqual({
+        models,
+        selectedId: models[0].chat_provider_id,
+        ready: true,
+      });
+      actions.selectModel(models[1].chat_provider_id);
       expect(onModelChange).toHaveBeenCalledWith(models[1]);
     });
 
@@ -1449,16 +1449,15 @@ describe("ChatInput", () => {
     it("still names the one model there is, in the + menu", async () => {
       await renderPhoneComposer({ touch: true, availableModels: [models[0]] });
 
-      expect(addControlsProps().modelSection?.items).toHaveLength(1);
-      expect(addControlsProps().modelSection?.submenu).toBeUndefined();
+      expect(addControlsProps().menu.model?.models).toEqual([models[0]]);
     });
 
     it("says in the + menu why an assistant's tools cannot be changed", async () => {
       await renderPhoneComposer({ touch: true, enforceTools: true });
 
-      expect(addControlsProps().toolsDisabledReason).toBe(
-        "This assistant sets the tools for its chats.",
-      );
+      expect(addControlsProps().menu.toolsLocked).toEqual({
+        reason: "This assistant sets the tools for its chats.",
+      });
     });
 
     describe("in audio mode", () => {
@@ -1579,7 +1578,7 @@ describe("ChatInput", () => {
         container.querySelector('[data-ui="chat-input-shell"]'),
       ).not.toHaveAttribute("data-layout");
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();
-      expect(addControlsProps().modelSection).toBeUndefined();
+      expect(addControlsProps().menu.model).toBeUndefined();
       expect(addControlsProps().selectedToolCount).toBeUndefined();
     });
   });
@@ -6325,14 +6324,18 @@ describe("ChatInput", () => {
       // Neither uploads nor facets are available here: the assistants alone
       // are what puts the "+" menu on screen.
       expect(screen.getByTestId("chat-input-add-controls")).toBeInTheDocument();
-      const props = mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
-        assistantSection: AddMenuSection;
+      const { menu } = mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
+        menu: ChatInputAddMenuData;
       };
-      expect(props.assistantSection.header).toBeUndefined();
-      expect(props.assistantSection.items.map((item) => item.label)).toEqual([
+      const section = buildAssistantMentionSection({
+        ...menu.assistants!,
+        onOpen: vi.fn(),
+      });
+      expect(section.header).toBeUndefined();
+      expect(section.items.map((item) => item.label)).toEqual([
         "Ask an assistant…",
       ]);
-      expect(props.assistantSection.items[0].description).toBe(
+      expect(section.items[0].description).toBe(
         "Researcher and 1 more you use often",
       );
     });

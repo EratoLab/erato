@@ -25,6 +25,7 @@ import {
   describeFilterMenu,
   filterMenuChoice,
 } from "@/lib/shell/menus/describeFilterMenu";
+import { useSystemMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
@@ -423,9 +424,25 @@ export function ChatHistoryFilterMenu({
       applyAndClose(() => applyFilterMenuChoice(choice, setters));
     }
   };
-  const sections = describeFilterMenu(filterValues, filterCapabilities).map(
-    (section) => section.children ?? [],
-  );
+  const description = describeFilterMenu(filterValues, filterCapabilities);
+  const applyPick = (itemId: string, on = true) => {
+    const choice = filterMenuChoice(itemId);
+    if (!choice) return;
+    // A source flips; act only when it is not already as asked.
+    const ticked =
+      choice.kind === "source" &&
+      filters.sourceFilter.sources.includes(choice.value);
+    if (choice.kind === "source" && ticked === on) return;
+    applyFilterMenuChoice(choice, setters);
+  };
+  const nativeMenu = useSystemMenu({
+    id: "chat-history-filter",
+    mode: "show",
+    entries: description,
+    onChoose: applyPick,
+    onToggle: applyPick,
+  });
+  const sections = description.map((section) => section.children ?? []);
   const rowsByKey: Partial<Record<SubmenuKey, SubmenuRow>> = Object.fromEntries(
     sections
       .flat()
@@ -505,6 +522,7 @@ export function ChatHistoryFilterMenu({
     <AnchoredPopover
       isOpen={isOpen}
       onOpenChange={setIsOpen}
+      nativeMenu={nativeMenu}
       panelRef={panelRef}
       role="menu"
       ariaHasPopup="menu"

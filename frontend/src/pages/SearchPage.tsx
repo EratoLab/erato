@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 
-import { buildChatHistoryRowMenuItems } from "@/components/ui/Chat/ChatHistoryList";
 import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import {
@@ -34,6 +33,8 @@ import {
   recentChatsQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { rowMenu } from "@/lib/shell/menus/web/rowMenuDropdownItems";
+import { useSystemMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 import { useChatSession } from "@/providers/ChatProvider";
 import {
   useChatInputFeature,
@@ -92,6 +93,35 @@ const SearchResultRow = ({
   const status = useChatRowStatus(result.chatId);
   const waitingOnly = useChatWaitsOnly(result.chatId);
   const archivedLabel = result.isArchived ? archivedChatLabel() : null;
+  const menu = rowMenu(
+    {
+      archived: result.isArchived,
+      isPinned: result.isPinned,
+      canEdit: result.canEdit,
+      // Asserted rather than resolved: the search payload carries no
+      // provenance, so a delegated run listed here is still offered
+      // the archive actions the sidebar withholds from it.
+      isRun: false,
+      status,
+      waitingOnly,
+    },
+    {
+      pinnedChatsCount,
+      pinnedChatsLimit,
+      onPin: pinnedChatsEnabled ? onPin : undefined,
+      onShare: chatSharingEnabled ? onShare : undefined,
+      onEditTitle: onRename,
+      onArchive,
+      onUnarchive,
+    },
+  );
+  const nativeMenu = useSystemMenu({
+    id: `search-row:${result.chatId}`,
+    mode: "show",
+    entries: menu.entries,
+    title: result.chatTitle,
+    onChoose: menu.choose,
+  });
 
   return (
     <Card
@@ -130,30 +160,7 @@ const SearchResultRow = ({
           e.stopPropagation();
         }}
       >
-        <DropdownMenu
-          items={buildChatHistoryRowMenuItems(
-            {
-              archived: result.isArchived,
-              isPinned: result.isPinned,
-              canEdit: result.canEdit,
-              // Asserted rather than resolved: the search payload carries no
-              // provenance, so a delegated run listed here is still offered
-              // the archive actions the sidebar withholds from it.
-              isRun: false,
-              status,
-              waitingOnly,
-            },
-            {
-              pinnedChatsCount,
-              pinnedChatsLimit,
-              onPin: pinnedChatsEnabled ? onPin : undefined,
-              onShare: chatSharingEnabled ? onShare : undefined,
-              onEditTitle: onRename,
-              onArchive,
-              onUnarchive,
-            },
-          )}
-        />
+        <DropdownMenu items={menu.items} nativeMenu={nativeMenu} />
       </div>
     </Card>
   );

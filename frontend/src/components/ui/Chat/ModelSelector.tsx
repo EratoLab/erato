@@ -5,9 +5,14 @@
  * available models using a dropdown interface.
  */
 import { t } from "@lingui/core/macro";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
-import { modelDescription } from "@/lib/shell/menus/describeModelMenu";
+import {
+  describeModelMenu,
+  modelChoice,
+  modelDescription,
+} from "@/lib/shell/menus/describeModelMenu";
+import { useSystemMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { ChevronDownIcon, ResolvedIcon } from "../icons";
@@ -142,6 +147,30 @@ export const ModelSelector = ({
     shouldReserveIconSpace,
   ]);
 
+  const menuId = useId();
+  const nativeMenu = useSystemMenu({
+    id: `model:${menuId}`,
+    mode: "attach",
+    // "No default model" is a row the description does not have.
+    entries:
+      allowNoSelection || availableModels.length < 2
+        ? null
+        : describeModelMenu(
+            {
+              models: availableModels,
+              selectedId: selectedModel?.chat_provider_id ?? null,
+              ready: !disabled,
+            },
+            { descriptions: true },
+          ),
+    onChoose: (itemId) => {
+      const chosen = availableModels.find(
+        (model) => model.chat_provider_id === modelChoice(itemId),
+      );
+      if (chosen) onModelChange(chosen);
+    },
+  });
+
   // Don't render if no models available
   if (availableModels.length === 0) {
     return null;
@@ -169,6 +198,7 @@ export const ModelSelector = ({
     <div className={`flex items-center ${className}`}>
       <DropdownMenu
         items={dropdownItems}
+        nativeMenu={nativeMenu}
         align={align}
         onOpenChange={setIsDropdownOpen}
         dataUi="model-selector-menu"
