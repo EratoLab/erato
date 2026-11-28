@@ -3239,6 +3239,17 @@ talk_over_voice = false
 talk_over_voice_min_speech_ms = 300
 ```
 
+#### Voice as conversation audio
+
+While a microphone with echo cancellation is open (a conversation, a recording over the voice), the voice (replies, wait lines, approvals) plays as a media stream in a hidden audio element, so the browser takes it as conversation audio and its echo cancellation removes it from the microphone. On the iPhone, WebKit (Safari, and apps that show the page) removes only audio played this way. Read aloud on its own, a browser without media stream output, and an element the browser refuses or stops (a call, a phone lock) use the page's audio output instead. A switch between the two while the voice speaks can be heard as a short gap, and the element adds a small output delay that browsers do not report; neither has been measured on desktop browsers or in the Office add-ins.
+
+To always use the page's audio output, set the frontend variable `AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT` to `false`; any other value, or none, keeps the media stream:
+
+```toml
+[frontend.additional_environment]
+AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT = false
+```
+
 #### `audio_conversational.wait_lines`
 
 {/* erato_toml_config_key: audio_conversational.wait_lines */}

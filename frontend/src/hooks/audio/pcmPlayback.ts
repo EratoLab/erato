@@ -1,4 +1,8 @@
+import { createLogger } from "@/utils/debugLogger";
+
 import { reviveStandingClock } from "./useAudioContextInterruptionRecovery";
+
+const logger = createLogger("HOOK", "pcmPlayback");
 
 let context: AudioContext | undefined;
 /** Resuming waits for it, or a voice right after unlocking stays silent. */
@@ -27,6 +31,8 @@ export async function resumePlaybackContext(): Promise<AudioContext> {
     context = new AudioContext();
     reviveOnReturn(context);
   }
+  // Before any await: the element may only start within the gesture.
+  followMicrophones();
   retryIfStanding(context, 0);
   if (revival) await revival;
   await context.resume();
@@ -76,7 +82,144 @@ function reviveOnReturn(playback: AudioContext) {
     if (document.visibilityState !== "visible") return;
     retriesLeft = REVIVAL_RETRIES;
     revive(playback);
+    followMicrophones();
   });
+}
+
+/**
+ * The voice as conversation audio: a media stream played in an audio
+ * element. Browsers take such streams as the echo canceller's reference;
+ * WebKit plays Web Audio's own output past its canceller and only turns it
+ * down, so the microphone heard the voice as loud as a person (iPhone 15,
+ * iOS 27.2.1, 2026-11-28). Only while a microphone with echo cancellation is
+ * open: an element that has played holds a media session that silences other
+ * apps' audio, and WebKit kept it after the element paused, so it is released
+ * once no such microphone is left. Otherwise, and while the element does not
+ * play, the voice plays through the context's own output.
+ */
+type VoiceStream = {
+  node: MediaStreamAudioDestinationNode;
+  element: HTMLAudioElement;
+  playing: boolean;
+};
+let stream: VoiceStream | undefined;
+let mediaStreamOutput = true;
+
+/** The deployment's `AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT`. */
+export function configureVoiceOutput(settings: { mediaStream?: boolean }) {
+  mediaStreamOutput = settings.mediaStream !== false;
+  followMicrophones();
+}
+
+/** Microphones with echo cancellation that may hear the voice. */
+const microphones = new Set<MediaStream>();
+/** Only releases: a track can also end without the recorder seeing it. */
+const MICROPHONE_CHECK_MS = 5000;
+let microphoneCheck: ReturnType<typeof setInterval> | undefined;
+
+function microphoneListens(): boolean {
+  for (const microphone of microphones)
+    if (
+      !microphone.getAudioTracks().some((track) => track.readyState === "live")
+    )
+      microphones.delete(microphone);
+  return microphones.size > 0;
+}
+
+/**
+ * A microphone with echo cancellation is open: the voice plays as
+ * conversation audio until {@link voiceNoLongerHeardBy}. Each call tries the
+ * element again if the browser had paused it.
+ */
+export function voiceHeardBy(microphone: MediaStream) {
+  microphones.add(microphone);
+  microphoneCheck ??= setInterval(() => {
+    if (!microphoneListens()) releaseStream();
+  }, MICROPHONE_CHECK_MS);
+  followMicrophones();
+}
+
+export function voiceNoLongerHeardBy(microphone: MediaStream) {
+  microphones.delete(microphone);
+  followMicrophones();
+}
+
+function followMicrophones() {
+  if (mediaStreamOutput && microphoneListens()) {
+    if (context) playAsStream(context);
+    return;
+  }
+  releaseStream();
+}
+
+function playAsStream(playback: AudioContext) {
+  if (!stream) {
+    if (
+      typeof document === "undefined" ||
+      typeof playback.createMediaStreamDestination !== "function" ||
+      typeof HTMLMediaElement === "undefined" ||
+      !("srcObject" in HTMLMediaElement.prototype)
+    )
+      return;
+    let node: MediaStreamAudioDestinationNode;
+    try {
+      node = playback.createMediaStreamDestination();
+    } catch {
+      return;
+    }
+    const element = document.createElement("audio");
+    element.srcObject = node.stream;
+    const created: VoiceStream = { node, element, playing: false };
+    stream = created;
+    // The browser pauses it on its own (a call, a lock, its autoplay rules).
+    element.addEventListener("pause", () => streamPlays(created, false));
+    element.addEventListener("error", () => streamPlays(created, false));
+    element.addEventListener("playing", () => streamPlays(created, true));
+  }
+  const current = stream;
+  if (current.playing) return;
+  let started: Promise<void> | undefined;
+  try {
+    started = current.element.play();
+  } catch {
+    return;
+  }
+  void Promise.resolve(started).then(
+    () => streamPlays(current, !current.element.paused),
+    (error: unknown) => {
+      logger.log("[VOICE] stream element may not play", error);
+      streamPlays(current, false);
+    },
+  );
+}
+
+function streamPlays(current: VoiceStream, playing: boolean) {
+  if (stream !== current || current.playing === playing) return;
+  current.playing = playing;
+  if (!output) return;
+  output.disconnect();
+  output.connect(voiceSink(output.context));
+}
+
+function releaseStream() {
+  clearInterval(microphoneCheck);
+  microphoneCheck = undefined;
+  const released = stream;
+  if (!released) return;
+  stream = undefined;
+  released.element.pause();
+  released.element.srcObject = null;
+  released.node.stream.getTracks().forEach((track) => track.stop());
+  if (released.playing && output) {
+    output.disconnect();
+    output.connect(voiceSink(output.context));
+  }
+}
+
+function voiceSink(playback: BaseAudioContext): AudioNode {
+  return stream?.playing && stream.node.context === playback
+    ? stream.node
+    : playback.destination;
 }
 
 export function playbackContext(): AudioContext | undefined {
@@ -106,7 +249,7 @@ let output: GainNode | undefined;
 function voiceOutput(context: AudioContext): GainNode {
   if (output?.context !== context) {
     output = context.createGain();
-    output.connect(context.destination);
+    output.connect(voiceSink(context));
   }
   return output;
 }
