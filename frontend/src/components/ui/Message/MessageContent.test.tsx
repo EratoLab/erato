@@ -8,7 +8,15 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   THEME_MODE_LOCAL_STORAGE_KEY,
@@ -3400,12 +3408,9 @@ it("says when a stored recording cannot be played", async () => {
   ).toBeInTheDocument();
 });
 
-it("waits with a replay while the app shell's voice audio has the conversation", async () => {
-  installHostShell(
-    { voiceAudio: 1 },
-    shellAnswers({ "voiceAudio.open": {}, "voiceAudio.close": null }),
-  );
-  try {
+describe("a replay while the app shell's voice audio has the conversation", () => {
+  let answer: (value: unknown) => void = () => {};
+  const recording = () =>
     renderWithTheme(
       <MessageContent
         content={[
@@ -3417,17 +3422,48 @@ it("waits with a replay while the app shell's voice audio has the conversation",
         ]}
       />,
     );
+  beforeEach(() => {
+    installHostShell(
+      { voiceAudio: 1 },
+      shellAnswers({
+        "voiceAudio.open": () => new Promise((resolve) => (answer = resolve)),
+        "voiceAudio.close": null,
+      }),
+    );
+  });
+  afterEach(async () => {
+    closeShellVoiceAudio();
+    answer({});
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    removeHostShell();
+  });
+
+  it("waits from the moment the shell's audio starts to open until it closes", async () => {
+    recording();
     const button = screen.getByTestId("spoken-reply-replay");
     expect(button).toBeEnabled();
 
-    await act(() => openShellVoiceAudio({ bufferMs: 400, maxWaitMs: 350 }));
+    act(() => {
+      void openShellVoiceAudio({ bufferMs: 400, maxWaitMs: 350 });
+    });
+    expect(button).toBeDisabled();
+    await act(async () => answer({}));
     expect(button).toBeDisabled();
     act(() => closeShellVoiceAudio());
     expect(button).toBeEnabled();
-  } finally {
-    closeShellVoiceAudio();
-    removeHostShell();
-  }
+  });
+
+  it("stops a replay that is playing when the shell's audio opens", () => {
+    recording();
+    const audio = document.querySelector("audio")!;
+    audio.pause = vi.fn();
+    fireEvent.play(audio);
+
+    act(() => {
+      void openShellVoiceAudio({ bufferMs: 400, maxWaitMs: 350 });
+    });
+    expect(audio.pause).toHaveBeenCalledOnce();
+  });
 });
 
 describe("a reply spoken in conversation mode", () => {

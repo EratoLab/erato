@@ -70,10 +70,14 @@ export function pcm16Bytes(audio: string): number {
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
-/** Whether `audio` is base64 signed 16-bit PCM at a rate a voice plays. */
+/**
+ * Whether `audio` is padded base64 signed 16-bit PCM at a rate a voice
+ * plays: what a host app takes, stricter than the browser's own decoding.
+ */
 export function isPlayablePcm16(audio: string, sampleRate: number): boolean {
   const bytes = pcm16Bytes(audio);
   return (
+    audio.length % 4 === 0 &&
     bytes > 0 &&
     bytes % 2 === 0 &&
     sampleRate >= 8000 &&

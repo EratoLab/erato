@@ -13,9 +13,9 @@ import {
   closeShellVoiceAudio,
   createShellVoiceQueue,
   openShellVoiceAudio,
+  lostShellVoiceAudio,
   settledShellVoiceAudio,
   shellVoiceAudio,
-  shellVoiceAudioLost,
 } from "./shellVoiceAudio";
 
 vi.mock("@/lib/chunkLoadRecovery", () => ({
@@ -166,6 +166,31 @@ describe("opening the app shell's voice audio", () => {
     expect(asked(request, "voiceAudio.close")).toHaveLength(1);
   });
 
+  it("hears the shell's events for a new session only from its own open on", async () => {
+    const close = later();
+    const request = voiceShell({ "voiceAudio.close": close.answer });
+    const first = await openShellVoiceAudio(START);
+    const queue = createShellVoiceQueue(vi.fn());
+    queue.enqueue(first!, { audio: pcm(100), sampleRate: RATE });
+    await settle();
+    const [old] = played(request);
+    closeShellVoiceAudio();
+    const opening = openShellVoiceAudio(START);
+    await settle();
+    // The engine closed before reports its close before answering it.
+    emitHostShellEvent("voiceAudio.closed", { reason: "failed" });
+    close.give();
+    const voice = await opening;
+
+    expect(voice?.state).toBe("running");
+    queue.enqueue(voice!, { audio: pcm(100), sampleRate: RATE });
+    await settle();
+    expect(played(request)[1].id).not.toBe(old.id);
+    closeShellVoiceAudio();
+    await settle();
+    close.give();
+  });
+
   it("sends each request only once the one before it is answered", async () => {
     const play = later();
     const { request, voice } = await opened({ "voiceAudio.play": play.answer });
@@ -191,6 +216,15 @@ describe("opening the app shell's voice audio", () => {
       "voiceAudio.stop",
     ]);
   });
+
+  it("sends no stop for pieces that never reached the shell", async () => {
+    const { request, voice } = await opened();
+    const queue = createShellVoiceQueue(vi.fn());
+    queue.enqueue(voice, { audio: pcm(100), sampleRate: RATE });
+    queue.stop();
+    await settle();
+    expect(request.mock.calls.slice(1)).toEqual([]);
+  });
 });
 
 describe("the voice through the app shell", () => {
@@ -208,6 +242,11 @@ describe("the voice through the app shell", () => {
     expect(queue.enqueue(voice, { audio: pcm(5), sampleRate: RATE })).toBe(
       true,
     );
+    // Unpadded, or not base64 at all: the shell would refuse it.
+    for (const broken of ["AQIDBA", "AQIDBAUGB", "AQ ID"])
+      expect(queue.enqueue(voice, { audio: broken, sampleRate: RATE })).toBe(
+        false,
+      );
     await settle();
 
     const [whole, short] = played(request);
@@ -228,23 +267,23 @@ describe("the voice through the app shell", () => {
 
     emitHostShellEvent("voiceAudio.started", { id: first.id, at: 1_000_000 });
     expect(scheduled).toHaveBeenLastCalledWith("Hallo.", 1000, 1000.5);
-    // After an interruption the shell starts the piece again.
-    emitHostShellEvent("voiceAudio.started", { id: first.id, at: 1_009_000 });
-    expect(scheduled).toHaveBeenCalledOnce();
     emitHostShellEvent("voiceAudio.played", {
       id: first.id,
-      at: 1_009_500,
+      at: 1_000_500,
       durationMs: 500,
     });
-    expect(drained).not.toHaveBeenCalled();
-
-    emitHostShellEvent("voiceAudio.started", { id: second.id, at: 1_009_500 });
-    expect(scheduled).toHaveBeenLastCalledWith(undefined, 1009.5, 1009.75);
+    emitHostShellEvent("voiceAudio.started", { id: second.id, at: 1_000_500 });
+    expect(scheduled).toHaveBeenLastCalledWith(undefined, 1000.5, 1000.75);
+    // After an interruption the shell plays the piece again from its start:
+    // its passage goes on from there.
+    emitHostShellEvent("voiceAudio.started", { id: second.id, at: 1_009_000 });
+    expect(scheduled).toHaveBeenLastCalledWith("Hallo.", 1008.5, 1009.25);
     emitHostShellEvent("voiceAudio.played", {
       id: second.id,
-      at: 1_009_750,
+      at: 1_009_250,
       durationMs: 250,
     });
+    expect(scheduled).toHaveBeenCalledTimes(3);
     expect(drained).toHaveBeenCalledOnce();
     expect(queue.active).toBe(false);
   });
@@ -280,6 +319,26 @@ describe("the voice through the app shell", () => {
     expect(queue.active).toBe(true);
   });
 
+  it("forgets what was heard before a pause once the queue is stopped", async () => {
+    let unplayed: string[] = [];
+    const { request, voice } = await opened({
+      "voiceAudio.stop": () => ({ unplayed }),
+    });
+    const queue = createShellVoiceQueue(vi.fn());
+    const chunk = { audio: pcm(100), sampleRate: RATE };
+    queue.enqueue(voice, chunk);
+    queue.enqueue(voice, { audio: pcm(200), sampleRate: RATE });
+    await settle();
+    unplayed = [played(request)[1].id];
+    queue.pause();
+    await settle();
+
+    queue.stop();
+    queue.enqueue(voice, { ...chunk });
+    await settle();
+    expect(played(request).at(-1)?.audio).toBe(chunk.audio);
+  });
+
   it("stops only what its own queue has in the shell, and plays again first what that silenced of another", async () => {
     let unplayed: string[] = [];
     const { request, voice } = await opened({
@@ -313,6 +372,30 @@ describe("the voice through the app shell", () => {
     expect(reply.active).toBe(true);
   });
 
+  it("logs a piece another queue's stop cut off where it starts again", async () => {
+    let unplayed: string[] = [];
+    const { request, voice } = await opened({
+      "voiceAudio.stop": () => ({ unplayed }),
+    });
+    const scheduled = vi.fn();
+    const reply = createShellVoiceQueue(vi.fn(), scheduled);
+    const line = createShellVoiceQueue(vi.fn());
+    reply.enqueue(voice, { audio: pcm(400), sampleRate: RATE, text: "Satz." });
+    line.enqueue(voice, { audio: pcm(100), sampleRate: RATE });
+    await settle();
+    const [replyPiece, linePiece] = played(request);
+    emitHostShellEvent("voiceAudio.started", { id: replyPiece.id, at: 2000 });
+    unplayed = [replyPiece.id, linePiece.id];
+    line.stop();
+    await settle();
+
+    emitHostShellEvent("voiceAudio.started", {
+      id: played(request)[2].id,
+      at: 5000,
+    });
+    expect(scheduled).toHaveBeenLastCalledWith("Satz.", 5, 5.4);
+  });
+
   it("plays what it has at once when told nothing more is coming", async () => {
     const { request, voice } = await opened();
     const queue = createShellVoiceQueue(vi.fn());
@@ -332,6 +415,16 @@ describe("the voice through the app shell", () => {
       microphoneMode: "voiceIsolation",
     });
     expect(voice).toMatchObject({ outputDelayMs: 180, inputDelayMs: 90 });
+  });
+
+  it("measures the microphone's system buffer from frames that share their time", async () => {
+    const { voice } = await opened();
+    expect(voice.bufferMs).toBe(32);
+    for (const at of [1000, 1000, 1000, 1090, 1090, 1090, 1180])
+      emitHostShellEvent("voiceAudio.input", { seq: 0, at, samples: "" });
+    expect(voice.bufferMs).toBe(90);
+    emitHostShellEvent("voiceAudio.input", { seq: 0, at: 1400, samples: "" });
+    expect(voice.bufferMs).toBe(100);
   });
 });
 
@@ -364,7 +457,8 @@ describe("interruptions of the app shell's voice audio", () => {
     expect(voice.state).toBe("closed");
     expect(states).toHaveBeenCalledOnce();
     expect(shellVoiceAudio()).toBeNull();
-    expect(shellVoiceAudioLost()).toBe(true);
+    expect(lostShellVoiceAudio()).toBe(voice);
+    expect(voice.reopens).toBe(true);
     expect(drained).toHaveBeenCalledOnce();
     expect(queue.active).toBe(false);
     expect(queue.enqueue(voice, { audio: pcm(200), sampleRate: RATE })).toBe(
@@ -382,9 +476,16 @@ describe("interruptions of the app shell's voice audio", () => {
 
     expect(asked(request, "voiceAudio.close")).toHaveLength(1);
     expect(voice.state).toBe("closed");
-    expect(shellVoiceAudioLost()).toBe(false);
+    expect(lostShellVoiceAudio()).toBeNull();
     expect(states).not.toHaveBeenCalled();
   });
+});
+
+it("is not opened again by itself after the system advised against going on", async () => {
+  const { voice } = await opened();
+  emitHostShellEvent("voiceAudio.closed", { reason: "interrupted" });
+  expect(lostShellVoiceAudio()).toBe(voice);
+  expect(voice.reopens).toBe(false);
 });
 
 describe("the microphone through the app shell", () => {

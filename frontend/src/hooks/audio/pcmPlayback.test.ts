@@ -210,6 +210,12 @@ function replay(stream: [number, number][]) {
 const rest = (from: number): [number, number][] =>
   Array.from({ length: 20 }, (_, i) => [from + i * 20, 100]);
 
+it("takes base64 as the browser decodes it, unpadded too", () => {
+  const ctx = context();
+  expect(createPcmQueue(vi.fn()).enqueue(ctx, "AQIDBA", RATE)).toBe(true);
+  expect(createPcmQueue(vi.fn()).enqueue(ctx, "AQID", RATE)).toBe(false);
+});
+
 describe("streams as measured", () => {
   it("staging's voice (small chunks, steady): no silence, first sound within 0.1 s", () => {
     // A reply on MS staging, 2026-11-20: the first 12 chunks.
@@ -919,7 +925,7 @@ describe("while the app shell's voice audio has the conversation", () => {
     expect(StreamContext.last).toBeUndefined();
   });
 
-  it("makes no context of its own for a conversation that ended while the shell opened", async () => {
+  it("hands read aloud the page's own context once the conversation ended while the shell opened", async () => {
     let answer!: (value: unknown) => void;
     shellWith({
       "voiceAudio.open": () => new Promise((resolve) => (answer = resolve)),
@@ -930,17 +936,20 @@ describe("while the app shell's voice audio has the conversation", () => {
     const unlocked = playback.resumePlaybackContext();
     held();
     await vi.advanceTimersByTimeAsync(0);
+    // Read aloud, after the conversation, while the open is still answered.
+    const readAloud = playback.resumePlaybackContext();
+    expect(StreamContext.last).toBeDefined();
     answer({ sampleRate: 16000, frameSamples: 512 });
 
-    expect((await unlocked).state).toBe("closed");
-    expect(StreamContext.last).toBeUndefined();
+    expect(await readAloud).toBe(StreamContext.last);
+    expect(await unlocked).toBe(StreamContext.last);
   });
 
   it("opens the shell's voice audio again for the conversation after the shell closed it", async () => {
     const playback = await import("./pcmPlayback");
     playback.holdConversationAudio();
     await playback.openConversationAudio();
-    emitHostShellEvent("voiceAudio.closed", { reason: "interrupted" });
+    emitHostShellEvent("voiceAudio.closed", { reason: "mediaServicesReset" });
     expect(playback.playbackContext()).toBeUndefined();
 
     const again = await playback.resumePlaybackContext();
@@ -948,6 +957,33 @@ describe("while the app shell's voice audio has the conversation", () => {
     expect(playback.playbackContext()).toBe(again);
     expect(again.state).toBe("running");
     expect(StreamContext.last).toBeUndefined();
+  });
+
+  it("waits for the person's next start after the system advised against going on", async () => {
+    const playback = await import("./pcmPlayback");
+    playback.holdConversationAudio();
+    const first = await playback.openConversationAudio();
+    emitHostShellEvent("voiceAudio.closed", { reason: "interrupted" });
+
+    expect(playback.conversationShellAudio()).toBe(first);
+    expect((await playback.resumePlaybackContext()).state).toBe("closed");
+    expect(asked("voiceAudio.open")).toHaveLength(1);
+    expect(StreamContext.last).toBeUndefined();
+
+    const again = await playback.openConversationAudio();
+    expect(again?.state).toBe("running");
+    expect(playback.conversationShellAudio()).toBe(again);
+  });
+
+  it("plays what is queued at once through the shell when told nothing more is coming", async () => {
+    shellWith({ "voiceAudio.flush": null });
+    const playback = await import("./pcmPlayback");
+    const shell = await playback.openConversationAudio();
+    const queue = playback.createPcmQueue(vi.fn());
+    queue.enqueue(shell!, pcm(100), RATE);
+    queue.flush();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked("voiceAudio.flush")).toHaveLength(1);
   });
 
   it("plays the conversation itself when the shell will not open again after closing it", async () => {

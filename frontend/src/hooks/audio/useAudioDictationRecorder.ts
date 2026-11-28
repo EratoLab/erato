@@ -68,9 +68,9 @@ import {
 } from "./pcmPlayback";
 import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
 import {
+  lostShellVoiceAudio,
   onShellVoiceAudioChange,
   settledShellVoiceAudio,
-  shellVoiceAudioLost,
 } from "./shellVoiceAudio";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
@@ -712,15 +712,15 @@ export function useAudioDictationRecorder({
     if (!conversing || !audioContinuesWhileHidden()) return;
     let release: (() => void) | undefined;
     let ended = false;
-    // The app shell's voice audio owns the device's audio session itself.
-    const follow = () =>
-      void Promise.resolve(settledShellVoiceAudio()).then((shell) => {
-        if (ended) return;
-        if (shell || shellVoiceAudioLost()) {
-          release?.();
-          release = undefined;
-        } else release ??= holdPlayAndRecordSession();
-      });
+    // The app shell's voice audio owns the device's audio session itself;
+    // an open settling is a change of its own.
+    const follow = () => {
+      if (ended) return;
+      if (settledShellVoiceAudio() || lostShellVoiceAudio()) {
+        release?.();
+        release = undefined;
+      } else release ??= holdPlayAndRecordSession();
+    };
     follow();
     const unfollow = onShellVoiceAudioChange(follow);
     return () => {
@@ -1308,6 +1308,15 @@ export function useAudioDictationRecorder({
           ? undefined
           : (navigator as Navigator & { mediaDevices?: MediaDevices })
               .mediaDevices;
+      const settled =
+        mode === "conversational" ? conversationShellAudio() : null;
+
+      if (!settled && typeof mediaDevices?.getUserMedia !== "function") {
+        setDictationError(t`Audio recording is not supported in this browser.`);
+        dispatchSession({ type: "abort" });
+        startInFlightRef.current = false;
+        return;
+      }
 
       const keepMicrophone = keepMicrophoneRef.current;
       const baseAudioConstraints: MediaTrackConstraints = {
@@ -1360,6 +1369,7 @@ export function useAudioDictationRecorder({
 
       /** The page's own microphone and capture context. */
       const openPageCapture = async () => {
+        // Also reached once a shell that was opening would not open.
         if (typeof mediaDevices?.getUserMedia !== "function")
           throw new Error(t`Audio recording is not supported in this browser.`);
         const kept = mediaStreamRef.current;
@@ -1408,8 +1418,6 @@ export function useAudioDictationRecorder({
       };
 
       try {
-        const settled =
-          mode === "conversational" ? conversationShellAudio() : null;
         // No await without a shell: the page's microphone is asked for in the
         // same task as before.
         const shell = settled instanceof Promise ? await settled : settled;
@@ -1427,9 +1435,11 @@ export function useAudioDictationRecorder({
         let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
         let primerSamples: number[] = [];
         // On the shell a frame's sound is older than its `at` by the input
-        // delay and up to one system buffer, which the shell does not tell:
-        // a frame's length stands for it.
-        const frameSamples = shell?.frameSamples ?? WORKLET_FRAME_SAMPLES;
+        // delay and up to one system buffer, as the session measures it.
+        const heldSamples = () =>
+          shell
+            ? (shell.bufferMs * sourceSampleRate) / 1000
+            : WORKLET_FRAME_SAMPLES;
         const inputDelayMs = () =>
           shell ? shell.inputDelayMs : inputLatencyMs(trackSettings);
         let lastFrameAt: number | undefined;
@@ -1568,7 +1578,7 @@ export function useAudioDictationRecorder({
                   signals,
                   at -
                     inputDelayMs() -
-                    ((samples.length + frameSamples) / rate) * 1000,
+                    ((samples.length + heldSamples()) / rate) * 1000,
                   primerMs,
                 );
               lastFrameAt = at;
@@ -1984,7 +1994,7 @@ export function useAudioDictationRecorder({
             recordingSignalsRef.current = audioFrom(
               recordingSignals(releasedAt, false),
               (lastFrameAt ?? releasedAt) -
-                ((unjudged + frameSamples) / sourceSampleRate) * 1000 -
+                ((unjudged + heldSamples()) / sourceSampleRate) * 1000 -
                 inputDelayMs(),
               0,
             );

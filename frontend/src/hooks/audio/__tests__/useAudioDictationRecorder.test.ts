@@ -16,7 +16,7 @@ import {
   getAudioLevelBarsFromTimeDomainData,
 } from "../audio-pcm-codec";
 import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
-import { MUTE_GRACE_MS } from "../audioTuning";
+import { MUTE_GRACE_MS, PRE_SPEECH_SILENCE_PRIMER_MS } from "../audioTuning";
 import { hesitationMatcher } from "../hesitations";
 import {
   holdConversationAudio,
@@ -1679,27 +1679,26 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
       expect(stoppedByHiddenPage).toHaveBeenCalledOnce();
     });
 
-    it("says the page plays and records while the conversation runs", async () => {
+    it("says the page plays and records while the conversation runs", () => {
       const audioSession = { type: "auto" };
       Object.defineProperty(navigator, "audioSession", {
         configurable: true,
         value: audioSession,
       });
       const hook = render();
-      await waitFor(() => expect(audioSession.type).toBe("play-and-record"));
+      expect(audioSession.type).toBe("play-and-record");
 
       hook.rerender({ conversation: false });
       expect(audioSession.type).toBe("auto");
     });
 
-    it("leaves a session type that something else set meanwhile", async () => {
+    it("leaves a session type that something else set meanwhile", () => {
       const audioSession = { type: "auto" };
       Object.defineProperty(navigator, "audioSession", {
         configurable: true,
         value: audioSession,
       });
       const hook = render();
-      await waitFor(() => expect(audioSession.type).toBe("play-and-record"));
       audioSession.type = "playback";
 
       hook.unmount();
@@ -3026,7 +3025,9 @@ describe("useAudioDictationRecorder in a conversation the app shell's voice audi
       const hook = render();
       await listen(hook);
       act(() =>
-        emitHostShellEvent("voiceAudio.closed", { reason: "interrupted" }),
+        emitHostShellEvent("voiceAudio.closed", {
+          reason: "mediaServicesReset",
+        }),
       );
       await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
 
@@ -3042,7 +3043,86 @@ describe("useAudioDictationRecorder in a conversation the app shell's voice audi
       expect(accepted.samples).toHaveLength(512);
     } finally {
       release();
+      // The conversation's close comes a moment after its release.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
     }
+  });
+
+  it("waits for the person after the system advised against going on, and opens no microphone of its own", async () => {
+    const release = holdConversationAudio();
+    try {
+      const hook = render();
+      await listen(hook);
+      act(() =>
+        emitHostShellEvent("voiceAudio.closed", { reason: "interrupted" }),
+      );
+      await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+
+      await act(async () => {
+        hook.result.current.toggleDictation();
+      });
+      await waitFor(() =>
+        expect(hook.result.current.isDictationStarting).toBe(false),
+      );
+      expect(hook.result.current.dictationError).toMatch(/disconnected/);
+      expect(
+        request.mock.calls.filter(([method]) => method === "voiceAudio.open"),
+      ).toHaveLength(1);
+      expect(getUserMedia).not.toHaveBeenCalled();
+    } finally {
+      release();
+      // The conversation's close comes a moment after its release.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    }
+  });
+
+  it("takes the page's audio session once the shell will not open again", async () => {
+    const audioSession = { type: "auto" };
+    Object.defineProperty(navigator, "audioSession", {
+      configurable: true,
+      value: audioSession,
+    });
+    const release = holdConversationAudio();
+    try {
+      const hook = render();
+      await listen(hook);
+      act(() => emitHostShellEvent("voiceAudio.closed", { reason: "failed" }));
+      await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+      expect(audioSession.type).toBe("auto");
+
+      shellWith({
+        "voiceAudio.open": () => {
+          throw { code: "unavailable", message: "cannot start" };
+        },
+      });
+      await listen(hook);
+      expect(getUserMedia).toHaveBeenCalledOnce();
+      expect(audioSession.type).toBe("play-and-record");
+    } finally {
+      release();
+      // The conversation's close comes a moment after its release.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    }
+  });
+
+  it("times its first frame by the system buffer the shell's frames show", async () => {
+    for (const at of [10_000, 10_000, 10_090, 10_090, 10_180])
+      emitHostShellEvent("voiceAudio.input", { seq: 0, at, samples: "" });
+    const hook = render();
+    await listen(hook);
+    act(() =>
+      emitHostShellEvent("voiceAudio.input", {
+        seq: 1,
+        at: 10_270,
+        samples: pcm16(new Array(512).fill(0)),
+      }),
+    );
+
+    // 30 ms input delay, 32 ms frame, 90 ms system buffer, then the primer.
+    expect(hook.result.current.readRecordingSignals()?.audioAt).toBeCloseTo(
+      10_270 - 30 - 32 - 90 - PRE_SPEECH_SILENCE_PRIMER_MS,
+      6,
+    );
   });
 
   it("opens the page's own microphone for a dictation outside the conversation", async () => {

@@ -1,14 +1,13 @@
 import { createLogger } from "@/utils/debugLogger";
 
-import { decodePcm16, isPlayablePcm16 } from "./audio-pcm-codec";
 import {
   closeShellVoiceAudio,
   createShellVoiceQueue,
+  lostShellVoiceAudio,
   openShellVoiceAudio,
   settledShellVoiceAudio,
   ShellVoiceAudio,
   shellVoiceAudio,
-  shellVoiceAudioLost,
 } from "./shellVoiceAudio";
 import { reviveStandingClock } from "./useAudioContextInterruptionRecovery";
 
@@ -45,7 +44,8 @@ export async function resumePlaybackContext(): Promise<VoicePlayback> {
   const settled = conversationShellAudio();
   // No await without a shell: the context may only start within the tap.
   const shell = settled instanceof Promise ? await settled : settled;
-  if (shell) return shell;
+  // Let go as its conversation ended: a caller outside one plays on the page.
+  if (shell && (shell.state === "running" || conversations > 0)) return shell;
   if (!context) {
     context = new AudioContext();
     reviveOnReturn(context);
@@ -190,20 +190,23 @@ export function holdConversationAudio(): () => void {
 
 /**
  * The app shell's voice audio a conversation plays and listens through,
- * opened again once the shell has closed it, as the shell expects.
+ * opened again once the shell has closed it, as the shell expects. After a
+ * close the person's next tap opens it again, unless the shell's audio only
+ * restarted or failed: then the next turn does.
  */
 export function conversationShellAudio():
   | ShellVoiceAudio
   | null
   | Promise<ShellVoiceAudio | null> {
   const settled = settledShellVoiceAudio();
-  if (settled !== null || conversations === 0 || !shellVoiceAudioLost())
-    return settled;
+  const lost = lostShellVoiceAudio();
+  if (settled !== null || conversations === 0 || !lost) return settled;
+  if (!lost.reopens) return lost;
   const reopening = openConversationAudio();
   // Refused: the page plays the conversation's voice itself from here on.
-  void reopening.then((shell) => {
-    if (!shell) resumePlaybackContext().catch(() => undefined);
-  });
+  reopening
+    .then((shell) => (shell ? undefined : resumePlaybackContext()))
+    .catch(() => undefined);
   return reopening;
 }
 
@@ -440,7 +443,7 @@ export interface PcmQueue {
    * Silences everything queued like `stop`, and returns the chunks that had
    * not played to their end, the one playing first, to be queued again. On
    * the app shell's voice audio a chunk the shell then reports heard to its
-   * end is taken out of the returned list.
+   * end is skipped when it is queued again.
    */
   pause(context: VoicePlayback): PcmChunk[];
   /** Whether a chunk is playing, scheduled, or waits for the start buffer. */
@@ -478,7 +481,6 @@ export function createPcmQueue(
       return onContext.active || onShell.active;
     },
     enqueue(playback, audio, sampleRate, text) {
-      if (!isPlayablePcm16(audio, sampleRate)) return false;
       if (playback instanceof ShellVoiceAudio)
         return onShell.enqueue(playback, { audio, sampleRate, text });
       return onContext.enqueue(playback, audio, sampleRate, text);
@@ -588,9 +590,20 @@ function createContextQueue(
       return sources.size > 0 || waiting !== null;
     },
     enqueue(context, audio, sampleRate, text) {
-      const samples = decodePcm16(audio);
-      const buffer = context.createBuffer(1, samples.length, sampleRate);
-      buffer.getChannelData(0).set(samples);
+      const raw = globalThis.atob(audio);
+      const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+      if (
+        !bytes.length ||
+        bytes.length % 2 !== 0 ||
+        sampleRate < 8000 ||
+        sampleRate > 192000
+      )
+        return false;
+      const view = new DataView(bytes.buffer);
+      const buffer = context.createBuffer(1, bytes.length / 2, sampleRate);
+      const samples = buffer.getChannelData(0);
+      for (let i = 0; i < samples.length; i++)
+        samples[i] = view.getInt16(i * 2, true) / 32768;
       const chunk = { audio, sampleRate, text, buffer };
       // Playing on, or running dry in the middle: the chunk plays at once.
       if (!waiting && (sources.size > 0 || !fresh)) {
