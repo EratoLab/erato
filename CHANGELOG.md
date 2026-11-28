@@ -72,6 +72,8 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Bug fixes
 
+**Files shared or added after an upload that overlapped the page start arrive again.** When an upload ran while the page was still loading its list of file types (typically a file shared into the phone app while it was closed, which the page uploads as it opens), every later upload in that page did nothing: no request, no error. Files shared from other apps were taken from the app and lost, and "+" did not attach anything either, until the chat, the model or the page changed. Uploads now check whether another one is running at the moment they start.
+
 **Beside the open sidebar on a narrow screen the page is out of reach for Tab and screen readers.** Below 640 px, while the open sidebar pushes the chat, search or assistants page aside, that page is `inert` (where a browser has no `inert`, `aria-hidden` at least keeps screen readers out), and the sidebar slid out of view is too. Focus moves into the sidebar when it opens and back to the button that opens it when it closes: by its close button, a tap beside it, a drag, Escape or a pick of a chat.
 
 **Hints on the glass are easier to read.** Inside an app with system glass the composer's placeholder and the muted labels in menus move towards the theme's own text colour (`colors.foreground.muted` mixed with `colors.foreground.primary`), so they stay at 4.5:1 or more over a white or black picture behind the glass for the erato, open-webui-like, trilux and novoferm themes in light and dark. In the built-in dark theme the composer's placeholder reaches 3.9:1 (its typed text 4.75:1). In dark mode the placeholder comes close to the typed text's colour. Outside such an app nothing changes.
