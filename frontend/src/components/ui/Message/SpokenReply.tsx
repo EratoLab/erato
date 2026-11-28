@@ -1,6 +1,16 @@
 import { t } from "@lingui/core/macro";
-import { useId, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
+import {
+  onShellVoiceAudioChange,
+  settledShellVoiceAudio,
+} from "@/hooks/audio/shellVoiceAudio";
 import { useVoiceTracesShown } from "@/hooks/audio/voiceTraces";
 
 import { PlayIcon, StopIcon } from "../icons";
@@ -34,6 +44,15 @@ function ReplayButton({
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const [seconds, setSeconds] = useState<number | null>(null);
+  // The app shell's voice audio does not mix with the page's: a replay
+  // would interrupt the conversation.
+  const shellHasAudio = useSyncExternalStore(
+    onShellVoiceAudioChange,
+    () => settledShellVoiceAudio() !== null,
+  );
+  useEffect(() => {
+    if (shellHasAudio && playing) audio.current?.pause();
+  }, [shellHasAudio, playing]);
 
   const toggle = () => {
     const element = audio.current;
@@ -95,7 +114,7 @@ function ReplayButton({
       <button
         type="button"
         onClick={toggle}
-        disabled={!src}
+        disabled={!src || shellHasAudio}
         className="inline-flex items-center gap-1 rounded-full border border-theme-border px-2 py-0.5 text-xs text-theme-fg-secondary hover:bg-theme-bg-hover disabled:opacity-50"
         aria-label={label}
         aria-describedby={describedBy}

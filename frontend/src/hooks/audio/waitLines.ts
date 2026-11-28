@@ -15,6 +15,7 @@ import {
   useSpeechPlayback,
 } from "./speechPlayback";
 
+import type { VoicePlayback } from "./pcmPlayback";
 import type {
   ToolCallLabel,
   WaitLinesResponse,
@@ -561,7 +562,7 @@ function plan() {
 
 /** Plays `clips` as the line `said` of `current`, holding the answer back. */
 function playLine(
-  context: AudioContext,
+  context: VoicePlayback,
   clips: readonly Clip[],
   said: SaidLine,
   current: Turn | null,

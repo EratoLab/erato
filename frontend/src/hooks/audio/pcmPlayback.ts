@@ -1,5 +1,14 @@
 import { createLogger } from "@/utils/debugLogger";
 
+import {
+  closeShellVoiceAudio,
+  createShellVoiceQueue,
+  lostShellVoiceAudio,
+  openShellVoiceAudio,
+  settledShellVoiceAudio,
+  ShellVoiceAudio,
+  shellVoiceAudio,
+} from "./shellVoiceAudio";
 import { reviveStandingClock } from "./useAudioContextInterruptionRecovery";
 
 const logger = createLogger("HOOK", "pcmPlayback");
@@ -22,11 +31,21 @@ let retriesLeft = REVIVAL_RETRIES;
 let reviving = false;
 
 /**
- * The one AudioContext all speech playback shares. Browsers keep a context
- * suspended until it is resumed from a user gesture, so the first call has to
- * come from a click.
+ * Where speech plays: the page's own context, or the app shell's voice audio
+ * while that has the conversation.
  */
-export async function resumePlaybackContext(): Promise<AudioContext> {
+export type VoicePlayback = AudioContext | ShellVoiceAudio;
+
+/**
+ * Browsers keep a context suspended until it is resumed from a user gesture,
+ * so the first call has to come from a click.
+ */
+export async function resumePlaybackContext(): Promise<VoicePlayback> {
+  const settled = conversationShellAudio();
+  // No await without a shell: the context may only start within the tap.
+  const shell = settled instanceof Promise ? await settled : settled;
+  // Let go as its conversation ended: a caller outside one plays on the page.
+  if (shell && (shell.state === "running" || conversations > 0)) return shell;
   if (!context) {
     context = new AudioContext();
     reviveOnReturn(context);
@@ -105,10 +124,90 @@ type VoiceStream = {
 let stream: VoiceStream | undefined;
 let mediaStreamOutput = true;
 
-/** The deployment's `AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT`. */
-export function configureVoiceOutput(settings: { mediaStream?: boolean }) {
+let shellOutput = true;
+/** Composers holding the conversation, and the close once none does. */
+let conversations = 0;
+let closing: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * The deployment's `AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT` and
+ * `AUDIO_CONVERSATIONAL_SHELL_VOICE`.
+ */
+export function configureVoiceOutput(settings: {
+  mediaStream?: boolean;
+  shellVoice?: boolean;
+}) {
   mediaStreamOutput = settings.mediaStream !== false;
+  shellOutput = settings.shellVoice !== false;
   followMicrophones();
+}
+
+/**
+ * A spoken conversation starts: where the app shell offers its voice audio,
+ * the conversation's voice and microphone go through it, and the page plays
+ * and records nothing of its own until it closes. Called before anything of
+ * the conversation plays; null keeps the page's own audio.
+ */
+export function openConversationAudio(): Promise<ShellVoiceAudio | null> {
+  if (!shellOutput) return Promise.resolve(null);
+  // A conversation starting again is not closed by the end of the last one.
+  clearTimeout(closing);
+  closing = undefined;
+  const opening = openShellVoiceAudio(voiceStart);
+  void opening
+    .then(async (shell) => {
+      if (shell?.state !== "running") return;
+      releaseStream();
+      // Two owners of the device's audio interrupt each other.
+      if (context?.state === "running") await context.suspend();
+    })
+    .catch(() => undefined);
+  return opening;
+}
+
+/**
+ * A composer has the conversation; returns its release. The app shell's
+ * voice audio closes once none has it: a composer shown anew for the same
+ * conversation takes it on before then.
+ */
+export function holdConversationAudio(): () => void {
+  conversations += 1;
+  clearTimeout(closing);
+  closing = undefined;
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    conversations -= 1;
+    if (conversations > 0) return;
+    clearTimeout(closing);
+    closing = setTimeout(() => {
+      closing = undefined;
+      if (conversations === 0) closeShellVoiceAudio();
+    }, 0);
+  };
+}
+
+/**
+ * The app shell's voice audio a conversation plays and listens through,
+ * opened again once the shell has closed it, as the shell expects. After a
+ * close the person's next tap opens it again, unless the shell's audio only
+ * restarted or failed: then the next turn does.
+ */
+export function conversationShellAudio():
+  | ShellVoiceAudio
+  | null
+  | Promise<ShellVoiceAudio | null> {
+  const settled = settledShellVoiceAudio();
+  const lost = lostShellVoiceAudio();
+  if (settled !== null || conversations === 0 || !lost) return settled;
+  if (!lost.reopens) return lost;
+  const reopening = openConversationAudio();
+  // Refused: the page plays the conversation's voice itself from here on.
+  reopening
+    .then((shell) => (shell ? undefined : resumePlaybackContext()))
+    .catch(() => undefined);
+  return reopening;
 }
 
 /** Microphones with echo cancellation that may hear the voice. */
@@ -145,7 +244,7 @@ export function voiceNoLongerHeardBy(microphone: MediaStream) {
 }
 
 function followMicrophones() {
-  if (mediaStreamOutput && microphoneListens()) {
+  if (mediaStreamOutput && !shellVoiceAudio() && microphoneListens()) {
     if (context) playAsStream(context);
     return;
   }
@@ -222,8 +321,9 @@ function voiceSink(playback: BaseAudioContext): AudioNode {
     : playback.destination;
 }
 
-export function playbackContext(): AudioContext | undefined {
-  return context;
+/** Where speech plays now, once a voice has been unlocked. */
+export function playbackContext(): VoicePlayback | undefined {
+  return shellVoiceAudio() ?? context;
 }
 
 /**
@@ -231,9 +331,10 @@ export function playbackContext(): AudioContext | undefined {
  * suspended only for a moment while its clock is started again.
  */
 export function playbackPlays(
-  playback: AudioContext | undefined,
-): playback is AudioContext {
+  playback: VoicePlayback | undefined,
+): playback is VoicePlayback {
   if (playback === undefined) return false;
+  if (playback instanceof ShellVoiceAudio) return playback.state === "running";
   const plays =
     playback.state === "running" ||
     (revival !== undefined && playback === context);
@@ -256,12 +357,30 @@ function voiceOutput(context: AudioContext): GainNode {
 
 /** Lowers the voice while the user may be starting to talk over it. */
 export function lowerVoice(lowered: boolean) {
+  const shell = shellVoiceAudio();
+  if (shell) {
+    shell.lower(lowered);
+    return;
+  }
   if (!output) return;
   output.gain.setTargetAtTime(
     lowered ? LOWERED_VOICE_GAIN : 1,
     output.context.currentTime,
     0.03,
   );
+}
+
+/** How much later than it is played the voice is heard, as far as known. */
+export function playbackOutputDelayMs(): number {
+  const shell = shellVoiceAudio();
+  if (shell) return shell.outputDelayMs;
+  // Safari reports no `outputLatency`; no browser reports what the voice's
+  // media stream element adds.
+  return context
+    ? ((Number(context.outputLatency) || 0) +
+        (Number(context.baseLatency) || 0)) *
+        1000
+    : 0;
 }
 
 /**
@@ -306,10 +425,11 @@ export interface PcmQueue {
   /**
    * Schedules one chunk of base64 signed 16-bit little-endian mono PCM right
    * after the chunks already queued. Returns false for a chunk that is not
-   * valid PCM, without scheduling it.
+   * valid PCM, without scheduling it. The app shell's voice audio takes the
+   * chunk as it is and waits for its own start buffer.
    */
   enqueue(
-    context: AudioContext,
+    context: VoicePlayback,
     audio: string,
     sampleRate: number,
     /** What the voice says from this chunk on, on a passage's first chunk. */
@@ -321,9 +441,11 @@ export interface PcmQueue {
   stop(): void;
   /**
    * Silences everything queued like `stop`, and returns the chunks that had
-   * not played to their end, the one playing first, to be queued again.
+   * not played to their end, the one playing first, to be queued again. On
+   * the app shell's voice audio a chunk the shell then reports heard to its
+   * end is skipped when it is queued again.
    */
-  pause(context: AudioContext): PcmChunk[];
+  pause(context: VoicePlayback): PcmChunk[];
   /** Whether a chunk is playing, scheduled, or waits for the start buffer. */
   readonly active: boolean;
 }
@@ -334,18 +456,68 @@ export interface PcmChunk {
   text?: string;
 }
 
+export type OnScheduled = (
+  text: string | undefined,
+  startsAt: number,
+  endsAt: number,
+) => void;
+
 /**
  * `onScheduled` hears each chunk as it is scheduled: its text, on a
- * passage's first chunk, and the context times it plays from and to.
+ * passage's first chunk, and the context times it plays from and to. On the
+ * app shell's voice audio it hears each chunk as it starts to be heard.
  */
 export function createPcmQueue(
   onDrained: () => void,
-  onScheduled?: (
-    text: string | undefined,
-    startsAt: number,
-    endsAt: number,
-  ) => void,
+  onScheduled?: OnScheduled,
 ): PcmQueue {
+  const drained = () => {
+    if (!onContext.active && !onShell.active) onDrained();
+  };
+  const onContext = createContextQueue(drained, onScheduled);
+  const onShell = createShellVoiceQueue(drained, onScheduled);
+  return {
+    get active() {
+      return onContext.active || onShell.active;
+    },
+    enqueue(playback, audio, sampleRate, text) {
+      if (playback instanceof ShellVoiceAudio)
+        return onShell.enqueue(playback, { audio, sampleRate, text });
+      return onContext.enqueue(playback, audio, sampleRate, text);
+    },
+    flush() {
+      onContext.flush();
+      onShell.flush();
+    },
+    stop() {
+      onContext.stop();
+      onShell.stop();
+    },
+    pause(playback) {
+      if (playback instanceof ShellVoiceAudio) {
+        onContext.stop();
+        return onShell.pause();
+      }
+      onShell.stop();
+      return onContext.pause(playback);
+    },
+  };
+}
+
+interface ContextQueue extends Omit<PcmQueue, "enqueue" | "pause"> {
+  enqueue(
+    context: AudioContext,
+    audio: string,
+    sampleRate: number,
+    text?: string,
+  ): boolean;
+  pause(context: AudioContext): PcmChunk[];
+}
+
+function createContextQueue(
+  onDrained: () => void,
+  onScheduled?: OnScheduled,
+): ContextQueue {
   let nextTime = 0;
   const sources = new Map<
     AudioBufferSourceNode,

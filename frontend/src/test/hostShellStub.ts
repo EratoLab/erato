@@ -27,6 +27,26 @@ export function installHostShell(
 
 const listeners = new Map<string, Set<(payload: unknown) => void>>();
 
+/**
+ * A host's `request` that answers each method from `answers`: the value, or
+ * what a function of the params returns or throws. A method without an
+ * answer rejects as one the host does not know.
+ */
+export function shellAnswers(answers: Record<string, unknown>) {
+  return vi.fn<(method: string, params?: unknown) => Promise<unknown>>(
+    (method, params) => {
+      if (!(method in answers))
+        return Promise.reject({ code: "unknownMethod", message: method });
+      const answer = answers[method];
+      return Promise.resolve().then(() =>
+        typeof answer === "function"
+          ? (answer as (params: unknown) => unknown)(params)
+          : answer,
+      );
+    },
+  );
+}
+
 /** Sends `event` to the page's listeners, as the host app would. */
 export function emitHostShellEvent(event: string, payload: unknown) {
   for (const listener of listeners.get(event) ?? []) listener(payload);

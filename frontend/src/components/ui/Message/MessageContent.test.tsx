@@ -1,14 +1,32 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   THEME_MODE_LOCAL_STORAGE_KEY,
   ThemeProvider,
 } from "@/components/providers/ThemeProvider";
 import { componentRegistry } from "@/config/componentRegistry";
+import {
+  closeShellVoiceAudio,
+  openShellVoiceAudio,
+} from "@/hooks/audio/shellVoiceAudio";
 import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 import {
   askForReviewAgain,
@@ -24,6 +42,11 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { ChatContextProviders } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { testChatValue } from "@/test/chatContextValue";
+import {
+  installHostShell,
+  removeHostShell,
+  shellAnswers,
+} from "@/test/hostShellStub";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
@@ -3383,6 +3406,64 @@ it("says when a stored recording cannot be played", async () => {
       "The recording could not be played. Reload the chat to try again.",
     ),
   ).toBeInTheDocument();
+});
+
+describe("a replay while the app shell's voice audio has the conversation", () => {
+  let answer: (value: unknown) => void = () => {};
+  const recording = () =>
+    renderWithTheme(
+      <MessageContent
+        content={[
+          {
+            content_type: "audio_file_pointer",
+            file_upload_id: "saved-speech",
+            download_url: "https://storage.example/speech.wav",
+          },
+        ]}
+      />,
+    );
+  beforeEach(() => {
+    installHostShell(
+      { voiceAudio: 1 },
+      shellAnswers({
+        "voiceAudio.open": () => new Promise((resolve) => (answer = resolve)),
+        "voiceAudio.close": null,
+      }),
+    );
+  });
+  afterEach(async () => {
+    closeShellVoiceAudio();
+    answer({});
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    removeHostShell();
+  });
+
+  it("waits from the moment the shell's audio starts to open until it closes", async () => {
+    recording();
+    const button = screen.getByTestId("spoken-reply-replay");
+    expect(button).toBeEnabled();
+
+    act(() => {
+      void openShellVoiceAudio({ bufferMs: 400, maxWaitMs: 350 });
+    });
+    expect(button).toBeDisabled();
+    await act(async () => answer({}));
+    expect(button).toBeDisabled();
+    act(() => closeShellVoiceAudio());
+    expect(button).toBeEnabled();
+  });
+
+  it("stops a replay that is playing when the shell's audio opens", () => {
+    recording();
+    const audio = document.querySelector("audio")!;
+    audio.pause = vi.fn();
+    fireEvent.play(audio);
+
+    act(() => {
+      void openShellVoiceAudio({ bufferMs: 400, maxWaitMs: 350 });
+    });
+    expect(audio.pause).toHaveBeenCalledOnce();
+  });
 });
 
 describe("a reply spoken in conversation mode", () => {

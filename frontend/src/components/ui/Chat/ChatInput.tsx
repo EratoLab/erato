@@ -39,7 +39,9 @@ import { classifyOverVoiceTurn } from "@/hooks/audio/overVoiceTurn";
 import {
   configureVoiceOutput,
   configureVoiceStart,
+  holdConversationAudio,
   lowerVoice,
+  openConversationAudio,
 } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import { takeSpeechEnd } from "@/hooks/audio/speechEnd";
@@ -668,6 +670,7 @@ export const ChatInput = ({
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
     voiceMediaStreamOutput,
+    shellVoice,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
   // Hesitations sound like the language the user spoke last.
@@ -691,8 +694,12 @@ export const ChatInput = ({
     });
   }, [voiceStartBufferMs, voiceStartMaxWaitMs]);
   useEffect(() => {
-    configureVoiceOutput({ mediaStream: voiceMediaStreamOutput });
-  }, [voiceMediaStreamOutput]);
+    configureVoiceOutput({ mediaStream: voiceMediaStreamOutput, shellVoice });
+  }, [voiceMediaStreamOutput, shellVoice]);
+  useEffect(() => {
+    if (!isAudioMode) return;
+    return holdConversationAudio();
+  }, [isAudioMode]);
   useEffect(() => {
     useSpeechPlayback.setState({
       conversational: isAudioMode && Boolean(speechEnabled),
@@ -2940,6 +2947,9 @@ export const ChatInput = ({
       return;
     }
     playHaptic("light");
+    // Before the unlock: where the app shell takes the conversation's audio,
+    // the page creates none of its own.
+    void openConversationAudio();
 
     if (speechEnabled) {
       // Resume playback from the user gesture, before microphone startup,

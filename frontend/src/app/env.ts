@@ -137,6 +137,11 @@ export type Env = {
    * media stream, so the browser's echo canceller removes it.
    */
   audioConversationalVoiceMediaStreamOutput?: boolean;
+  /**
+   * Where the app shell offers its voice audio, a conversation's voice and
+   * microphone go through it instead of the page.
+   */
+  audioConversationalShellVoice?: boolean;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
@@ -257,6 +262,8 @@ declare global {
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS?: number;
     /** From frontend.additional_environment; only false turns it off. */
     AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT?: boolean | string;
+    /** From frontend.additional_environment; only false turns it off. */
+    AUDIO_CONVERSATIONAL_SHELL_VOICE?: boolean | string;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
@@ -620,6 +627,9 @@ export const env = (): Env => {
   const voiceMediaStreamOutput =
     import.meta.env.VITE_AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT ??
     window.AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT;
+  const shellVoice =
+    import.meta.env.VITE_AUDIO_CONVERSATIONAL_SHELL_VOICE ??
+    window.AUDIO_CONVERSATIONAL_SHELL_VOICE;
 
   const sidebarCollapsedMode =
     import.meta.env.VITE_SIDEBAR_COLLAPSED_MODE ??
@@ -796,6 +806,8 @@ export const env = (): Env => {
     audioConversationalTalkOverVoiceMinSpeechMs,
     audioConversationalVoiceMediaStreamOutput:
       voiceMediaStreamOutput !== false && voiceMediaStreamOutput !== "false",
+    audioConversationalShellVoice:
+      shellVoice !== false && shellVoice !== "false",
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,

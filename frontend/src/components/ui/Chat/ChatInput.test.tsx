@@ -28,6 +28,11 @@ import { useApprovalSpeech } from "@/hooks/audio/approvalSpeech";
 import { dictatedTurnFor } from "@/hooks/audio/dictatedTurns";
 import { playbackContext } from "@/hooks/audio/pcmPlayback";
 import {
+  closeShellVoiceAudio,
+  ShellVoiceAudio,
+  shellVoiceAudio,
+} from "@/hooks/audio/shellVoiceAudio";
+import {
   beginSpeechResponse,
   noteApprovedAction,
   noteToolCall,
@@ -42,7 +47,11 @@ import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { readTeamsTranscriptIndex } from "@/hooks/teams/useTeamsTranscriptIndex";
 import { messages as enMessages } from "@/locales/en/messages.json";
-import { installHostShell, removeHostShell } from "@/test/hostShellStub";
+import {
+  installHostShell,
+  removeHostShell,
+  shellAnswers,
+} from "@/test/hostShellStub";
 import { setPageVisibility } from "@/test/pageVisibility";
 import {
   teamsIndex,
@@ -2914,6 +2923,113 @@ describe("ChatInput", () => {
         );
       },
     );
+
+    it("hands a conversation's audio to an app shell that offers it before the voice unlocks, and takes it back with audio mode", async () => {
+      const AudioContextMock = vi.fn(function () {
+        return { resume: vi.fn(async () => {}), state: "running" };
+      });
+      vi.stubGlobal("AudioContext", AudioContextMock);
+      const request = installHostShell(
+        { voiceAudio: 1 },
+        shellAnswers({
+          "voiceAudio.open": { sampleRate: 16000, frameSamples: 512 },
+          "voiceAudio.stop": { unplayed: [] },
+          "voiceAudio.close": null,
+        }),
+      );
+      try {
+        useSpeechPlayback.setState({ enabled: true, blocked: true });
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          maxRecordingDurationSeconds: 1200,
+        });
+        const onAudioModeChange = vi.fn();
+        const queryClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const { i18n } = await import("@lingui/core");
+        const composer = (audioMode: boolean) => (
+          <QueryClientProvider client={queryClient}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput
+                onSendMessage={vi.fn()}
+                controlledIsAudioMode={audioMode}
+                onControlledIsAudioModeChange={onAudioModeChange}
+              />
+            </I18nProvider>
+          </QueryClientProvider>
+        );
+        const { rerender } = render(composer(false));
+        // A context an earlier test left must not be what the voice plays on.
+        const leftover = playbackContext();
+        const resumed = leftover
+          ? vi.spyOn(leftover as AudioContext, "resume")
+          : undefined;
+
+        fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+        await waitFor(() =>
+          expect(request).toHaveBeenCalledWith("voiceAudio.open", {
+            startBufferMs: 400,
+            startMaxWaitMs: 350,
+          }),
+        );
+        rerender(composer(true));
+        await waitFor(() =>
+          expect(playbackContext()).toBeInstanceOf(ShellVoiceAudio),
+        );
+        await act(async () => {});
+        expect(useSpeechPlayback.getState().blocked).toBe(false);
+        expect(AudioContextMock).not.toHaveBeenCalled();
+        expect(resumed?.mock.calls ?? []).toHaveLength(0);
+        resumed?.mockRestore();
+
+        rerender(composer(false));
+        await waitFor(() =>
+          expect(request).toHaveBeenCalledWith("voiceAudio.close", undefined),
+        );
+        expect(shellVoiceAudio()).toBeNull();
+      } finally {
+        closeShellVoiceAudio();
+        removeHostShell();
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("keeps a conversation's audio in the page where the deployment turns the app shell's voice off", async () => {
+      const request = installHostShell(
+        { voiceAudio: 1 },
+        shellAnswers({ "voiceAudio.open": {}, "voiceAudio.close": null }),
+      );
+      try {
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          maxRecordingDurationSeconds: 1200,
+          shellVoice: false,
+        });
+        const { i18n } = await import("@lingui/core");
+        render(
+          <QueryClientProvider client={new QueryClient()}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput onSendMessage={vi.fn()} />
+            </I18nProvider>
+          </QueryClientProvider>,
+        );
+
+        fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+        await waitFor(() =>
+          expect(useSpeechPlayback.getState().conversational).toBe(true),
+        );
+        expect(
+          request.mock.calls.filter(([method]) => method === "voiceAudio.open"),
+        ).toHaveLength(0);
+        expect(shellVoiceAudio()).toBeNull();
+      } finally {
+        closeShellVoiceAudio();
+        removeHostShell();
+      }
+    });
 
     const createSubmitHandlerThatSends =
       (
