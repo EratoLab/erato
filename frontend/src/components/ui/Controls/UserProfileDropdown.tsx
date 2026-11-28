@@ -11,6 +11,7 @@ import {
   describeAccountMenu,
 } from "@/lib/shell/menus/describeAccountMenu";
 import { menuEntryDropdownItems } from "@/lib/shell/menus/web/dropdownItems";
+import { useSystemMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 import {
   useAuthFeature,
   useUserPreferencesFeature,
@@ -61,20 +62,26 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           "serversTools"
         : undefined;
 
-    const dropdownItems = menuEntryDropdownItems(
-      describeAccountMenu({ showLogout }),
-      {
-        onSelect: {
-          [ACCOUNT_MENU_ID.settings]: () => setOpenFromMenu(true),
-          [ACCOUNT_MENU_ID.signOut]: onSignOut,
-        },
-      },
-    );
+    const entries = describeAccountMenu({ showLogout });
+    const actions: Partial<Record<string, () => void>> = {
+      [ACCOUNT_MENU_ID.settings]: () => setOpenFromMenu(true),
+      [ACCOUNT_MENU_ID.signOut]: onSignOut,
+    };
+    const dropdownItems = menuEntryDropdownItems(entries, {
+      onSelect: actions,
+    });
+    const nativeMenu = useSystemMenu({
+      id: "account",
+      mode: "attach",
+      entries,
+      onChoose: (id) => actions[id]?.(),
+    });
 
     return (
       <div className={clsx("flex items-center", className)}>
         <DropdownMenu
           items={dropdownItems}
+          nativeMenu={nativeMenu}
           align="left"
           data-testid="user-profile-dropdown"
           triggerButtonGeometry="icon"

@@ -10,16 +10,30 @@ export function installHostShell(
     Promise.resolve({ completed: true }),
   ),
 ) {
+  listeners.clear();
   window.ERATO_SHELL = {
     contract: 1,
     capabilities,
     request,
-    on: () => () => {},
+    on: (event: string, listener: (payload: unknown) => void) => {
+      const forEvent = listeners.get(event) ?? new Set();
+      forEvent.add(listener);
+      listeners.set(event, forEvent);
+      return () => forEvent.delete(listener);
+    },
   };
   return request;
 }
 
+const listeners = new Map<string, Set<(payload: unknown) => void>>();
+
+/** Sends `event` to the page's listeners, as the host app would. */
+export function emitHostShellEvent(event: string, payload: unknown) {
+  for (const listener of listeners.get(event) ?? []) listener(payload);
+}
+
 export function removeHostShell() {
+  listeners.clear();
   delete window.ERATO_SHELL;
 }
 

@@ -171,7 +171,7 @@ import { ComposerToolChips } from "./ComposerToolChips";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
 import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
-import { ModelSelector, ModelSelectorOptionContent } from "./ModelSelector";
+import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { buildAssistantMentionSection } from "./assistantMentionSection";
 import { buildMcpToolsSection, describeAllowChanges } from "./mcpToolsSection";
@@ -184,7 +184,6 @@ import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { toast } from "../Toast/toast";
 
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
-import type { AddMenuSection } from "./ChatInputAddMenu";
 import type {
   AppendToDraftOptions,
   ChatInputControlsHandle,
@@ -2578,33 +2577,6 @@ export const ChatInput = ({
       fitTextareaHeight(textareaRef.current);
     }
   }, [oneLineComposer]);
-  const modelMenuSection = useMemo<AddMenuSection | undefined>(() => {
-    if (availableModels.length === 0) {
-      return undefined;
-    }
-    return {
-      id: "model",
-      header: t({ id: "chatInput.addMenu.modelHeader", message: "Model" }),
-      // Menu placement is an internal key.
-      // eslint-disable-next-line lingui/no-unlocalized-strings
-      placement: "belowTools",
-      // A list of models outgrows the menu, so it opens as its own page; a
-      // single model stays one row, there is nothing to choose between.
-      submenu:
-        availableModels.length > 1
-          ? { summary: selectedModel?.model_display_name }
-          : undefined,
-      items: availableModels.map((model) => ({
-        id: `model-${model.chat_provider_id}`,
-        label: <ModelSelectorOptionContent model={model} compact />,
-        checked: selectedModel?.chat_provider_id === model.chat_provider_id,
-        exclusive: true,
-        disabled: !isSelectionReady,
-        onToggle: () => setSelectedModel(model),
-      })),
-    };
-  }, [availableModels, selectedModel, isSelectionReady, setSelectedModel]);
-
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
     isDisabled ||
@@ -4050,25 +4022,6 @@ export const ChatInput = ({
               {showControls &&
                 (useUnifiedMobileMenu ? (
                   <ChatInputAddControls
-                    compactionSection={
-                      compaction.available
-                        ? {
-                            id: "compaction",
-                            // Menu placement is an internal key.
-                            // eslint-disable-next-line lingui/no-unlocalized-strings
-                            placement: "belowTools",
-                            items: [
-                              {
-                                id: "compact",
-                                label: compactChatLabel(),
-                                description: compactionDescription,
-                                onSelect: compaction.compact,
-                                disabled: compaction.isPending,
-                              },
-                            ],
-                          }
-                        : undefined
-                    }
                     canUpload={canUploadFiles}
                     upload={{
                       message,
@@ -4087,21 +4040,61 @@ export const ChatInput = ({
                     facets={availableFacets}
                     selectedFacetIds={selectedFacetIds}
                     onToggleFacet={toggleFacetId}
-                    assistantSection={assistantMentionSection}
-                    mcpToolsSection={mcpToolsSection}
+                    menu={{
+                      onlySingleFacet:
+                        globalFacetSettings?.only_single_facet ?? false,
+                      // On one line no tool chip says why the tools are set.
+                      toolsLocked: enforceSelectedFacetIds
+                        ? {
+                            reason: oneLineComposer
+                              ? toolsLockReason
+                              : undefined,
+                          }
+                        : undefined,
+                      connectors: canBrowseMcpTools
+                        ? {
+                            servers: mcpServers,
+                            disabledServerIds:
+                              disabledMcpServers.disabledServerIds,
+                            writeToolsEnabled: mcpWriteTools.enabled,
+                          }
+                        : undefined,
+                      assistants: canMentionAssistants
+                        ? { suggested: suggestedAssistants, suggestedFromUsage }
+                        : undefined,
+                      compaction: compaction.available
+                        ? {
+                            description: compactionDescription,
+                            pending: compaction.isPending,
+                          }
+                        : undefined,
+                      // The composer's own model picker shows unless on one line.
+                      model:
+                        oneLineComposer &&
+                        showModelSelector &&
+                        availableModels.length > 0
+                          ? {
+                              models: availableModels,
+                              selectedId:
+                                selectedModel?.chat_provider_id ?? null,
+                              ready: isSelectionReady,
+                            }
+                          : undefined,
+                    }}
+                    actions={{
+                      openConnectors: () => setIsMcpToolsBrowserOpen(true),
+                      openAssistants: () => setIsAssistantBrowserOpen(true),
+                      compact: compaction.compact,
+                      selectModel: (chatProviderId) => {
+                        const model = availableModels.find(
+                          (candidate) =>
+                            candidate.chat_provider_id === chatProviderId,
+                        );
+                        if (model) setSelectedModel(model);
+                      },
+                    }}
                     disabled={composeLocked}
                     uploadDisabled={attachedFiles.length >= maxFiles}
-                    toolsDisabled={enforceSelectedFacetIds}
-                    toolsDisabledReason={
-                      oneLineComposer && enforceSelectedFacetIds
-                        ? toolsLockReason
-                        : undefined
-                    }
-                    modelSection={
-                      oneLineComposer && showModelSelector
-                        ? modelMenuSection
-                        : undefined
-                    }
                     selectedToolCount={
                       oneLineComposer ? selectedFacets.length : undefined
                     }

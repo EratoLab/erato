@@ -29,6 +29,7 @@ import {
   PlusIcon,
 } from "../icons";
 
+import type { NativeMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 import type React from "react";
 
 // The ring swaps into the same slot as a 20px PlusIcon, so it takes that
@@ -137,6 +138,8 @@ export interface ChatInputAddMenuProps {
    */
   selectedToolCount?: number;
   className?: string;
+  /** The host app's system menu for the same rows; see AnchoredPopover. */
+  nativeMenu?: NativeMenu;
 }
 
 // Same delayed close as DropdownMenu's item click, so a selection stays
@@ -170,6 +173,7 @@ export function ChatInputAddMenu({
   isProcessing = false,
   selectedToolCount = 0,
   className = "",
+  nativeMenu,
 }: ChatInputAddMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   // The section shown as a page in place of the whole menu, if any.
@@ -558,6 +562,7 @@ export function ChatInputAddMenu({
     <AnchoredPopover
       isOpen={isOpen}
       onOpenChange={handleOpenChange}
+      nativeMenu={nativeMenu}
       panelRef={panelRef}
       ariaHasPopup="menu"
       role="menu"

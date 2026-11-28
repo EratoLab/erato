@@ -3339,7 +3339,7 @@ msgid "chat.warning.budget.stale"
 msgstr "Votre budget n’a pas pu être actualisé. Ces chiffres sont peut-être obsolètes."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/ChatInputAddControls.tsx
 #: src/lib/shell/menus/describeAddMenu.ts
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Modèle"
