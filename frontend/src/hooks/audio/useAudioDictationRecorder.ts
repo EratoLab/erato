@@ -59,7 +59,7 @@ import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
-import { playbackContext } from "./pcmPlayback";
+import { playbackContext, voiceHeardBy } from "./pcmPlayback";
 import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
@@ -1345,6 +1345,7 @@ export function useAudioDictationRecorder({
         }
 
         mediaStreamRef.current = stream;
+        if (microphoneEchoCancelledRef.current) voiceHeardBy(stream);
         const audioTrack = stream.getAudioTracks()[0];
         // Start watching for mid-session device-loss (AirPods route change,
         // incoming call, unplug) as soon as the track exists (ERMAIN-390).

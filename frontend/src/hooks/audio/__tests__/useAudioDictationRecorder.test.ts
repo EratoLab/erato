@@ -8,10 +8,16 @@ import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
 import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
 import { MUTE_GRACE_MS } from "../audioTuning";
 import { hesitationMatcher } from "../hesitations";
+import { voiceHeardBy } from "../pcmPlayback";
 import {
   resolveEndOfTurnSilenceMs,
   useAudioDictationRecorder,
 } from "../useAudioDictationRecorder";
+
+vi.mock("../pcmPlayback", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../pcmPlayback")>()),
+  voiceHeardBy: vi.fn(),
+}));
 
 vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
   default: "blob:mock-audio-dictation-worklet",
@@ -1367,6 +1373,27 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
       { audio: { echoCancellation: false } },
     ]);
     expect((await track(1)).stop).toHaveBeenCalled();
+  });
+
+  it("lets the voice play as conversation audio while the echo-cancelled microphone is open, not for dictation", async () => {
+    vi.mocked(voiceHeardBy).mockClear();
+    const hook = render();
+    await listen(hook);
+    await cancel(hook);
+    expect(voiceHeardBy).toHaveBeenCalledTimes(1);
+    expect(voiceHeardBy).toHaveBeenCalledWith(
+      await getUserMedia.mock.results[0].value,
+    );
+
+    hook.rerender({ conversation: false });
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    act(() => hook.result.current.cancelDictation());
+
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(voiceHeardBy).toHaveBeenCalledTimes(1);
   });
 
   it("closes the microphone when the page is hidden, and opens it again for the next turn", async () => {
