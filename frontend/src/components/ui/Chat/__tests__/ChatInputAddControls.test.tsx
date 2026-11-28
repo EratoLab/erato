@@ -21,7 +21,7 @@ const onSelectDisk = vi.fn();
 vi.mock("@/hooks/files/useChatFileSources", () => ({
   useChatFileSources: () => ({
     isProcessing: false,
-    fileSourceItems: [{ id: "computer", label: "Upload", onSelect: vi.fn() }],
+    fileSources: ["computer"],
     onSelectDisk,
     onSelectCloud: vi.fn(),
     onSelectFiles: vi.fn(),
@@ -185,6 +185,21 @@ describe("ChatInputAddControls", () => {
     const tool = screen.getByTestId("chat-input-add-menu-tool-web_search");
     expect(tool).toHaveTextContent("Set by the assistant.");
     expect(tool).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("draws the web menu from the description the app gets", () => {
+    renderControls({ menu: { connectors } });
+
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+    expect(screen.getByText("Upload from Computer")).toBeInTheDocument();
+    for (const facet of facets) {
+      expect(
+        screen.getByTestId(`chat-input-add-menu-tool-${facet.id}`),
+      ).toBeInTheDocument();
+    }
+    expect(
+      screen.getByTestId("chat-input-add-menu-extra-connectors"),
+    ).toBeInTheDocument();
   });
 
   describe("in an app with system menus", () => {

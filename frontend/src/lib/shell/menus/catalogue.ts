@@ -16,12 +16,17 @@ import { describeAddMenu } from "./describeAddMenu";
 import { describeFilterMenu } from "./describeFilterMenu";
 import { describeModelMenu } from "./describeModelMenu";
 import { describeRowMenu } from "./describeRowMenu";
-import { confirmParams, toShellMenuItems } from "./menuEntry";
+import {
+  CONFIRM_ACTION_ID,
+  confirmParams,
+  toShellMenuItems,
+} from "./menuEntry";
 import { SHELL_MENUS } from "./registry";
 
 import type { MenuConfirm, MenuDescription, MenuEntry } from "./menuEntry";
 import type { ShellMenuName } from "./registry";
 import type { ShellAnchor } from "@/lib/hostShell";
+import type { CapabilityCatalogue } from "@/lib/shell/catalogue/capabilityCatalogue";
 import type {
   ShellMenuItem,
   SystemMenusAppMessage,
@@ -29,29 +34,25 @@ import type {
 } from "@/lib/shell/contract/systemMenus";
 
 /** A 48 px circle: every icon in the catalogue is drawn as this picture. */
-export const CATALOGUE_ICON_PNG =
+const CATALOGUE_ICON_PNG =
   "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAcklEQVR42u2ZsQ0AIAzD+P/pcAISAtoEW8peT5R0DACANLSI5dBtZXQotoOXiOhyrIe/KqHHsR7+uIS1gIrzt4CaBAFLATULAggggAAC/74FrBJspPwH+BObC9jXKhHFVkS1GFHuRtTrMQeOmBMTAMAeE+2N+DKyUB6+AAAAAElFTkSuQmCC";
 
 const ANCHOR: ShellAnchor = { x: 12, y: 780, width: 40, height: 40 };
 const MOVED_ANCHOR: ShellAnchor = { x: 12, y: 452, width: 40, height: 40 };
-const CONFIRM_ACTION_ID = "confirm";
 
-export interface CatalogueDocument {
-  /** The file name without `.json`: `<menu>.<fixture>`, or `app.<case>`. */
-  name: string;
-  document: SystemMenusRequest | SystemMenusAppMessage;
-}
+/** Per menu and fixture: the document's name, or null where it stays web. */
+type CatalogueMenus = Record<
+  ShellMenuName,
+  { request: "show" | "attach"; fixtures: Record<string, string | null> }
+>;
 
-export interface SystemMenusCatalogue {
-  capability: typeof SYSTEM_MENUS_CAPABILITY;
-  version: typeof SYSTEM_MENUS_VERSION;
-  /** Per menu and fixture: the document's name, or null where it stays web. */
-  menus: Record<
-    ShellMenuName,
-    { request: "show" | "attach"; fixtures: Record<string, string | null> }
-  >;
-  documents: CatalogueDocument[];
-}
+/** Document names are `<menu>.<fixture>`, or `app.<case>`. */
+type SystemMenusCatalogue = CapabilityCatalogue<
+  SystemMenusRequest | SystemMenusAppMessage,
+  { menus: CatalogueMenus }
+>;
+
+type CatalogueDocument = SystemMenusCatalogue["documents"][number];
 
 interface Described {
   entries: MenuDescription;
@@ -188,7 +189,7 @@ const appMessages = (): CatalogueDocument[] => [
 export function buildSystemMenusCatalogue(): SystemMenusCatalogue {
   const described = describedMenus();
   const documents: CatalogueDocument[] = [];
-  const menus = {} as SystemMenusCatalogue["menus"];
+  const menus = {} as CatalogueMenus;
 
   for (const [menu, fixtures] of Object.entries(described) as [
     ShellMenuName,
@@ -219,25 +220,26 @@ export function buildSystemMenusCatalogue(): SystemMenusCatalogue {
           name: `${name}.confirm-${id}`,
           document: {
             method: SYSTEM_MENUS_METHOD.confirm,
-            params: {
-              ...confirmParams(confirm, CONFIRM_ACTION_ID),
-              anchor: ANCHOR,
-            },
+            params: confirmParams(confirm, ANCHOR),
           },
         });
       }
     }
   }
 
-  // While the "+" menu is open, an upload starts (every row waits) and the
-  // keyboard moves its button.
-  const uploading = describeAddMenu({ ...ADD_MENU_FIXTURES.tools, busy: true });
-  if (uploading) {
+  // While the "+" menu is open, a second tool is switched on (the page's
+  // entries after `toggled`) and the keyboard moves its button.
+  const { tools } = ADD_MENU_FIXTURES;
+  const toggled = describeAddMenu({
+    ...tools,
+    selectedFacetIds: tools.facets.slice(0, 2).map((facet) => facet.id),
+  });
+  if (toggled) {
     documents.push({
-      name: "addMenu.update-uploading",
+      name: "addMenu.update-toggled",
       document: {
         method: SYSTEM_MENUS_METHOD.update,
-        params: { id: "addMenu", items: wireItems(uploading) },
+        params: { id: "addMenu", items: wireItems(toggled) },
       },
     });
   }
@@ -262,7 +264,7 @@ export function buildSystemMenusCatalogue(): SystemMenusCatalogue {
   return {
     capability: SYSTEM_MENUS_CAPABILITY,
     version: SYSTEM_MENUS_VERSION,
-    menus,
     documents,
+    index: { menus },
   };
 }

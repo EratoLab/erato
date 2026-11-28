@@ -100,7 +100,7 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Chores & Developer experience
 
-**A host app can test what the page may send to its system menus.** The "+", model, chat row, history filter and account menus are each described as data by a pure function (`frontend/src/lib/shell/menus/`), and the row, filter and account web menus draw from that description. `frontend/src/lib/shell/contract/systemMenus.v1.schema.json` is the shape a host app that offers `systemMenus: 1` in `window.ERATO_SHELL` may be sent, and `pnpm shell:catalogue` writes every menu in every fixture setting as the request the page would send, for the host's own tests. Nothing changes in the web app.
+**A host app can test what the page may send to its system menus.** The "+", model, chat row, history filter and account menus are each described as data by a pure function (`frontend/src/lib/shell/menus/`), and their web menus draw from that description. `frontend/src/lib/shell/contract/systemMenus.v1.schema.json` is the shape a host app that offers `systemMenus: 1` in `window.ERATO_SHELL` may be sent; the page's types for it are generated from the schema (`pnpm shell:types`, checked in CI). `pnpm shell:catalogue` writes every menu in every fixture setting as the request the page would send, a folder per capability, for the host's own tests. Nothing changes in the web app.
 
 #### Deprecations and upgrade notes
 

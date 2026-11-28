@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
+import { toolsHeaderLabel } from "@/lib/shell/menus/addMenuTexts";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
@@ -539,7 +540,7 @@ export function ChatInputAddMenu({
           className="flex flex-col"
         >
           <PopoverSectionHeader id={toolsHeaderId}>
-            {t({ id: "chatInput.addMenu.toolsHeader", message: "Tools" })}
+            {toolsHeaderLabel()}
           </PopoverSectionHeader>
           {tools.map((tool) =>
             renderToolRow(tool, `chat-input-add-menu-tool-${tool.id}`),

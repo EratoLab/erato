@@ -2,6 +2,8 @@ import { render, renderHook, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { schemaChecks } from "@/lib/shell/catalogue/schemaChecks";
+import schema from "@/lib/shell/contract/systemMenus.v1.schema.json";
 import {
   emitHostShellEvent,
   installHostShell,
@@ -45,6 +47,8 @@ const trigger = () => {
   return button;
 };
 
+const checks = schemaChecks(schema);
+
 const options = (more: Partial<SystemMenuOptions> = {}): SystemMenuOptions => ({
   id: "row",
   mode: "show",
@@ -55,6 +59,14 @@ const options = (more: Partial<SystemMenuOptions> = {}): SystemMenuOptions => ({
 
 describe("useSystemMenu", () => {
   afterEach(() => {
+    // What the page sent the app fits the contract.
+    const request = (window.ERATO_SHELL as { request?: unknown } | undefined)
+      ?.request;
+    if (request && vi.isMockFunction(request)) {
+      for (const [method, params] of request.mock.calls) {
+        expect(checks.errors({ method, params }), String(method)).toEqual([]);
+      }
+    }
     removeHostShell();
     document.body.innerHTML = "";
   });

@@ -44,6 +44,9 @@ interface ModelSelectorProps {
   align?: "left" | "right";
 }
 
+const modelOfEntry = (models: readonly ChatModel[], itemId: string) =>
+  models.find((model) => model.chat_provider_id === modelChoice(itemId));
+
 export function ModelSelectorOptionContent({
   model,
   compact = false,
@@ -111,18 +114,36 @@ export const ModelSelector = ({
     [availableModels],
   );
 
-  // Convert available models to dropdown menu items
-  const dropdownItems: DropdownMenuItem[] = useMemo(() => {
-    const items = availableModels.map((model) => ({
-      label: (
-        <ModelSelectorOptionContent
-          model={model}
-          reserveIconSpace={shouldReserveIconSpace}
-        />
+  // One description of the models, for the dropdown and the app's menu.
+  const entries = useMemo(
+    () =>
+      describeModelMenu(
+        {
+          models: availableModels,
+          selectedId: selectedModel?.chat_provider_id ?? null,
+          ready: !disabled,
+        },
+        { descriptions: true },
       ),
-      onClick: () => onModelChange(model),
-      checked: selectedModel?.chat_provider_id === model.chat_provider_id,
-    }));
+    [availableModels, selectedModel, disabled],
+  );
+  const dropdownItems: DropdownMenuItem[] = useMemo(() => {
+    const items: DropdownMenuItem[] = entries.flatMap((entry) => {
+      const model = modelOfEntry(availableModels, entry.id);
+      if (!model) return [];
+      return [
+        {
+          label: (
+            <ModelSelectorOptionContent
+              model={model}
+              reserveIconSpace={shouldReserveIconSpace}
+            />
+          ),
+          onClick: () => onModelChange(model),
+          checked: entry.state === "on",
+        },
+      ];
+    });
 
     if (allowNoSelection) {
       items.unshift({
@@ -140,6 +161,7 @@ export const ModelSelector = ({
   }, [
     allowNoSelection,
     availableModels,
+    entries,
     noneLabel,
     onClearSelection,
     onModelChange,
@@ -152,21 +174,9 @@ export const ModelSelector = ({
     id: `model:${menuId}`,
     mode: "attach",
     // "No default model" is a row the description does not have.
-    entries:
-      allowNoSelection || availableModels.length < 2
-        ? null
-        : describeModelMenu(
-            {
-              models: availableModels,
-              selectedId: selectedModel?.chat_provider_id ?? null,
-              ready: !disabled,
-            },
-            { descriptions: true },
-          ),
+    entries: allowNoSelection || availableModels.length < 2 ? null : entries,
     onChoose: (itemId) => {
-      const chosen = availableModels.find(
-        (model) => model.chat_provider_id === modelChoice(itemId),
-      );
+      const chosen = modelOfEntry(availableModels, itemId);
       if (chosen) onModelChange(chosen);
     },
   });

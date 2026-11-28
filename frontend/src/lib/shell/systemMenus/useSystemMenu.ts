@@ -1,13 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { hostShellWithCapability, shellAnchor } from "@/lib/hostShell";
+import { observePopoverViewport } from "@/lib/popoverViewport";
 import {
+  requestSystemMenus,
   SYSTEM_MENUS_CAPABILITY,
   SYSTEM_MENUS_EVENT,
   SYSTEM_MENUS_METHOD,
   SYSTEM_MENUS_VERSION,
 } from "@/lib/shell/contract/systemMenus";
 import {
+  CONFIRM_ACTION_ID,
   confirmParams,
   findMenuEntry,
   menuIcons,
@@ -48,7 +51,6 @@ export interface NativeMenu {
   attachTo(trigger: Element | null): void;
 }
 
-const CONFIRM_ACTION_ID = "confirm";
 /** A first menu waits this long at most for its icons to be drawn. */
 const ICON_WAIT_MS = 400;
 /**
@@ -230,12 +232,16 @@ class SystemMenuSession {
       const items = this.items();
       let answer: unknown;
       try {
-        answer = await this.shell.request(SYSTEM_MENUS_METHOD.show, {
-          id,
-          anchor: shellAnchor(trigger),
-          ...(this.options.title ? { title: this.options.title } : {}),
-          items,
-        });
+        answer = await requestSystemMenus(
+          this.shell,
+          SYSTEM_MENUS_METHOD.show,
+          {
+            id,
+            anchor: shellAnchor(trigger),
+            ...(this.options.title ? { title: this.options.title } : {}),
+            items,
+          },
+        );
       } catch {
         answer = undefined;
       }
@@ -258,10 +264,14 @@ class SystemMenuSession {
     if (entry.confirm) {
       let answer: unknown;
       try {
-        answer = await this.shell.request(SYSTEM_MENUS_METHOD.confirm, {
-          ...confirmParams(entry.confirm, CONFIRM_ACTION_ID),
-          ...(trigger ? { anchor: shellAnchor(trigger) } : {}),
-        });
+        answer = await requestSystemMenus(
+          this.shell,
+          SYSTEM_MENUS_METHOD.confirm,
+          confirmParams(
+            entry.confirm,
+            trigger ? shellAnchor(trigger) : undefined,
+          ),
+        );
       } catch {
         // Not asked is not agreed: the person can pick it again.
         return;
@@ -313,11 +323,15 @@ class SystemMenuSession {
       const anchor = shellAnchor(trigger);
       let answer: unknown;
       try {
-        answer = await this.shell.request(SYSTEM_MENUS_METHOD.attach, {
-          id: this.options.id,
-          anchor,
-          items,
-        });
+        answer = await requestSystemMenus(
+          this.shell,
+          SYSTEM_MENUS_METHOD.attach,
+          {
+            id: this.options.id,
+            anchor,
+            items,
+          },
+        );
       } catch {
         answer = undefined;
       }
@@ -352,9 +366,9 @@ class SystemMenuSession {
   }
 
   private requestDetach() {
-    void this.shell
-      .request(SYSTEM_MENUS_METHOD.detach, { id: this.options.id })
-      .catch(() => {});
+    void requestSystemMenus(this.shell, SYSTEM_MENUS_METHOD.detach, {
+      id: this.options.id,
+    }).catch(() => {});
   }
 
   /** New entries for an open or attached menu, when they changed. */
@@ -366,9 +380,10 @@ class SystemMenuSession {
     const sent = JSON.stringify(items);
     if (sent === this.sentItems) return;
     this.sentItems = sent;
-    void this.shell
-      .request(SYSTEM_MENUS_METHOD.update, { id, items })
-      .catch(() => {});
+    void requestSystemMenus(this.shell, SYSTEM_MENUS_METHOD.update, {
+      id,
+      items,
+    }).catch(() => {});
   }
 
   /**
@@ -387,18 +402,16 @@ class SystemMenuSession {
         const sent = JSON.stringify(anchor);
         if (sent === this.sentAnchor) return;
         this.sentAnchor = sent;
-        void this.shell
-          .request(SYSTEM_MENUS_METHOD.update, { id: this.options.id, anchor })
-          .catch(() => {});
+        void requestSystemMenus(this.shell, SYSTEM_MENUS_METHOD.update, {
+          id: this.options.id,
+          anchor,
+        }).catch(() => {});
       });
     };
     const resize = new ResizeObserver(check);
     resize.observe(trigger);
     resize.observe(document.documentElement);
-    const viewport = window.visualViewport;
-    viewport?.addEventListener("resize", check);
-    viewport?.addEventListener("scroll", check);
-    window.addEventListener("scroll", check, true);
+    const stopViewport = observePopoverViewport(check);
     document.addEventListener("transitionend", check, true);
     const interval = window.setInterval(check, PLACE_CHECK_MS);
     // A page restored from the back-forward cache lost its attachment.
@@ -412,9 +425,7 @@ class SystemMenuSession {
       window.cancelAnimationFrame(frame);
       window.clearInterval(interval);
       resize.disconnect();
-      viewport?.removeEventListener("resize", check);
-      viewport?.removeEventListener("scroll", check);
-      window.removeEventListener("scroll", check, true);
+      stopViewport();
       document.removeEventListener("transitionend", check, true);
       window.removeEventListener("pageshow", restored);
     };

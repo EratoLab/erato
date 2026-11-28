@@ -1,5 +1,6 @@
 /* eslint-disable lingui/no-unlocalized-strings -- fixture data standing in for what a server sends */
-import { everyValue } from "./everyValue";
+import { everyValue } from "@/utils/everyValue";
+
 import { MODELS } from "./modelMenu.fixtures";
 
 import type { AddMenuFileSource, AddMenuState } from "../describeAddMenu";
@@ -45,7 +46,6 @@ const SERVERS: McpServerStatus[] = connectionStatuses.map((status, index) => ({
 const fileSources = everyValue<AddMenuFileSource>()("computer", "sharepoint");
 
 const plain: AddMenuState = {
-  busy: false,
   fileSources: ["computer"],
   uploadLimitReached: false,
   facets: FACETS,
@@ -65,8 +65,6 @@ export const ADD_MENU_FIXTURES = {
   uploadsOff: fixture({ fileSources: [] }),
   cloudUpload: fixture({ fileSources }),
   uploadLimitReached: fixture({ uploadLimitReached: true }),
-  // Files are uploading: every row waits, and the tools say nothing.
-  busy: fixture({ busy: true }),
   toolsLocked: fixture({
     toolsLocked: { reason: "This assistant sets the tools for its chats." },
   }),
@@ -124,9 +122,9 @@ export const ADD_MENU_FIXTURES = {
   models: fixture({
     model: { models: MODELS, selectedId: "claude-sonnet", ready: true },
   }),
-  modelsBusy: fixture({
-    busy: true,
-    model: { models: MODELS, selectedId: "claude-sonnet", ready: true },
+  // The chat's settings are still loading: the models wait.
+  modelsNotReady: fixture({
+    model: { models: MODELS, selectedId: "claude-sonnet", ready: false },
   }),
   everything: fixture({
     fileSources,
@@ -143,7 +141,6 @@ export const ADD_MENU_FIXTURES = {
 
 /** Each setting of the menu, so the matrix gains a fixture when one is added. */
 export const ADD_MENU_STATE_KEYS = everyValue<keyof AddMenuState>()(
-  "busy",
   "fileSources",
   "uploadLimitReached",
   "facets",

@@ -1,7 +1,6 @@
 /* eslint-disable lingui/no-unlocalized-strings -- fixture data standing in for what a server sends */
 import { CHAT_HISTORY_FILTER_DEFAULTS } from "@/hooks/chat/store/chatHistoryFilterStore";
-
-import { everyValue } from "./everyValue";
+import { everyValue } from "@/utils/everyValue";
 
 import type {
   ChatHistoryFilterCapabilities,
@@ -11,7 +10,7 @@ import type {
   ChatHistorySourceMode,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
 
-export interface FilterMenuFixture {
+interface FilterMenuFixture {
   values: ChatHistoryFilterValues;
   capabilities: ChatHistoryFilterCapabilities;
 }

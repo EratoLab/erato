@@ -1,5 +1,3 @@
-import { t } from "@lingui/core/macro";
-
 import {
   ASSISTANT_MENTION_OPEN_ITEM_ID,
   buildAssistantMentionSection,
@@ -10,7 +8,12 @@ import {
   buildMcpToolsSection,
 } from "@/components/ui/Chat/mcpToolsSection";
 
-import { compactChatLabel, uploadSourceLabel } from "./addMenuTexts";
+import {
+  compactChatLabel,
+  modelHeaderLabel,
+  toolsHeaderLabel,
+  uploadSourceLabel,
+} from "./addMenuTexts";
 import { describeModelMenu } from "./describeModelMenu";
 
 import type { AddMenuFileSource } from "./addMenuTexts";
@@ -27,8 +30,6 @@ import type React from "react";
 export type { AddMenuFileSource } from "./addMenuTexts";
 
 export interface AddMenuState {
-  /** The composer is locked or files are being uploaded: every row waits. */
-  busy: boolean;
   /** Where files can come from; empty when uploads are off. */
   fileSources: readonly AddMenuFileSource[];
   /** The chat holds as many files as it may. */
@@ -64,15 +65,24 @@ export const ADD_MENU_ID = {
   model: "model",
 } as const;
 
+export const ADD_MENU_SECTION = {
+  uploads: "section:uploads",
+  tools: "section:tools",
+  connectors: "section:connectors",
+  assistants: "section:assistants",
+  compaction: "section:compaction",
+  model: "section:model",
+} as const;
+
 const TOOL_ID_PREFIX = "tool:";
-export const toolEntryId = (facetId: string) => `${TOOL_ID_PREFIX}${facetId}`;
+const toolEntryId = (facetId: string) => `${TOOL_ID_PREFIX}${facetId}`;
 export const toolChoice = (itemId: string): string | null =>
   itemId.startsWith(TOOL_ID_PREFIX)
     ? itemId.slice(TOOL_ID_PREFIX.length)
     : null;
 
-// The web menu's own section builders and labels hold the rows' texts, so
-// the two drawings cannot word a row differently.
+// The web menu's own section builders and labels hold the rows' texts, and
+// how the web menu draws them, so no row says or does it differently.
 const textOf = (node: React.ReactNode, what: string): string => {
   if (typeof node !== "string") {
     throw new Error(`describeAddMenu: the ${what} is drawn, not text`);
@@ -80,21 +90,27 @@ const textOf = (node: React.ReactNode, what: string): string => {
   return node;
 };
 
-const sectionRow = (
-  section: AddMenuSection,
-  id: string,
-  disabled: boolean,
-): MenuEntry => {
+const sectionRow = (section: AddMenuSection, id: string): MenuEntry => {
   const row = section.items[0];
   const description =
     "description" in row && row.description != null
       ? textOf(row.description, `${id} description`)
       : undefined;
+  const closesImmediately = "closesImmediately" in row && row.closesImmediately;
+  const twoLineSubtitle =
+    "truncateDescription" in row && row.truncateDescription;
   return {
     id,
     label: textOf(row.label, `${id} label`),
     ...(description ? { subtitle: description } : {}),
-    ...(disabled ? { disabled: true } : {}),
+    ...(closesImmediately || twoLineSubtitle
+      ? {
+          web: {
+            ...(closesImmediately ? { closesImmediately } : {}),
+            ...(twoLineSubtitle ? { twoLineSubtitle } : {}),
+          },
+        }
+      : {}),
   };
 };
 
@@ -103,17 +119,14 @@ const noop = () => {};
 /**
  * The composer's "+" menu: uploads, the tools as toggles that keep the menu
  * open, connectors, assistants, compaction and, on a one-line composer, the
- * model. `null` while a host draws rows of its own into it.
+ * model. The web menu draws these entries whatever else it holds.
  */
-export function describeAddMenu(state: AddMenuState): MenuDescription {
-  if (state.hostContent) return null;
-  const { busy } = state;
+export function addMenuEntries(state: AddMenuState): MenuEntry[] {
   const sections: MenuEntry[] = [];
 
   if (state.fileSources.length > 0) {
-    const disabled = busy || state.uploadLimitReached;
     sections.push({
-      id: "section:uploads",
+      id: ADD_MENU_SECTION.uploads,
       inline: true,
       children: state.fileSources.map((source) => ({
         id:
@@ -125,7 +138,7 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
           // eslint-disable-next-line lingui/no-unlocalized-strings -- icon names
           name: source === "computer" ? "uploadComputer" : "uploadCloud",
         },
-        ...(disabled ? { disabled: true } : {}),
+        ...(state.uploadLimitReached ? { disabled: true } : {}),
       })),
     });
   }
@@ -133,11 +146,10 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
   if (state.facets.length > 0) {
     const selected = new Set(state.selectedFacetIds);
     const locked = state.toolsLocked;
-    const disabled = busy || locked !== undefined;
     sections.push({
-      id: "section:tools",
+      id: ADD_MENU_SECTION.tools,
       inline: true,
-      label: t({ id: "chatInput.addMenu.toolsHeader", message: "Tools" }),
+      label: toolsHeaderLabel(),
       selection: state.onlySingleFacet ? "single" : "multiple",
       children: state.facets.map((facet) => ({
         id: toolEntryId(facet.id),
@@ -145,7 +157,7 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
         icon: facet.icon ? { iconId: facet.icon } : { name: "tool" },
         state: selected.has(facet.id) ? "on" : "off",
         keepOpen: true,
-        ...(disabled ? { disabled: true } : {}),
+        ...(locked ? { disabled: true } : {}),
         ...(locked?.reason ? { disabledReason: locked.reason } : {}),
       })),
     });
@@ -154,9 +166,9 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
   if (state.connectors) {
     const section = buildMcpToolsSection({ ...state.connectors, onOpen: noop });
     sections.push({
-      id: "section:connectors",
+      id: ADD_MENU_SECTION.connectors,
       inline: true,
-      children: [sectionRow(section, ADD_MENU_ID.connectors, busy)],
+      children: [sectionRow(section, ADD_MENU_ID.connectors)],
     });
   }
 
@@ -166,23 +178,22 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
       onOpen: noop,
     });
     sections.push({
-      id: "section:assistants",
+      id: ADD_MENU_SECTION.assistants,
       inline: true,
-      children: [sectionRow(section, ADD_MENU_ID.assistants, busy)],
+      children: [sectionRow(section, ADD_MENU_ID.assistants)],
     });
   }
 
   if (state.compaction) {
-    const disabled = busy || state.compaction.pending;
     sections.push({
-      id: "section:compaction",
+      id: ADD_MENU_SECTION.compaction,
       inline: true,
       children: [
         {
           id: ADD_MENU_ID.compact,
           label: compactChatLabel(),
           subtitle: state.compaction.description,
-          ...(disabled ? { disabled: true } : {}),
+          ...(state.compaction.pending ? { disabled: true } : {}),
         },
       ],
     });
@@ -190,11 +201,8 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
 
   if (state.model && state.model.models.length > 0) {
     // The composer draws its "+" models without descriptions.
-    const rows = describeModelMenu(
-      { ...state.model, ready: state.model.ready && !busy },
-      { descriptions: false },
-    );
-    const header = t({ id: "chatInput.addMenu.modelHeader", message: "Model" });
+    const rows = describeModelMenu(state.model, { descriptions: false });
+    const header = modelHeaderLabel();
     const selected = state.model.models.find(
       (model) => model.chat_provider_id === state.model?.selectedId,
     );
@@ -203,7 +211,7 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
     sections.push(
       rows.length > 1
         ? {
-            id: "section:model",
+            id: ADD_MENU_SECTION.model,
             inline: true,
             children: [
               {
@@ -211,13 +219,12 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
                 label: header,
                 ...(selected ? { subtitle: selected.model_display_name } : {}),
                 selection: "single",
-                ...(busy ? { disabled: true } : {}),
                 children: rows,
               },
             ],
           }
         : {
-            id: "section:model",
+            id: ADD_MENU_SECTION.model,
             inline: true,
             label: header,
             selection: "single",
@@ -227,4 +234,9 @@ export function describeAddMenu(state: AddMenuState): MenuDescription {
   }
 
   return sections;
+}
+
+/** The "+" menu for the app: `null` while a host draws rows of its own into it. */
+export function describeAddMenu(state: AddMenuState): MenuDescription {
+  return state.hostContent ? null : addMenuEntries(state);
 }

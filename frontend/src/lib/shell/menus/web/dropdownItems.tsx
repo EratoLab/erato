@@ -3,7 +3,7 @@ import { MenuIconView } from "./MenuIconView";
 import type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
 import type { MenuEntry } from "@/lib/shell/menus/menuEntry";
 
-export interface MenuEntryDropdownOptions {
+interface MenuEntryDropdownOptions {
   /** What a pick of each entry does, by id; an entry without one is left out. */
   onSelect: Readonly<Record<string, (() => void) | undefined>>;
   testIds?: Readonly<Record<string, string | undefined>>;

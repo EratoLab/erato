@@ -16,3 +16,9 @@ export const uploadSourceLabel = (source: AddMenuFileSource): string =>
 
 export const compactChatLabel = (): string =>
   t({ id: "chat.compaction.action", message: "Compact chat history" });
+
+export const toolsHeaderLabel = (): string =>
+  t({ id: "chatInput.addMenu.toolsHeader", message: "Tools" });
+
+export const modelHeaderLabel = (): string =>
+  t({ id: "chatInput.addMenu.modelHeader", message: "Model" });

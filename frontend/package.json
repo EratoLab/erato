@@ -74,6 +74,7 @@
     "check:component-registry-shared": "node scripts/generate-component-registry-shared-exports.mjs --check",
     "build:adaptive-cards": "node scripts/build-adaptive-cards.mjs",
     "check:adaptive-cards": "node scripts/build-adaptive-cards.mjs --check",
+    "check:shell-types": "node scripts/shell-contract-types.mjs --check",
     "check:served-routes": "node ../scripts/generate-served-routes.mjs --check --target frontend",
     "typecheck": "tsc --noEmit",
     "check": "pnpm lint:strict && pnpm typecheck",
@@ -82,7 +83,8 @@
     "i18n:extract:check": "./scripts/check-i18n-extract.sh",
     "i18n:compile": "lingui compile",
     "i18n:watch": "lingui extract --watch",
-    "shell:catalogue": "lingui compile && node scripts/shell-catalogue.mjs"
+    "shell:catalogue": "lingui compile && node scripts/shell-catalogue.mjs",
+    "shell:types": "node scripts/shell-contract-types.mjs"
   },
   "dependencies": {
     "@erato/desktop-sidecar-protocol": "file:../desktop-sidecar-protocol",
@@ -194,6 +196,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-storybook": "^0.11.2",
     "jsdom": "^26.0.0",
+    "json-schema-to-typescript": "15.0.4",
     "msw": "^2.7.3",
     "postcss": "^8.5.15",
     "prettier": "3.5.0",

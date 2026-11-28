@@ -205,11 +205,10 @@ describe("describeAddMenu", () => {
     });
   });
 
-  it("holds every row while files upload", () => {
-    const rows = leaves(add("busy"));
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows.every((entry) => entry.disabled)).toBe(true);
-    expect(findMenuEntry(add("modelsBusy"), "model")?.disabled).toBe(true);
+  it("holds the models while the chat's settings load", () => {
+    const models = findMenuEntry(add("modelsNotReady"), "model")?.children;
+    expect(models?.length).toBeGreaterThan(0);
+    expect(models?.every((entry) => entry.disabled)).toBe(true);
   });
 
   it("reads the connectors' and assistants' texts from the web menu's own rows", () => {

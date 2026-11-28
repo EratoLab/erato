@@ -49,8 +49,9 @@ try {
     "/src/lib/shell/catalogue/writeShellCatalogue.ts",
   );
   const { messages } = JSON.parse(fs.readFileSync(messagesPath, "utf8"));
-  const { folder, files } = writeShellCatalogue({ outDir, messages });
-  console.log(`${path.relative(process.cwd(), folder)}: ${files} files`);
+  for (const { folder, files } of writeShellCatalogue({ outDir, messages })) {
+    console.log(`${path.relative(process.cwd(), folder)}: ${files} files`);
+  }
 } finally {
   await server.close();
 }

@@ -1,6 +1,6 @@
 /* eslint-disable lingui/no-unlocalized-strings -- JSON pointers into a schema */
 /** The keywords these walks follow; a schema has others besides. */
-type JsonSchema = {
+export type JsonSchema = {
   $ref?: string;
   properties?: Record<string, JsonSchema>;
   items?: JsonSchema;

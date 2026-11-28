@@ -3339,8 +3339,7 @@ msgid "chat.warning.budget.stale"
 msgstr "Das Budget konnte nicht aktualisiert werden. Die Zahlen sind möglicherweise veraltet."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInputAddControls.tsx
-#: src/lib/shell/menus/describeAddMenu.ts
+#: src/lib/shell/menus/addMenuTexts.ts
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Modell"
 
@@ -3350,8 +3349,7 @@ msgid "chatInput.addMenu.pageBack"
 msgstr "Zurück:"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInputAddMenu.tsx
-#: src/lib/shell/menus/describeAddMenu.ts
+#: src/lib/shell/menus/addMenuTexts.ts
 msgid "chatInput.addMenu.toolsHeader"
 msgstr "Tools"
 
@@ -4745,13 +4743,11 @@ msgid "filePreviewModal.unavailableMissingPermissions"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/FileUpload/FileSourceSelector.tsx
 #: src/lib/shell/menus/addMenuTexts.ts
 msgid "fileSourceSelector.uploadFromComputer"
 msgstr "Vom Computer hochladen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/FileUpload/FileSourceSelector.tsx
 #: src/lib/shell/menus/addMenuTexts.ts
 msgid "fileSourceSelector.uploadFromOneDrive"
 msgstr "Von Sharepoint hochladen"
