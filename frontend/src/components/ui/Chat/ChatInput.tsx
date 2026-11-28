@@ -36,7 +36,11 @@ import {
   hesitationWordsFor,
 } from "@/hooks/audio/hesitations";
 import { classifyOverVoiceTurn } from "@/hooks/audio/overVoiceTurn";
-import { configureVoiceStart, lowerVoice } from "@/hooks/audio/pcmPlayback";
+import {
+  configureVoiceOutput,
+  configureVoiceStart,
+  lowerVoice,
+} from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import { takeSpeechEnd } from "@/hooks/audio/speechEnd";
 import {
@@ -663,6 +667,7 @@ export const ChatInput = ({
     hesitationsByLanguage,
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
+    voiceMediaStreamOutput,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
   // Hesitations sound like the language the user spoke last.
@@ -685,6 +690,9 @@ export const ChatInput = ({
       maxWaitMs: voiceStartMaxWaitMs,
     });
   }, [voiceStartBufferMs, voiceStartMaxWaitMs]);
+  useEffect(() => {
+    configureVoiceOutput({ mediaStream: voiceMediaStreamOutput });
+  }, [voiceMediaStreamOutput]);
   useEffect(() => {
     useSpeechPlayback.setState({
       conversational: isAudioMode && Boolean(speechEnabled),

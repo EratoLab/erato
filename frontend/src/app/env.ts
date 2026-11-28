@@ -132,6 +132,11 @@ export type Env = {
   audioConversationalTalkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds. */
   audioConversationalTalkOverVoiceMinSpeechMs?: number;
+  /**
+   * While a microphone with echo cancellation is open, the voice plays as a
+   * media stream, so the browser's echo canceller removes it.
+   */
+  audioConversationalVoiceMediaStreamOutput?: boolean;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
@@ -250,6 +255,8 @@ declare global {
     AUDIO_CONVERSATIONAL_HESITATIONS?: Partial<Record<string, string[]>>;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE?: boolean;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS?: number;
+    /** From frontend.additional_environment; only false turns it off. */
+    AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT?: boolean | string;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
@@ -610,6 +617,9 @@ export const env = (): Env => {
         import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS,
       )
     : window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS;
+  const voiceMediaStreamOutput =
+    import.meta.env.VITE_AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT ??
+    window.AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT;
 
   const sidebarCollapsedMode =
     import.meta.env.VITE_SIDEBAR_COLLAPSED_MODE ??
@@ -784,6 +794,8 @@ export const env = (): Env => {
     audioConversationalHesitations: window.AUDIO_CONVERSATIONAL_HESITATIONS,
     audioConversationalTalkOverVoice,
     audioConversationalTalkOverVoiceMinSpeechMs,
+    audioConversationalVoiceMediaStreamOutput:
+      voiceMediaStreamOutput !== false && voiceMediaStreamOutput !== "false",
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,

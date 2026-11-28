@@ -102,6 +102,8 @@ interface AudioConversationalFeatureConfig {
   talkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds; 300 when omitted. */
   talkOverVoiceMinSpeechMs?: number;
+  /** The voice is conversation audio while the microphone listens; on when omitted. */
+  voiceMediaStreamOutput?: boolean;
 }
 
 /**
@@ -507,6 +509,8 @@ function createFeatureConfig(
       talkOverVoice: environment.audioConversationalTalkOverVoice ?? false,
       talkOverVoiceMinSpeechMs:
         environment.audioConversationalTalkOverVoiceMinSpeechMs,
+      voiceMediaStreamOutput:
+        environment.audioConversationalVoiceMediaStreamOutput,
     },
     auth: {
       showLogout: !environment.disableLogout,

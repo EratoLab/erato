@@ -8,7 +8,7 @@ import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
 import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
 import { MUTE_GRACE_MS } from "../audioTuning";
 import { hesitationMatcher } from "../hesitations";
-import { voiceHeardBy } from "../pcmPlayback";
+import { voiceHeardBy, voiceNoLongerHeardBy } from "../pcmPlayback";
 import {
   resolveEndOfTurnSilenceMs,
   useAudioDictationRecorder,
@@ -17,6 +17,7 @@ import {
 vi.mock("../pcmPlayback", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../pcmPlayback")>()),
   voiceHeardBy: vi.fn(),
+  voiceNoLongerHeardBy: vi.fn(),
 }));
 
 vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
@@ -947,6 +948,29 @@ describe("useAudioDictationRecorder over the voice", () => {
     expect(hook.result.current.isDictationStarting).toBe(true);
   });
 
+  it("hands a microphone opened over the voice to the voice's playback once it cancels echo", async () => {
+    vi.mocked(voiceHeardBy).mockClear();
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementation(
+      async (constraints) =>
+        new MockMediaStream(
+          (constraints?.audio as MediaTrackConstraints | undefined)
+            ?.echoCancellation === true,
+        ) as unknown as MediaStream,
+    );
+    const hook = renderOverVoice();
+    await startHeld(hook);
+
+    expect(voiceHeardBy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not hand over a microphone whose echo the browser does not cancel", async () => {
+    vi.mocked(voiceHeardBy).mockClear();
+    const hook = renderOverVoice();
+    await startHeld(hook);
+
+    expect(voiceHeardBy).not.toHaveBeenCalled();
+  });
+
   it("keeps today's session when the voice is quiet, with the echo cancelled for the voice to come", async () => {
     const hook = renderOverVoice(false);
     await act(async () => {
@@ -1375,17 +1399,18 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
     expect((await track(1)).stop).toHaveBeenCalled();
   });
 
-  it("lets the voice play as conversation audio while the echo-cancelled microphone is open, not for dictation", async () => {
+  it("lets the voice play as conversation audio while the echo-cancelled microphone is open, not for a dictation started while the voice is quiet", async () => {
     vi.mocked(voiceHeardBy).mockClear();
+    vi.mocked(voiceNoLongerHeardBy).mockClear();
     const hook = render();
     await listen(hook);
     await cancel(hook);
+    const conversation = await getUserMedia.mock.results[0].value;
     expect(voiceHeardBy).toHaveBeenCalledTimes(1);
-    expect(voiceHeardBy).toHaveBeenCalledWith(
-      await getUserMedia.mock.results[0].value,
-    );
+    expect(voiceHeardBy).toHaveBeenCalledWith(conversation);
 
     hook.rerender({ conversation: false });
+    expect(voiceNoLongerHeardBy).toHaveBeenCalledWith(conversation);
     await act(async () => {
       hook.result.current.toggleDictation();
     });

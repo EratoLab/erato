@@ -59,7 +59,11 @@ import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
-import { playbackContext, voiceHeardBy } from "./pcmPlayback";
+import {
+  playbackContext,
+  voiceHeardBy,
+  voiceNoLongerHeardBy,
+} from "./pcmPlayback";
 import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
@@ -623,7 +627,7 @@ export function useAudioDictationRecorder({
   );
 
   const closeMicrophone = useCallback(() => {
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    if (mediaStreamRef.current) stopMicrophone(mediaStreamRef.current);
     mediaStreamRef.current = null;
   }, []);
 
@@ -667,7 +671,7 @@ export function useAudioDictationRecorder({
 
     const stream = mediaStreamRef.current;
     if (stream && !keepsMicrophone(stream)) {
-      stream.getTracks().forEach((track) => track.stop());
+      stopMicrophone(stream);
       mediaStreamRef.current = null;
     } else if (stream && document.visibilityState === "hidden") {
       releaseIdleMicrophoneLater();
@@ -1340,12 +1344,16 @@ export function useAudioDictationRecorder({
           stream = await openMicrophone();
         }
         if (!isMounted()) {
-          stream.getTracks().forEach((track) => track.stop());
+          stopMicrophone(stream);
           return;
         }
 
         mediaStreamRef.current = stream;
-        if (microphoneEchoCancelledRef.current) voiceHeardBy(stream);
+        if (
+          microphoneEchoCancelledRef.current &&
+          microphoneUsable(stream, true)
+        )
+          voiceHeardBy(stream);
         const audioTrack = stream.getAudioTracks()[0];
         // Start watching for mid-session device-loss (AirPods route change,
         // incoming call, unplug) as soon as the track exists (ERMAIN-390).
@@ -1372,7 +1380,7 @@ export function useAudioDictationRecorder({
           trackSettings.sampleRate,
         );
         if (!isMounted()) {
-          stream.getTracks().forEach((track) => track.stop());
+          stopMicrophone(stream);
           return;
         }
         if (audioContext) {
@@ -1703,7 +1711,8 @@ export function useAudioDictationRecorder({
                 );
                 current.gate = step.gate;
                 if (step.confirmed) {
-                  // Safari reports no `outputLatency`.
+                  // Safari reports no `outputLatency`; no browser reports
+                  // what the voice's media stream element adds.
                   const output = playbackContext();
                   spokeOnRef.current = spokeOnStart(
                     output
@@ -2117,7 +2126,7 @@ export function useAudioDictationRecorder({
       workletModuleLoadedRef.current = false;
       clearRecordingDurationTimer();
       if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        stopMicrophone(mediaStreamRef.current);
         mediaStreamRef.current = null;
       }
     };
@@ -2162,6 +2171,11 @@ function inputLatencyMs(settings: MediaTrackSettings): number {
   return typeof latency === "number" && Number.isFinite(latency)
     ? Math.max(latency * 1000, MIN_INPUT_LATENCY_MS)
     : MIN_INPUT_LATENCY_MS;
+}
+
+function stopMicrophone(stream: MediaStream) {
+  stream.getTracks().forEach((track) => track.stop());
+  voiceNoLongerHeardBy(stream);
 }
 
 /** The microphone is live, heard, cancels echo, and may be kept while hidden. */

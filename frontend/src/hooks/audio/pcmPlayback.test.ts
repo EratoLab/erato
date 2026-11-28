@@ -470,14 +470,23 @@ describe("the voice as conversation audio", () => {
       disconnect: ReturnType<typeof vi.fn>;
       gain: { setTargetAtTime: ReturnType<typeof vi.fn> };
     }[] = [];
-    streams: { context: StreamContext; stream: { id: string } }[] = [];
+    streams: {
+      context: StreamContext;
+      stream: { getTracks: () => { stop: ReturnType<typeof vi.fn> }[] };
+      track: { stop: ReturnType<typeof vi.fn> };
+    }[] = [];
     constructor() {
       StreamContext.last = this;
     }
     resume = vi.fn(async () => {});
     suspend = vi.fn(async () => {});
     createMediaStreamDestination() {
-      const node = { context: this, stream: { id: "voice" } };
+      const track = { stop: vi.fn() };
+      const node = {
+        context: this,
+        stream: { getTracks: () => [track] },
+        track,
+      };
       this.streams.push(node);
       return node;
     }
@@ -497,9 +506,8 @@ describe("the voice as conversation audio", () => {
         getChannelData: () => new Float32Array(length),
       };
     }
-    sources: { onended: (() => void) | null }[] = [];
     createBufferSource() {
-      const source = {
+      return {
         connect: vi.fn(),
         disconnect: vi.fn(),
         stop: vi.fn(),
@@ -507,8 +515,6 @@ describe("the voice as conversation audio", () => {
         buffer: null,
         onended: null,
       };
-      this.sources.push(source);
-      return source;
     }
   }
 
@@ -552,9 +558,7 @@ describe("the voice as conversation audio", () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
     vi.restoreAllMocks();
-    delete window.ERATO_VOICE_MEDIA_STREAM_OUTPUT;
     if (!hadSrcObject)
       delete (HTMLMediaElement.prototype as { srcObject?: unknown }).srcObject;
   });
@@ -564,14 +568,14 @@ describe("the voice as conversation audio", () => {
     ({ getAudioTracks: () => [track] }) as unknown as MediaStream;
 
   /** Queues enough audio to start a voice, so its output exists. */
-  const speak = async (
+  const speak = (
     playback: AudioContext,
     { createPcmQueue }: typeof import("./pcmPlayback"),
-  ) => {
-    createPcmQueue(vi.fn()).enqueue(playback, pcm(500), RATE);
-  };
-  const lastConnection = (playback: StreamContext) =>
+  ) => createPcmQueue(vi.fn()).enqueue(playback, pcm(500), RATE);
+  const sink = (playback: StreamContext) =>
     playback.gains[0].connect.mock.calls.at(-1)?.[0];
+  const plays = () =>
+    vi.mocked(HTMLMediaElement.prototype.play).mock.calls.length;
 
   it("plays the voice as a media stream while a microphone with echo cancellation is open, started within the tap", async () => {
     const playback = await import("./pcmPlayback");
@@ -579,62 +583,121 @@ describe("the voice as conversation audio", () => {
     const tapped = playback.resumePlaybackContext();
     expect(elements).toHaveLength(1);
     const context = await tapped;
-    await speak(context, playback);
+    speak(context, playback);
 
     const shared = StreamContext.last!;
     expect(elements[0].srcObject).toBe(shared.streams[0].stream);
-    expect(lastConnection(shared)).toBe(shared.streams[0]);
+    expect(sink(shared)).toBe(shared.streams[0]);
   });
 
-  it("plays as before while no microphone listens, as for read aloud", async () => {
+  it("plays through the context's output while no microphone listens, as for read aloud", async () => {
     const playback = await import("./pcmPlayback");
     const context = await playback.resumePlaybackContext();
-    await speak(context, playback);
+    speak(context, playback);
 
     expect(elements).toHaveLength(0);
     const shared = StreamContext.last!;
-    expect(lastConnection(shared)).toBe(shared.destination);
+    expect(sink(shared)).toBe(shared.destination);
   });
 
-  it("moves the voice to the stream when a microphone opens while it plays", async () => {
+  it("moves the voice to the stream when a microphone opens while it plays, leaving the speakers", async () => {
     const playback = await import("./pcmPlayback");
     const context = await playback.resumePlaybackContext();
-    await speak(context, playback);
+    speak(context, playback);
     const shared = StreamContext.last!;
-    expect(lastConnection(shared)).toBe(shared.destination);
+    expect(sink(shared)).toBe(shared.destination);
 
     playback.voiceHeardBy(microphone());
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(shared.gains[0].disconnect).toHaveBeenCalled();
-    expect(lastConnection(shared)).toBe(shared.streams[0]);
+    expect(shared.gains[0].disconnect).toHaveBeenLastCalledWith();
+    expect(sink(shared)).toBe(shared.streams[0]);
   });
 
-  it("goes back to the speakers and pauses the element once the microphone is closed", async () => {
+  it("releases the element and goes back to the speakers once the microphone closes", async () => {
+    const playback = await import("./pcmPlayback");
+    const opened = microphone();
+    playback.voiceHeardBy(opened);
+    const context = await playback.resumePlaybackContext();
+    await vi.advanceTimersByTimeAsync(0);
+    speak(context, playback);
+    const shared = StreamContext.last!;
+
+    playback.voiceNoLongerHeardBy(opened);
+
+    expect(pauses).toBe(1);
+    expect(elements[0].srcObject).toBeNull();
+    expect(shared.streams[0].track.stop).toHaveBeenCalled();
+    expect(sink(shared)).toBe(shared.destination);
+  });
+
+  it("makes a new element for the next microphone", async () => {
+    const playback = await import("./pcmPlayback");
+    const first = microphone();
+    playback.voiceHeardBy(first);
+    const context = await playback.resumePlaybackContext();
+    await vi.advanceTimersByTimeAsync(0);
+    playback.voiceNoLongerHeardBy(first);
+
+    playback.voiceHeardBy(microphone());
+    await vi.advanceTimersByTimeAsync(0);
+    speak(context, playback);
+
+    const shared = StreamContext.last!;
+    expect(elements).toHaveLength(2);
+    expect(sink(shared)).toBe(shared.streams[1]);
+  });
+
+  it("releases the element when a microphone's track ends without being handed back", async () => {
     const playback = await import("./pcmPlayback");
     const track = { readyState: "live" };
     playback.voiceHeardBy(microphone(track));
     const context = await playback.resumePlaybackContext();
     await vi.advanceTimersByTimeAsync(0);
-    await speak(context, playback);
-    const shared = StreamContext.last!;
+    speak(context, playback);
 
     track.readyState = "ended";
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(5000);
 
     expect(pauses).toBe(1);
-    expect(lastConnection(shared)).toBe(shared.destination);
+    const shared = StreamContext.last!;
+    expect(sink(shared)).toBe(shared.destination);
   });
 
-  it("plays through the speakers as before when the element may not play, and moves to the stream on the next tap", async () => {
+  it("keeps the voice on the speakers while the microphone closes during a pending start", async () => {
+    let start!: () => void;
+    answer = () =>
+      new Promise<void>((resolve) => {
+        start = () => {
+          paused = false;
+          resolve();
+        };
+      });
+    const playback = await import("./pcmPlayback");
+    const opened = microphone();
+    playback.voiceHeardBy(opened);
+    const context = await playback.resumePlaybackContext();
+    speak(context, playback);
+
+    playback.voiceNoLongerHeardBy(opened);
+    start();
+    elements[0].dispatchEvent(new Event("playing"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    const shared = StreamContext.last!;
+    expect(sink(shared)).toBe(shared.destination);
+  });
+
+  it("plays through the speakers when the element may not play, and moves to the stream on the next tap", async () => {
     answer = () => Promise.reject(new DOMException("", "NotAllowedError"));
     const playback = await import("./pcmPlayback");
     playback.voiceHeardBy(microphone());
     const context = await playback.resumePlaybackContext();
-    await vi.advanceTimersByTimeAsync(0);
-    await speak(context, playback);
+    await vi.advanceTimersByTimeAsync(10_000);
+    speak(context, playback);
     const shared = StreamContext.last!;
-    expect(lastConnection(shared)).toBe(shared.destination);
+    expect(sink(shared)).toBe(shared.destination);
+    expect(plays()).toBe(1);
 
     answer = async () => {
       paused = false;
@@ -642,43 +705,52 @@ describe("the voice as conversation audio", () => {
     await playback.resumePlaybackContext();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(lastConnection(shared)).toBe(shared.streams[0]);
+    expect(sink(shared)).toBe(shared.streams[0]);
     expect(elements).toHaveLength(1);
   });
 
-  it("goes back to the speakers at once when the browser pauses the element, and to the stream again once the page is shown", async () => {
+  it("stays on the speakers after the browser pauses the element, until the page is shown or the next turn", async () => {
     const playback = await import("./pcmPlayback");
-    playback.voiceHeardBy(microphone());
+    const opened = microphone();
+    playback.voiceHeardBy(opened);
     const context = await playback.resumePlaybackContext();
     await vi.advanceTimersByTimeAsync(0);
-    await speak(context, playback);
+    speak(context, playback);
     const shared = StreamContext.last!;
 
     paused = true;
     elements[0].dispatchEvent(new Event("pause"));
-    expect(lastConnection(shared)).toBe(shared.destination);
-
     setPageVisibility("hidden");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sink(shared)).toBe(shared.destination);
+    expect(plays()).toBe(1);
+
     setPageVisibility("visible");
     await vi.advanceTimersByTimeAsync(0);
-    expect(lastConnection(shared)).toBe(shared.streams[0]);
+    expect(sink(shared)).toBe(shared.streams[0]);
+
+    elements[0].dispatchEvent(new Event("pause"));
+    playback.voiceHeardBy(opened);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sink(shared)).toBe(shared.streams[0]);
   });
 
-  it("keeps the lowering on the voice while it plays as a stream", async () => {
+  it("lowers the voice that feeds the stream", async () => {
     const playback = await import("./pcmPlayback");
     playback.voiceHeardBy(microphone());
     const context = await playback.resumePlaybackContext();
     await vi.advanceTimersByTimeAsync(0);
-    await speak(context, playback);
+    speak(context, playback);
+    const shared = StreamContext.last!;
+    expect(sink(shared)).toBe(shared.streams[0]);
 
     playback.lowerVoice(true);
 
-    expect(
-      StreamContext.last!.gains[0].gain.setTargetAtTime,
-    ).toHaveBeenCalledWith(0.3, 0, 0.03);
+    const [lowered] = shared.gains[0].gain.setTargetAtTime.mock.calls.at(-1)!;
+    expect(lowered).toBeLessThan(1);
   });
 
-  it("plays as before where the browser has no media stream output", async () => {
+  it("plays through the context's output where the browser has no media stream output", async () => {
     vi.stubGlobal(
       "AudioContext",
       class extends StreamContext {
@@ -691,26 +763,28 @@ describe("the voice as conversation audio", () => {
     const playback = await import("./pcmPlayback");
     playback.voiceHeardBy(microphone());
     const context = await playback.resumePlaybackContext();
-    await speak(context, playback);
+    speak(context, playback);
 
     expect(elements).toHaveLength(0);
     const shared = StreamContext.last!;
-    expect(lastConnection(shared)).toBe(shared.destination);
+    expect(sink(shared)).toBe(shared.destination);
   });
 
-  it.each([false, "false"])(
-    "plays as before when the deployment turns the stream off (%s)",
-    async (setting) => {
-      window.ERATO_VOICE_MEDIA_STREAM_OUTPUT = setting;
-      const playback = await import("./pcmPlayback");
-      playback.voiceHeardBy(microphone());
-      const context = await playback.resumePlaybackContext();
-      await speak(context, playback);
+  it("plays through the context's output when the deployment turns the stream off, also from playing", async () => {
+    const playback = await import("./pcmPlayback");
+    playback.voiceHeardBy(microphone());
+    const context = await playback.resumePlaybackContext();
+    await vi.advanceTimersByTimeAsync(0);
+    speak(context, playback);
+    const shared = StreamContext.last!;
+    expect(sink(shared)).toBe(shared.streams[0]);
 
-      expect(elements).toHaveLength(0);
-      const shared = StreamContext.last!;
-      expect(shared.streams).toHaveLength(0);
-      expect(lastConnection(shared)).toBe(shared.destination);
-    },
-  );
+    playback.configureVoiceOutput({ mediaStream: false });
+    expect(sink(shared)).toBe(shared.destination);
+
+    playback.voiceHeardBy(microphone());
+    await playback.resumePlaybackContext();
+    expect(elements).toHaveLength(1);
+    expect(sink(shared)).toBe(shared.destination);
+  });
 });

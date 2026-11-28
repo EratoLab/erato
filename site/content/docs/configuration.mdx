@@ -3196,8 +3196,6 @@ Shorter sounds only lower the voice for a moment. An approval card is not talked
 
 A recording that starts while the voice plays asks the browser for echo cancellation, so the voice does not hear itself, and keeps it until that turn ends (switching it off in the middle of the user's words would change the sound mid-sentence). Turns that start while the voice is quiet use the microphone as before. On speakers echo cancellation depends on the browser and the device and cannot be guaranteed; with headphones there is no echo. Check it on the devices your users have before switching it on.
 
-While a microphone with echo cancellation is open (a conversation, a recording over the voice), every voice plays as a media stream in a hidden audio element, so the browser treats it as conversation audio and its echo cancellation removes it from the microphone; on the iPhone, Safari and the app remove only audio played this way. Without such a microphone (read aloud on its own), where the browser cannot play the stream, or when it stops the element itself (a call, a phone lock), the voice plays through the page's own audio output, as before. To always play it that older way, set `ERATO_VOICE_MEDIA_STREAM_OUTPUT = false` in [`frontend.additional_environment`](#frontendadditional_environment).
-
 **Type:** `boolean`
 
 **Default:** `false`
@@ -3239,6 +3237,17 @@ hesitation_words = []
 hesitation_words_replace_base = false
 talk_over_voice = false
 talk_over_voice_min_speech_ms = 300
+```
+
+#### Voice as conversation audio
+
+While a microphone with echo cancellation is open (a conversation, a recording over the voice), the voice (replies, wait lines, approvals) plays as a media stream in a hidden audio element, so the browser takes it as conversation audio and its echo cancellation removes it from the microphone. On the iPhone, WebKit (Safari, and apps that show the page) removes only audio played this way. Read aloud on its own, a browser without media stream output, and an element the browser refuses or stops (a call, a phone lock) use the page's audio output instead. A switch between the two while the voice speaks can be heard as a short gap, and the element adds a small output delay that browsers do not report; neither has been measured on desktop browsers or in the Office add-ins.
+
+To always use the page's audio output, set the frontend variable `AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT` to `false`; any other value, or none, keeps the media stream:
+
+```toml
+[frontend.additional_environment]
+AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT = false
 ```
 
 #### `audio_conversational.wait_lines`
