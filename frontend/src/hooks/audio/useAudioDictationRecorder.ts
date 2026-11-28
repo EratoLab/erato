@@ -60,11 +60,12 @@ import {
   type SpeechOnsetController,
 } from "./onsetFlipController";
 import {
-  playbackContext,
+  playbackOutputDelayMs,
   voiceHeardBy,
   voiceNoLongerHeardBy,
 } from "./pcmPlayback";
 import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
+import { settledShellVoiceAudio } from "./shellVoiceAudio";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
   overVoiceGate,
@@ -423,6 +424,12 @@ export function useAudioDictationRecorder({
   const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const audioProcessorRef = useRef<AudioWorkletNode | null>(null);
+  /**
+   * The current recording's capture, by the page's own graph or by the app
+   * shell's voice audio: a late callback of an earlier one tells by it.
+   */
+  const captureRef = useRef<object | null>(null);
+  const shellInputStopRef = useRef<(() => void) | null>(null);
   const audioLevelDataRef = useRef<Uint8Array | null>(null);
   const audioFrameRef = useRef<number | null>(null);
   /**
@@ -488,25 +495,28 @@ export function useAudioDictationRecorder({
   // latest one each render via its own Effect Event. No mount guard needed:
   // the watchdog removes all listeners and clears its timers on unmount, so
   // this can't fire after teardown.
-  const { watchTrack: watchCaptureTrack, unwatchTrack: unwatchCaptureTrack } =
-    useMediaStreamTrackWatchdog({
-      onTrackLost: (reason) => {
-        if (reason === "hidden") {
-          if (mode === "dictation") stopDictation();
-          else cancelDictation();
-          closeMicrophone();
-          onStoppedByHiddenPage?.();
-          return;
-        }
-        setDictationError(
-          reason === "ended"
-            ? t`The microphone was disconnected. Please check your microphone and start dictation again.`
-            : t`The microphone stopped sending audio. Please check your microphone and start dictation again.`,
-        );
-        stopDictation();
+  const {
+    watchTrack: watchCaptureTrack,
+    watchShellVoice: watchCaptureShell,
+    unwatchTrack: unwatchCaptureTrack,
+  } = useMediaStreamTrackWatchdog({
+    onTrackLost: (reason) => {
+      if (reason === "hidden") {
+        if (mode === "dictation") stopDictation();
+        else cancelDictation();
         closeMicrophone();
-      },
-    });
+        onStoppedByHiddenPage?.();
+        return;
+      }
+      setDictationError(
+        reason === "ended"
+          ? t`The microphone was disconnected. Please check your microphone and start dictation again.`
+          : t`The microphone stopped sending audio. Please check your microphone and start dictation again.`,
+      );
+      stopDictation();
+      closeMicrophone();
+    },
+  });
 
   useEffect(() => {
     onTranscriptChunkRef.current = onTranscriptChunk;
@@ -588,6 +598,9 @@ export function useAudioDictationRecorder({
         audioProcessorRef.current.disconnect();
         audioProcessorRef.current = null;
       }
+      shellInputStopRef.current?.();
+      shellInputStopRef.current = null;
+      captureRef.current = null;
       audioLevelDataRef.current = null;
       // Discard any pending throttled bar update queued from the final
       // RAF tick — otherwise it can fire after the reset below and
@@ -633,7 +646,7 @@ export function useAudioDictationRecorder({
 
   /** Closes a microphone kept open between turns; a running turn closes it as it ends. */
   const closeIdleMicrophone = useCallback(() => {
-    if (audioSourceNodeRef.current || startInFlightRef.current) return;
+    if (captureRef.current || startInFlightRef.current) return;
     closeMicrophone();
   }, [closeMicrophone]);
 
@@ -694,7 +707,19 @@ export function useAudioDictationRecorder({
 
   useEffect(() => {
     if (!conversing || !audioContinuesWhileHidden()) return;
-    return holdPlayAndRecordSession();
+    // The app shell's voice audio owns the phone's audio session itself.
+    const shell = settledShellVoiceAudio();
+    if (!(shell instanceof Promise))
+      return shell ? undefined : holdPlayAndRecordSession();
+    let release: (() => void) | undefined;
+    let ended = false;
+    void shell.then((opened) => {
+      if (!ended && !opened) release = holdPlayAndRecordSession();
+    });
+    return () => {
+      ended = true;
+      release?.();
+    };
   }, [conversing]);
 
   useEffect(() => {
@@ -1276,7 +1301,11 @@ export function useAudioDictationRecorder({
           : (navigator as Navigator & { mediaDevices?: MediaDevices })
               .mediaDevices;
 
-      if (typeof mediaDevices?.getUserMedia !== "function") {
+      // A conversation the app shell's voice audio has listens through it.
+      const shellAudio =
+        mode === "conversational" ? settledShellVoiceAudio() : null;
+
+      if (!shellAudio && typeof mediaDevices?.getUserMedia !== "function") {
         setDictationError(t`Audio recording is not supported in this browser.`);
         dispatchSession({ type: "abort" });
         startInFlightRef.current = false;
@@ -1298,12 +1327,14 @@ export function useAudioDictationRecorder({
         sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
       };
 
-      const openMicrophone = async (): Promise<MediaStream> => {
+      const openMicrophone = async (
+        devices: MediaDevices,
+      ): Promise<MediaStream> => {
         microphoneDeviceRef.current = selectedAudioInputDeviceId;
         microphoneEchoCancelledRef.current =
           baseAudioConstraints.echoCancellation === true;
         try {
-          return await requestAudioStream(mediaDevices, {
+          return await requestAudioStream(devices, {
             audio: selectedAudioInputDeviceId
               ? {
                   deviceId: { exact: selectedAudioInputDeviceId },
@@ -1322,7 +1353,7 @@ export function useAudioDictationRecorder({
           ) {
             // The next turn tries the stored device again.
             microphoneDeviceRef.current = undefined;
-            return requestAudioStream(mediaDevices, {
+            return requestAudioStream(devices, {
               audio: baseAudioConstraints,
             });
           }
@@ -1331,68 +1362,83 @@ export function useAudioDictationRecorder({
       };
 
       try {
-        const kept = mediaStreamRef.current;
-        let stream: MediaStream;
-        if (
-          kept &&
-          keepsMicrophone(kept) &&
-          microphoneDeviceRef.current === selectedAudioInputDeviceId
-        ) {
-          stream = kept;
+        const shell =
+          shellAudio instanceof Promise ? await shellAudio : shellAudio;
+        let stream: MediaStream | null = null;
+        let trackSettings: MediaTrackSettings = {};
+        let audioContext: AudioContext | null = null;
+        if (shell) {
+          watchCaptureShell(shell);
         } else {
-          if (kept) closeMicrophone();
-          stream = await openMicrophone();
-        }
-        if (!isMounted()) {
-          stopMicrophone(stream);
-          return;
-        }
+          if (typeof mediaDevices?.getUserMedia !== "function")
+            throw new Error(
+              t`Audio recording is not supported in this browser.`,
+            );
+          const kept = mediaStreamRef.current;
+          let opened: MediaStream;
+          if (
+            kept &&
+            keepsMicrophone(kept) &&
+            microphoneDeviceRef.current === selectedAudioInputDeviceId
+          ) {
+            opened = kept;
+          } else {
+            if (kept) closeMicrophone();
+            opened = await openMicrophone(mediaDevices);
+          }
+          if (!isMounted()) {
+            stopMicrophone(opened);
+            return;
+          }
 
-        mediaStreamRef.current = stream;
-        if (
-          microphoneEchoCancelledRef.current &&
-          microphoneUsable(stream, true)
-        )
-          voiceHeardBy(stream);
-        const audioTrack = stream.getAudioTracks()[0];
-        // Start watching for mid-session device-loss (AirPods route change,
-        // incoming call, unplug) as soon as the track exists (ERMAIN-390).
-        watchCaptureTrack(audioTrack);
-        const trackSettings = audioTrack.getSettings();
-        setDictationDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
+          stream = opened;
+          mediaStreamRef.current = opened;
+          if (
+            microphoneEchoCancelledRef.current &&
+            microphoneUsable(opened, true)
+          )
+            voiceHeardBy(opened);
+          const audioTrack = opened.getAudioTracks()[0];
+          // Start watching for mid-session device-loss (AirPods route change,
+          // incoming call, unplug) as soon as the track exists (ERMAIN-390).
+          watchCaptureTrack(audioTrack);
+          trackSettings = audioTrack.getSettings();
+          setDictationDiagnostics(
+            mediaTrackSettingsToDiagnostics(trackSettings),
+          );
 
-        // Build the audio pipeline BEFORE awaiting the socket handshake. Once
-        // the worklet node is connected, samples land in
-        // `preSessionSamplesRef` until the live session is constructed, so
-        // the user's first words aren't dropped during the (~250 ms–1 s)
-        // socket + session_state handshake. Sample extraction runs on the
-        // audio rendering thread via `AudioWorkletNode`, isolated from
-        // main-thread contention.
-        //
-        // Passing the track's sampleRate to the AudioContext constructor
-        // (when known and supported) prevents createMediaStreamSource from
-        // inserting an internal Web Audio resampler — one fewer documented
-        // source of startup latency between getUserMedia and the first
-        // sample reaching the worklet.
+          // Build the audio pipeline BEFORE awaiting the socket handshake.
+          // Once the worklet node is connected, samples land in
+          // `preSessionSamplesRef` until the live session is constructed, so
+          // the user's first words aren't dropped during the (~250 ms–1 s)
+          // socket + session_state handshake. Sample extraction runs on the
+          // audio rendering thread via `AudioWorkletNode`, isolated from
+          // main-thread contention.
+          //
+          // Passing the track's sampleRate to the AudioContext constructor
+          // (when known and supported) prevents createMediaStreamSource from
+          // inserting an internal Web Audio resampler — one fewer documented
+          // source of startup latency between getUserMedia and the first
+          // sample reaching the worklet.
+          audioContext = await ensureAudioContextReady(
+            trackSettings.sampleRate,
+          );
+          if (!isMounted()) {
+            stopMicrophone(opened);
+            return;
+          }
+        }
         let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
         let primerSamples: number[] = [];
-        const audioContext = await ensureAudioContextReady(
-          trackSettings.sampleRate,
-        );
-        if (!isMounted()) {
-          stopMicrophone(stream);
-          return;
-        }
-        if (audioContext) {
-          const source = audioContext.createMediaStreamSource(stream);
-          const analyser = audioContext.createAnalyser();
-          const processor = new AudioWorkletNode(
-            audioContext,
-            AUDIO_DICTATION_WORKLET_PROCESSOR_NAME,
-          );
-          analyser.fftSize = 256;
-          analyser.smoothingTimeConstant = 0.65;
-          sourceSampleRate = audioContext.sampleRate;
+        /** Samples a frame holds before the page sees it. */
+        const frameSamples = shell?.frameSamples ?? WORKLET_FRAME_SAMPLES;
+        const inputDelayMs = () =>
+          shell ? shell.inputDelayMs : inputLatencyMs(trackSettings);
+        const capture = shell ?? audioContext;
+        if (capture) {
+          const rate = capture.sampleRate;
+          const capturing = {};
+          sourceSampleRate = rate;
           // Synthetic silence primer: seeds the pre-session buffer with a
           // fixed amount of zero samples so the audio sent to the server
           // always starts with the same calibration window for its VAD,
@@ -1404,20 +1450,16 @@ export function useAudioDictationRecorder({
           // word in that case.
           const primerSampleCount = Math.max(
             0,
-            Math.floor(
-              (audioContext.sampleRate * PRE_SPEECH_SILENCE_PRIMER_MS) / 1000,
-            ),
+            Math.floor((rate * PRE_SPEECH_SILENCE_PRIMER_MS) / 1000),
           );
           const primer: number[] = [];
           primer.length = primerSampleCount;
           primer.fill(0);
           primerSamples = primer;
           preSessionSamplesRef.current = [...primer];
-          const heldSampleCount = Math.floor(
-            (audioContext.sampleRate * HELD_AUDIO_MS) / 1000,
-          );
+          const heldSampleCount = Math.floor((rate * HELD_AUDIO_MS) / 1000);
           const beforeSpeechSampleCount = Math.floor(
-            (audioContext.sampleRate * BEFORE_SPEECH_KEPT_MS) / 1000,
+            (rate * BEFORE_SPEECH_KEPT_MS) / 1000,
           );
           // The worklet posts every render quantum, including zero-filled
           // OS warm-up frames — we want those in the stream sent to the
@@ -1431,21 +1473,21 @@ export function useAudioDictationRecorder({
           // bytes.
           const flipCapturingAudio = () => {
             // Guard against late firings: if the pipeline was torn down
-            // between scheduling and execution, the processor ref will be
-            // null or point at a different node — don't flip stale state.
-            if (!isMounted() || audioProcessorRef.current !== processor) {
+            // between scheduling and execution, the capture ref will be
+            // null or point at a different capture — don't flip stale state.
+            if (!isMounted() || captureRef.current !== capturing) {
               return;
             }
             setIsCapturingAudio(true);
           };
           const onsetController = createSpeechOnsetController({
-            sampleRate: audioContext.sampleRate,
+            sampleRate: rate,
             onFlip: flipCapturingAudio,
             log: (diagnostics) => logger.log("[AUDIO_DICT] frame", diagnostics),
           });
           onsetControllerRef.current = onsetController;
           logger.log("[AUDIO_DICT] onset detector armed", {
-            sampleRate: audioContext.sampleRate,
+            sampleRate: rate,
             engine: getAudioEnvironment().engine,
           });
           // The first sample was captured no earlier than the recording was
@@ -1453,14 +1495,16 @@ export function useAudioDictationRecorder({
           // bound, a first speech is never stamped later than it was said:
           // too early costs a "say again", too late could take the voice's
           // echo for the user.
-          const asked = recordingSignalsRef.current;
-          recordingSignalsRef.current = audioFrom(
-            asked,
-            asked.startedAt - inputLatencyMs(trackSettings),
-            (primerSampleCount / audioContext.sampleRate) * 1000,
-          );
-          processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
-            const input = event.data;
+          const primerMs = (primerSampleCount / rate) * 1000;
+          if (!shell) {
+            const asked = recordingSignalsRef.current;
+            recordingSignalsRef.current = audioFrom(
+              asked,
+              asked.startedAt - inputLatencyMs(trackSettings),
+              primerMs,
+            );
+          }
+          const acceptInput = (input: Float32Array) => {
             const gate = gateRef.current;
             const detector = gate?.catchingUp ? null : vadEngineRef.current;
             const vadFrame = detector ? new Float32Array(input) : null;
@@ -1510,38 +1554,72 @@ export function useAudioDictationRecorder({
               void detector
                 .acceptFrame({
                   samples: vadFrame,
-                  sampleRate: audioContext.sampleRate,
+                  sampleRate: rate,
                   timestampMs: Date.now(),
                 })
                 .catch(() => stopVadEngine());
             }
           };
 
-          const levelData = new Uint8Array(analyser.fftSize);
-
-          const analyzeLevel = () => {
-            if (!audioAnalyserRef.current || !audioLevelDataRef.current) {
-              return;
-            }
-
-            audioAnalyserRef.current.getByteTimeDomainData(
-              audioLevelDataRef.current,
+          if (shell) {
+            let timed = false;
+            shellInputStopRef.current = shell.onInput(({ samples, at }) => {
+              // Its first frame's first sample was captured at the earliest
+              // the input delay and the frame's length before it came.
+              const signals = recordingSignalsRef.current;
+              if (!timed && signals) {
+                timed = true;
+                recordingSignalsRef.current = audioFrom(
+                  signals,
+                  at - shell.inputDelayMs - (samples.length / rate) * 1000,
+                  primerMs,
+                );
+              }
+              acceptInput(samples);
+              setDictationBarsThrottled(
+                getAudioLevelBarsFromTimeDomainData(timeDomainBytes(samples)),
+              );
+            });
+          } else if (audioContext && stream) {
+            const source = audioContext.createMediaStreamSource(stream);
+            const analyser = audioContext.createAnalyser();
+            const processor = new AudioWorkletNode(
+              audioContext,
+              AUDIO_DICTATION_WORKLET_PROCESSOR_NAME,
             );
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.65;
+            processor.port.onmessage = (event: MessageEvent<Float32Array>) =>
+              acceptInput(event.data);
 
-            setDictationBarsThrottled(
-              getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
-            );
+            const levelData = new Uint8Array(analyser.fftSize);
+
+            const analyzeLevel = () => {
+              if (!audioAnalyserRef.current || !audioLevelDataRef.current) {
+                return;
+              }
+
+              audioAnalyserRef.current.getByteTimeDomainData(
+                audioLevelDataRef.current,
+              );
+
+              setDictationBarsThrottled(
+                getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
+              );
+              audioFrameRef.current =
+                window.requestAnimationFrame(analyzeLevel);
+            };
+
+            audioContextRef.current = audioContext;
+            audioAnalyserRef.current = analyser;
+            audioSourceNodeRef.current = source;
+            audioProcessorRef.current = processor;
+            audioLevelDataRef.current = levelData;
+            source.connect(analyser);
+            source.connect(processor);
             audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
-          };
-
-          audioContextRef.current = audioContext;
-          audioAnalyserRef.current = analyser;
-          audioSourceNodeRef.current = source;
-          audioProcessorRef.current = processor;
-          audioLevelDataRef.current = levelData;
-          source.connect(analyser);
-          source.connect(processor);
-          audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
+          }
+          captureRef.current = capturing;
 
           if (vadAutoStopEnabled) {
             // Start (or re-start) the VAD engine only AFTER the capture
@@ -1587,8 +1665,7 @@ export function useAudioDictationRecorder({
             const keptAfterMisfire = Math.min(
               beforeSpeechSampleCount,
               Math.floor(
-                (audioContext.sampleRate *
-                  Math.max(0, tuning.redemptionMs - MISFIRE_MARGIN_MS)) /
+                (rate * Math.max(0, tuning.redemptionMs - MISFIRE_MARGIN_MS)) /
                   1000,
               ),
             );
@@ -1679,8 +1756,7 @@ export function useAudioDictationRecorder({
               const waiting = holdRef.current?.released === null;
               if (event.type === "frame") {
                 gate.judged += Math.round(
-                  (event.frame.samples.length * audioContext.sampleRate) /
-                    event.frame.sampleRate,
+                  (event.frame.samples.length * rate) / event.frame.sampleRate,
                 );
                 gate.quietFrames =
                   event.probabilities.isSpeech < SILENT_FRAME_PROBABILITY
@@ -1711,16 +1787,7 @@ export function useAudioDictationRecorder({
                 );
                 current.gate = step.gate;
                 if (step.confirmed) {
-                  // Safari reports no `outputLatency`; no browser reports
-                  // what the voice's media stream element adds.
-                  const output = playbackContext();
-                  spokeOnRef.current = spokeOnStart(
-                    output
-                      ? ((Number(output.outputLatency) || 0) +
-                          (Number(output.baseLatency) || 0)) *
-                          1000
-                      : 0,
-                  );
+                  spokeOnRef.current = spokeOnStart(playbackOutputDelayMs());
                   onSpeechOverVoiceRef.current?.();
                   releaseHold("speech");
                   return;
@@ -1818,11 +1885,11 @@ export function useAudioDictationRecorder({
             );
             try {
               await vadStartPromise;
-              if (audioProcessorRef.current === processor) {
+              if (captureRef.current === capturing) {
                 // What was said while the model loaded is heard first, in
                 // order, before the detector takes the live audio.
                 let position = preDroppedRef.current;
-                while (audioProcessorRef.current === processor) {
+                while (captureRef.current === capturing) {
                   const buffer = preSessionSamplesRef.current;
                   const from = Math.max(0, position - preDroppedRef.current);
                   if (from >= buffer.length) break;
@@ -1831,7 +1898,7 @@ export function useAudioDictationRecorder({
                   gate.fed += backlog.length;
                   await vadEngine.acceptFrame({
                     samples: backlog,
-                    sampleRate: audioContext.sampleRate,
+                    sampleRate: rate,
                     timestampMs: Date.now(),
                   });
                 }
@@ -1915,8 +1982,8 @@ export function useAudioDictationRecorder({
             recordingSignalsRef.current = audioFrom(
               recordingSignals(releasedAt, false),
               releasedAt -
-                ((unjudged + WORKLET_FRAME_SAMPLES) / sourceSampleRate) * 1000 -
-                inputLatencyMs(trackSettings),
+                ((unjudged + frameSamples) / sourceSampleRate) * 1000 -
+                inputDelayMs(),
               0,
             );
             if (gate) {
@@ -2072,6 +2139,7 @@ export function useAudioDictationRecorder({
       isDictationStarting,
       isMounted,
       maxRecordingDurationSeconds,
+      mode,
       releaseHold,
       selectedAudioInputDeviceId,
       setDictationBarsThrottled,
@@ -2079,6 +2147,7 @@ export function useAudioDictationRecorder({
       stopVadEngine,
       tearDownCaptureGraph,
       vadAutoStopEnabled,
+      watchCaptureShell,
       watchCaptureTrack,
     ],
   );
@@ -2171,6 +2240,17 @@ function inputLatencyMs(settings: MediaTrackSettings): number {
   return typeof latency === "number" && Number.isFinite(latency)
     ? Math.max(latency * 1000, MIN_INPUT_LATENCY_MS)
     : MIN_INPUT_LATENCY_MS;
+}
+
+/** Samples as an analyser's time-domain bytes, for the level bars. */
+function timeDomainBytes(samples: Float32Array): Uint8Array {
+  const bytes = new Uint8Array(samples.length);
+  for (let index = 0; index < samples.length; index++)
+    bytes[index] = Math.max(
+      0,
+      Math.min(255, Math.round(128 + samples[index] * 128)),
+    );
+  return bytes;
 }
 
 function stopMicrophone(stream: MediaStream) {

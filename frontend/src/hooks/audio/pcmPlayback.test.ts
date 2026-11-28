@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  installHostShell,
+  removeHostShell,
+  shellAnswers,
+} from "@/test/hostShellStub";
 import { setPageVisibility } from "@/test/pageVisibility";
 
 import {
@@ -569,7 +574,7 @@ describe("the voice as conversation audio", () => {
 
   /** Queues enough audio to start a voice, so its output exists. */
   const speak = (
-    playback: AudioContext,
+    playback: import("./pcmPlayback").VoicePlayback,
     { createPcmQueue }: typeof import("./pcmPlayback"),
   ) => createPcmQueue(vi.fn()).enqueue(playback, pcm(500), RATE);
   const sink = (playback: StreamContext) =>
@@ -786,5 +791,198 @@ describe("the voice as conversation audio", () => {
     await playback.resumePlaybackContext();
     expect(elements).toHaveLength(1);
     expect(sink(shared)).toBe(shared.destination);
+  });
+});
+
+describe("while the app shell's voice audio has the conversation", () => {
+  const made: ShellContext[] = [];
+  class ShellContext {
+    state: AudioContextState = "running";
+    currentTime = 0;
+    destination = {};
+    constructor() {
+      made.push(this);
+    }
+    resume = vi.fn(async () => {
+      this.state = "running";
+    });
+    suspend = vi.fn(async () => {
+      this.state = "suspended";
+    });
+    createGain() {
+      return {
+        context: this,
+        gain: { value: 1, setTargetAtTime: vi.fn() },
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      };
+    }
+    createBuffer(_channels: number, length: number, rate: number) {
+      return {
+        duration: length / rate,
+        getChannelData: () => new Float32Array(length),
+      };
+    }
+    createBufferSource() {
+      return {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        stop: vi.fn(),
+        start: vi.fn(),
+        buffer: null,
+        onended: null,
+      };
+    }
+    createMediaStreamDestination() {
+      return { context: this, stream: { getTracks: () => [] } };
+    }
+  }
+  const microphone = () =>
+    ({
+      getAudioTracks: () => [{ readyState: "live" }],
+    }) as unknown as MediaStream;
+  let request: ReturnType<typeof shellAnswers>;
+  const shellWith = (answers: Record<string, unknown> = {}) => {
+    request = shellAnswers({
+      "voiceAudio.open": {
+        sampleRate: 16000,
+        frameSamples: 512,
+        output: "speaker",
+        outputDelayMs: 40,
+        inputDelayMs: 30,
+        microphoneMode: "standard",
+      },
+      "voiceAudio.play": null,
+      "voiceAudio.stop": { unplayed: [] },
+      "voiceAudio.lower": null,
+      "voiceAudio.close": null,
+      ...answers,
+    });
+    installHostShell({ voiceAudio: 1 }, request);
+  };
+  const asked = (method: string) =>
+    request.mock.calls.filter(([called]) => called === method);
+
+  beforeEach(() => {
+    vi.resetModules();
+    made.length = 0;
+    vi.stubGlobal("AudioContext", ShellContext);
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    shellWith();
+  });
+  afterEach(() => {
+    removeHostShell();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("plays and lowers the voice through the shell, with no context or element of its own", async () => {
+    const playback = await import("./pcmPlayback");
+    const shell = await playback.openConversationAudio();
+    playback.voiceHeardBy(microphone());
+
+    const voice = await playback.resumePlaybackContext();
+    expect(voice).toBe(shell);
+    expect(playback.playbackContext()).toBe(shell);
+    expect(playback.playbackPlays(voice)).toBe(true);
+    const audio = pcm(500);
+    expect(playback.createPcmQueue(vi.fn()).enqueue(voice, audio, RATE)).toBe(
+      true,
+    );
+    playback.lowerVoice(true);
+
+    expect(made).toHaveLength(0);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(asked("voiceAudio.play")).toEqual([
+      ["voiceAudio.play", { id: expect.any(String), audio, sampleRate: RATE }],
+    ]);
+    expect(asked("voiceAudio.lower")).toEqual([
+      ["voiceAudio.lower", { lowered: true }],
+    ]);
+    expect(playback.playbackOutputDelayMs()).toBe(40);
+  });
+
+  it("asks the shell for the deployment's start buffer", async () => {
+    const playback = await import("./pcmPlayback");
+    playback.configureVoiceStart({ bufferMs: 600, maxWaitMs: 200 });
+    await playback.openConversationAudio();
+    expect(asked("voiceAudio.open")).toEqual([
+      [
+        "voiceAudio.open",
+        { mode: "conversation", startBufferMs: 600, startMaxWaitMs: 200 },
+      ],
+    ]);
+  });
+
+  it("waits for a shell that is still opening before it plays anything", async () => {
+    let answer!: (value: unknown) => void;
+    shellWith({
+      "voiceAudio.open": () => new Promise((resolve) => (answer = resolve)),
+    });
+    const playback = await import("./pcmPlayback");
+    const opening = playback.openConversationAudio();
+    const unlocked = playback.resumePlaybackContext();
+    await vi.advanceTimersByTimeAsync(0);
+    answer({ sampleRate: 16000, frameSamples: 512 });
+
+    expect(await unlocked).toBe(await opening);
+    expect(made).toHaveLength(0);
+  });
+
+  it("silences a context left from read aloud while the shell has the conversation, and hands it back after", async () => {
+    const playback = await import("./pcmPlayback");
+    const page =
+      (await playback.resumePlaybackContext()) as unknown as ShellContext;
+    const held = playback.holdConversationAudio();
+    await playback.openConversationAudio();
+    expect(page.suspend).toHaveBeenCalled();
+
+    held();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked("voiceAudio.close")).toHaveLength(1);
+    expect(playback.playbackContext()).toBe(page);
+    expect(await playback.resumePlaybackContext()).toBe(page);
+    expect(page.resume).toHaveBeenCalledTimes(2);
+    expect(made).toHaveLength(1);
+  });
+
+  it("keeps the conversation's audio for a composer shown anew, and closes it after the last", async () => {
+    const playback = await import("./pcmPlayback");
+    const shown = playback.holdConversationAudio();
+    await playback.openConversationAudio();
+
+    shown();
+    const again = playback.holdConversationAudio();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked("voiceAudio.close")).toHaveLength(0);
+    expect(playback.playbackContext()).not.toBeUndefined();
+
+    again();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked("voiceAudio.close")).toHaveLength(1);
+    expect(playback.playbackContext()).toBeUndefined();
+  });
+
+  it("plays as before where the shell will not open its voice audio", async () => {
+    shellWith({
+      "voiceAudio.open": () => {
+        throw { code: "unavailable", message: "microphone off" };
+      },
+    });
+    const playback = await import("./pcmPlayback");
+    expect(await playback.openConversationAudio()).toBeNull();
+    const context = await playback.resumePlaybackContext();
+    expect(made).toEqual([context]);
+    expect(playback.playbackContext()).toBe(context);
+  });
+
+  it("plays as before where the deployment turns the shell's voice off", async () => {
+    const playback = await import("./pcmPlayback");
+    playback.configureVoiceOutput({ shellVoice: false });
+    expect(await playback.openConversationAudio()).toBeNull();
+    expect(asked("voiceAudio.open")).toHaveLength(0);
+    expect(made).toHaveLength(0);
+    await playback.resumePlaybackContext();
+    expect(made).toHaveLength(1);
   });
 });

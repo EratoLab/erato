@@ -2,13 +2,23 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
+import {
+  emitHostShellEvent,
+  installHostShell,
+  removeHostShell,
+  shellAnswers,
+} from "@/test/hostShellStub";
 import { setPageVisibility } from "@/test/pageVisibility";
 
 import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
-import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
+import {
+  installAudioCaptureAccessPolicy,
+  isAudioCaptureLive,
+} from "../audioCaptureAccess";
 import { MUTE_GRACE_MS } from "../audioTuning";
 import { hesitationMatcher } from "../hesitations";
 import { voiceHeardBy, voiceNoLongerHeardBy } from "../pcmPlayback";
+import { closeShellVoiceAudio, openShellVoiceAudio } from "../shellVoiceAudio";
 import {
   resolveEndOfTurnSilenceMs,
   useAudioDictationRecorder,
@@ -2776,5 +2786,203 @@ describe("useAudioDictationRecorder: connections of earlier recordings", () => {
     expect(result.current.dictationError).toBe(
       "Audio dictation connection failed.",
     );
+  });
+});
+
+describe("useAudioDictationRecorder in a conversation the app shell's voice audio has", () => {
+  const RATE = 16000;
+  const contexts = vi.fn();
+  let getUserMedia: ReturnType<typeof vi.fn>;
+
+  /** One shell frame of 512 samples at `value`, as base64 16-bit PCM. */
+  const frame = (seq: number, value: number) => {
+    const bytes = new Uint8Array(512 * 2);
+    const view = new DataView(bytes.buffer);
+    for (let index = 0; index < 512; index++)
+      view.setInt16(index * 2, Math.round(value * 32767), true);
+    emitHostShellEvent("voiceAudio.input", {
+      seq,
+      at: Date.now(),
+      samples: globalThis.btoa(String.fromCharCode(...bytes)),
+    });
+  };
+
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    MockWebSocket.instances.length = 0;
+    MockAudioWorkletNode.instances.length = 0;
+    vadMock.engines.length = 0;
+    vadMock.createRicky0123VadEngine.mockClear();
+    contexts.mockClear();
+    getUserMedia = vi.fn(async () => new MockMediaStream(true));
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    vi.stubGlobal(
+      "AudioContext",
+      class extends MockAudioContext {
+        constructor() {
+          super();
+          contexts();
+        }
+      },
+    );
+    vi.stubGlobal("AudioWorkletNode", MockAudioWorkletNode);
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    installHostShell(
+      { voiceAudio: 1, audioWhileHidden: 1 },
+      shellAnswers({
+        "voiceAudio.open": {
+          sampleRate: RATE,
+          frameSamples: 512,
+          output: "speaker",
+          outputDelayMs: 40,
+          inputDelayMs: 30,
+          microphoneMode: "standard",
+        },
+        "voiceAudio.close": null,
+      }),
+    );
+    await openShellVoiceAudio({ bufferMs: 400, maxWaitMs: 350 });
+  });
+  afterEach(() => {
+    closeShellVoiceAudio();
+    removeHostShell();
+    Reflect.deleteProperty(navigator, "audioSession");
+  });
+
+  const render = () =>
+    renderHook(() =>
+      useAudioDictationRecorder({
+        enabled: true,
+        mode: "conversational",
+        maxRecordingDurationSeconds: 1200,
+        onTranscriptChunk: vi.fn(),
+        vadAutoStopEnabled: true,
+      }),
+    );
+
+  async function listen(hook: ReturnType<typeof render>) {
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(true));
+  }
+
+  it("listens through the shell, with no microphone, context or worklet of its own", async () => {
+    const hook = render();
+    await listen(hook);
+
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(contexts).not.toHaveBeenCalled();
+    expect(MockAudioWorkletNode.instances).toHaveLength(0);
+    expect(isAudioCaptureLive()).toBe(true);
+  });
+
+  it("hands the shell's frames to the detector at 16 kHz and, once speech is heard, to the transcription", async () => {
+    const hook = render();
+    await listen(hook);
+    act(() => frame(1, 0.25));
+
+    const accepted = vadMock.engines[0].acceptedFrames.at(-1) as {
+      samples: Float32Array;
+      sampleRate: number;
+    };
+    expect(accepted.sampleRate).toBe(RATE);
+    expect(accepted.samples).toHaveLength(512);
+    expect(accepted.samples[0]).toBeCloseTo(0.25, 3);
+
+    act(() => hearSpeech());
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    act(() => MockWebSocket.instances[0].emit("open"));
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual(
+        expect.objectContaining({ type: "start" }),
+      ),
+    );
+    act(() =>
+      MockWebSocket.instances[0].emitJson({
+        type: "session_state",
+        next_chunk_index: 0,
+        chunk_duration_ms: 32,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        MockWebSocket.instances[0].sentBinaryFrames.length,
+      ).toBeGreaterThan(0),
+    );
+    const sent = MockWebSocket.instances[0].sentBinaryFrames.length;
+    act(() => frame(2, 0.25));
+    await waitFor(() =>
+      expect(
+        MockWebSocket.instances[0].sentBinaryFrames.length,
+      ).toBeGreaterThan(sent),
+    );
+  });
+
+  it("leaves the page's audio session to the shell", async () => {
+    const audioSession = { type: "auto" };
+    Object.defineProperty(navigator, "audioSession", {
+      configurable: true,
+      value: audioSession,
+    });
+    const hook = render();
+    await listen(hook);
+    expect(audioSession.type).toBe("auto");
+  });
+
+  it("reports the microphone lost when the shell closes its voice audio", async () => {
+    const hook = render();
+    await listen(hook);
+
+    act(() =>
+      emitHostShellEvent("voiceAudio.closed", { reason: "mediaServicesReset" }),
+    );
+
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+    expect(hook.result.current.dictationError).toMatch(/disconnected/);
+  });
+
+  it("reports an interruption only once it outlives the mute grace", async () => {
+    const hook = render();
+    await listen(hook);
+    vi.useFakeTimers();
+    try {
+      act(() =>
+        emitHostShellEvent("voiceAudio.interrupted", { reason: "system" }),
+      );
+      act(() => vi.advanceTimersByTime(MUTE_GRACE_MS - 1));
+      act(() => emitHostShellEvent("voiceAudio.resumed", {}));
+      act(() => vi.advanceTimersByTime(MUTE_GRACE_MS));
+      expect(hook.result.current.isDictating).toBe(true);
+
+      act(() =>
+        emitHostShellEvent("voiceAudio.interrupted", { reason: "system" }),
+      );
+      act(() => vi.advanceTimersByTime(MUTE_GRACE_MS));
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+    expect(hook.result.current.dictationError).toMatch(/stopped sending audio/);
+  });
+
+  it("opens the page's own microphone for a dictation outside the conversation", async () => {
+    const hook = renderHook(() =>
+      useAudioDictationRecorder({
+        enabled: true,
+        mode: "dictation",
+        maxRecordingDurationSeconds: 1200,
+        onTranscriptChunk: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
   });
 });

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 
 import { MUTE_GRACE_MS } from "./audioTuning";
 
+import type { ShellVoiceAudio } from "./shellVoiceAudio";
+
 /** A timer this much later than asked for was not run by a live page. */
 const FROZEN_PAGE_SLACK_MS = 2_000;
 
@@ -48,6 +50,11 @@ export function useMediaStreamTrackWatchdog({
   onTrackLost: (reason: TrackLossReason) => void;
 }): {
   watchTrack: (track: MediaStreamTrack) => void;
+  /**
+   * The same for the app shell's voice audio: closed is lost at once, an
+   * interruption (a call, Siri) once it outlives the mute grace.
+   */
+  watchShellVoice: (voice: ShellVoiceAudio) => void;
   unwatchTrack: () => void;
 } {
   const watchedTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -177,11 +184,34 @@ export function useMediaStreamTrackWatchdog({
     [clearPendingLossTimer, reportLost, unwatchTrack],
   );
 
+  const watchShellVoice = useCallback(
+    (voice: ShellVoiceAudio) => {
+      unwatchTrack();
+      const follow = () => {
+        clearPendingLossTimer();
+        if (voice.state === "closed") {
+          reportLost("ended");
+          return;
+        }
+        if (voice.state !== "interrupted") return;
+        pendingLossTimerRef.current = window.setTimeout(() => {
+          pendingLossTimerRef.current = null;
+          if (voice.state === "interrupted") reportLost("muted");
+        }, MUTE_GRACE_MS);
+      };
+      detachRef.current = voice.onStateChange(follow);
+      // As for a track: never back into the start that is still running.
+      if (voice.state !== "running")
+        pendingLossTimerRef.current = window.setTimeout(follow, 0);
+    },
+    [clearPendingLossTimer, reportLost, unwatchTrack],
+  );
+
   useEffect(() => {
     return () => {
       unwatchTrack();
     };
   }, [unwatchTrack]);
 
-  return { watchTrack, unwatchTrack };
+  return { watchTrack, watchShellVoice, unwatchTrack };
 }

@@ -14,6 +14,7 @@ import { useSpeechPlayback } from "./speechPlayback";
 import { afterWaitLine, waitLinePlaying } from "./waitLines";
 
 import type { VoiceChange, VoiceDecision } from "./approvalChanges";
+import type { VoicePlayback } from "./pcmPlayback";
 import type { ReadAloudStreamEvent } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   SpokenApproval,
@@ -126,7 +127,7 @@ let buffers: Buffered[] = [];
 let said: SpokenPiece[] = [];
 let flow: SpokenCardFlow = spokenCardFlow([]);
 let pauseTimer: ReturnType<typeof setTimeout> | undefined;
-let context: AudioContext | undefined;
+let context: VoicePlayback | undefined;
 /** What is said besides the pieces, sentence by sentence. */
 let extra: { parts: Buffered[]; at: number; close: () => void } | null = null;
 
@@ -775,7 +776,7 @@ function play_(
     speaking: true,
     failed: false,
   });
-  const start = (resumed: AudioContext) => {
+  const start = (resumed: VoicePlayback) => {
     if (current !== cardRun) return;
     if (resumed.state !== "running") {
       fail();
