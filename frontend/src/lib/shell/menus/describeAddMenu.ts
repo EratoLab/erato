@@ -74,6 +74,14 @@ export const ADD_MENU_SECTION = {
   model: "section:model",
 } as const;
 
+/** The file source an upload entry names, or null for another entry. */
+export const uploadChoice = (itemId: string): AddMenuFileSource | null =>
+  itemId === ADD_MENU_ID.uploadComputer
+    ? "computer"
+    : itemId === ADD_MENU_ID.uploadSharepoint
+      ? "sharepoint"
+      : null;
+
 const TOOL_ID_PREFIX = "tool:";
 const toolEntryId = (facetId: string) => `${TOOL_ID_PREFIX}${facetId}`;
 export const toolChoice = (itemId: string): string | null =>

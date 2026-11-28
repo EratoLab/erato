@@ -1,3 +1,5 @@
+import { everyValue } from "@/utils/everyValue";
+
 import type { ShellAnchor } from "@/lib/hostShell";
 import type {
   ConfirmParams,
@@ -76,6 +78,27 @@ export function menuIcons(entries: readonly MenuEntry[]): MenuIcon[] {
 }
 
 /**
+ * The wire's fields an entry sends as it holds them, every one the contract
+ * types besides the drawn icon and the children; nothing else of an entry
+ * reaches the app.
+ */
+/* eslint-disable lingui/no-unlocalized-strings -- the wire's field names */
+const WIRE_FIELDS = everyValue<
+  Exclude<keyof ShellMenuItem, "icon" | "children">
+>()(
+  "id",
+  "label",
+  "subtitle",
+  "state",
+  "selection",
+  "disabled",
+  "disabledReason",
+  "keepOpen",
+  "inline",
+);
+/* eslint-enable lingui/no-unlocalized-strings */
+
+/**
  * The wire's items. An icon without a drawing is left out rather than sent
  * empty, so a failed drawing costs the picture, not the menu.
  */
@@ -83,15 +106,20 @@ export function toShellMenuItems(
   entries: readonly MenuEntry[],
   drawIcon: (icon: MenuIcon) => ShellMenuIcon | undefined,
 ): ShellMenuItem[] {
-  return entries.map(
-    ({ icon, children, confirm: _confirm, web: _web, ...rest }) => {
-      const item: ShellMenuItem = { ...rest };
-      const drawn = icon ? drawIcon(icon) : undefined;
-      if (drawn) item.icon = drawn;
-      if (children) item.children = toShellMenuItems(children, drawIcon);
-      return item;
-    },
-  );
+  return entries.map((entry) => {
+    const item: ShellMenuItem = { id: entry.id };
+    for (const field of WIRE_FIELDS) {
+      if (entry[field] !== undefined) {
+        Object.assign(item, { [field]: entry[field] });
+      }
+    }
+    const drawn = entry.icon ? drawIcon(entry.icon) : undefined;
+    if (drawn) item.icon = drawn;
+    if (entry.children) {
+      item.children = toShellMenuItems(entry.children, drawIcon);
+    }
+    return item;
+  });
 }
 
 export function findMenuEntry(

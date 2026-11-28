@@ -127,6 +127,8 @@ export const ModelSelector = ({
       ),
     [availableModels, selectedModel, disabled],
   );
+  // The rows and their ticks are the description's; each draws its model as
+  // the picker does, from the fields the description reads too.
   const dropdownItems: DropdownMenuItem[] = useMemo(() => {
     const items: DropdownMenuItem[] = entries.flatMap((entry) => {
       const model = modelOfEntry(availableModels, entry.id);

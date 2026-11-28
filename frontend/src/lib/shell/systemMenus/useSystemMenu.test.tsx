@@ -13,7 +13,20 @@ import {
 import { useSystemMenu } from "./useSystemMenu";
 
 import type { NativeMenu, SystemMenuOptions } from "./useSystemMenu";
-import type { MenuEntry } from "@/lib/shell/menus/menuEntry";
+import type { MenuEntry, MenuIcon } from "@/lib/shell/menus/menuEntry";
+
+// An icon drawing that throws, while a test asks for it.
+const drawing = vi.hoisted(() => ({ fails: false }));
+vi.mock("./drawMenuIcon", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./drawMenuIcon")>();
+  return {
+    ...actual,
+    drawMenuIcon: (icon: MenuIcon) => {
+      if (drawing.fails) throw new Error("cannot draw");
+      return actual.drawMenuIcon(icon);
+    },
+  };
+});
 
 const entries: MenuEntry[] = [
   { id: "pin", label: "Pin" },
@@ -59,16 +72,18 @@ const options = (more: Partial<SystemMenuOptions> = {}): SystemMenuOptions => ({
 
 describe("useSystemMenu", () => {
   afterEach(() => {
-    // What the page sent the app fits the contract.
     const request = (window.ERATO_SHELL as { request?: unknown } | undefined)
       ?.request;
-    if (request && vi.isMockFunction(request)) {
-      for (const [method, params] of request.mock.calls) {
-        expect(checks.errors({ method, params }), String(method)).toEqual([]);
-      }
-    }
+    const calls =
+      request && vi.isMockFunction(request) ? [...request.mock.calls] : [];
     removeHostShell();
     document.body.innerHTML = "";
+    vi.restoreAllMocks();
+    drawing.fails = false;
+    // What the page sent the app fits the contract.
+    for (const [method, params] of calls) {
+      expect(checks.errors({ method, params }), String(method)).toEqual([]);
+    }
   });
 
   it("leaves the web menu where the app has no system menus or nothing is described", () => {
@@ -304,6 +319,94 @@ describe("useSystemMenu", () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(request).not.toHaveBeenCalledWith(
       "systemMenus.attach",
+      expect.anything(),
+    );
+  });
+
+  it("sends a shown menu's entries once, and again only when they change", async () => {
+    const request = installHostShell(
+      { systemMenus: 1 },
+      vi.fn((method: string) =>
+        method === "systemMenus.show"
+          ? new Promise(() => {})
+          : Promise.resolve({ updated: true }),
+      ),
+    );
+    const { result, rerender } = renderHook(
+      (props: SystemMenuOptions) => useSystemMenu(props),
+      { initialProps: options() },
+    );
+    result.current?.open(trigger(), vi.fn());
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "systemMenus.show",
+        expect.anything(),
+      ),
+    );
+    rerender(options());
+    rerender(options());
+    expect(request).not.toHaveBeenCalledWith(
+      "systemMenus.update",
+      expect.anything(),
+    );
+    rerender(options({ entries: [entries[0]] }));
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenLastCalledWith("systemMenus.update", {
+      id: "row",
+      items: [{ id: "pin", label: "Pin" }],
+    });
+  });
+
+  it("opens the web menu on a later tap when the app's menu never came", async () => {
+    let answer: (value: unknown) => void = () => {};
+    const request = installHostShell(
+      { systemMenus: 1 },
+      vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    );
+    const onChoose = vi.fn();
+    const now = vi.spyOn(Date, "now").mockReturnValue(1000);
+    const { result } = renderHook(() => useSystemMenu(options({ onChoose })));
+    const button = trigger();
+    const web = vi.fn();
+    expect(result.current?.open(button, web)).toBe(true);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+
+    now.mockReturnValue(4000);
+    expect(result.current?.open(button, vi.fn())).toBe(false);
+    answer({ shown: true, chosen: "pin" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onChoose).not.toHaveBeenCalled();
+    expect(web).not.toHaveBeenCalled();
+  });
+
+  it("opens the web menu when asking the app fails", async () => {
+    installHostShell(
+      { systemMenus: 1 },
+      vi.fn(() => {
+        throw new Error("bridge gone");
+      }),
+    );
+    const web = vi.fn();
+    const { result } = renderHook(() => useSystemMenu(options()));
+    result.current?.open(trigger(), web);
+    await waitFor(() => expect(web).toHaveBeenCalledTimes(1));
+  });
+
+  it("opens the web menu when the menu cannot be readied for the app", async () => {
+    const request = shellAnswering({});
+    const web = vi.fn();
+    const { result } = renderHook(() =>
+      useSystemMenu(
+        options({
+          entries: [{ id: "pin", label: "Pin", icon: { name: "pin" } }],
+        }),
+      ),
+    );
+    drawing.fails = true;
+    result.current?.open(trigger(), web);
+    await waitFor(() => expect(web).toHaveBeenCalledTimes(1));
+    expect(request).not.toHaveBeenCalledWith(
+      "systemMenus.show",
       expect.anything(),
     );
   });

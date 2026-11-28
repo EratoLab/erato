@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { componentRegistry } from "@/config/componentRegistry";
+import { MODELS } from "@/lib/shell/menus/__fixtures__/modelMenu.fixtures";
 import {
   emitHostShellEvent,
   installHostShell,
@@ -200,6 +201,33 @@ describe("ChatInputAddControls", () => {
     expect(
       screen.getByTestId("chat-input-add-menu-extra-connectors"),
     ).toBeInTheDocument();
+  });
+
+  it("keeps the web rows' own ids, and picks a model from its page", () => {
+    const selectModel = vi.fn();
+    const [first, second] = MODELS;
+    renderControls({
+      menu: {
+        model: {
+          models: MODELS,
+          selectedId: first.chat_provider_id,
+          ready: true,
+        },
+      },
+      actions: { selectModel },
+    });
+
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+    expect(
+      screen.getByTestId("chat-input-add-menu-source-computer"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-page-model"));
+    fireEvent.click(
+      screen.getByTestId(
+        `chat-input-add-menu-extra-model-${second.chat_provider_id}`,
+      ),
+    );
+    expect(selectModel).toHaveBeenCalledWith(second.chat_provider_id);
   });
 
   describe("in an app with system menus", () => {

@@ -54,6 +54,13 @@ export interface NativeMenu {
 /** A first menu waits this long at most for its icons to be drawn. */
 const ICON_WAIT_MS = 400;
 /**
+ * How long a shown menu may take to appear: the icons' wait, then the app's
+ * own second before it answers that nothing opened. A tap later than that,
+ * with the menu's answer still on its way back, is taken as a menu that
+ * never came; the app does not say when its menu appeared.
+ */
+const SHOW_GRACE_MS = 1500;
+/**
  * How often an attached trigger's place is checked: a transform (the phone
  * drawer pushing the page aside) moves it without any event to hear.
  */
@@ -129,6 +136,9 @@ class SystemMenuSession {
   private options: SystemMenuOptions;
   /** The id of the shown menu while it is open. */
   private shownId: string | null = null;
+  /** Counts shown menus; the answer to one the page gave up on is dropped. */
+  private shows = 0;
+  private shownAt = 0;
   private trigger: Element | null = null;
   private attachment: "none" | "pending" | "attached" = "none";
   /** Ends an attach still on its way when anything changes first. */
@@ -216,8 +226,16 @@ class SystemMenuSession {
 
   private open(trigger: Element, web: () => void): boolean {
     if (!isDrawable(this.options.entries)) return false;
-    // A second tap while the first menu is coming changes nothing.
-    if (this.shownId !== null) return true;
+    if (this.shownId !== null) {
+      // A second tap while the menu is coming changes nothing. The page is
+      // not tapped while the app's menu is up, so a tap after that means it
+      // never appeared: the web menu takes this one.
+      if (Date.now() - this.shownAt < SHOW_GRACE_MS) return true;
+      this.shows += 1;
+      this.shownId = null;
+      this.stopListeningUnlessUsed();
+      return false;
+    }
     // An attached menu's own id stays with its button; this one is the
     // shown menu a key or VoiceOver opened from the same trigger.
     const id =
@@ -225,13 +243,17 @@ class SystemMenuSession {
         ? // eslint-disable-next-line lingui/no-unlocalized-strings -- menu id
           `${this.options.id}:shown`
         : this.options.id;
+    const show = ++this.shows;
     this.shownId = id;
+    this.shownAt = Date.now();
     this.listen();
     void (async () => {
-      await this.iconsDrawn();
-      const items = this.items();
       let answer: unknown;
       try {
+        await this.iconsDrawn();
+        if (show !== this.shows) return;
+        const items = this.items();
+        this.sentItems = JSON.stringify(items);
         answer = await requestSystemMenus(
           this.shell,
           SYSTEM_MENUS_METHOD.show,
@@ -245,6 +267,7 @@ class SystemMenuSession {
       } catch {
         answer = undefined;
       }
+      if (show !== this.shows) return;
       this.shownId = null;
       this.stopListeningUnlessUsed();
       if (field(answer, "shown") !== true) {
@@ -346,6 +369,7 @@ class SystemMenuSession {
         if (field(answer, "unsupported") !== undefined) {
           this.refusedItems = JSON.stringify(items);
         }
+        this.stopListeningUnlessUsed();
         return;
       }
       this.attachment = "attached";
@@ -357,6 +381,8 @@ class SystemMenuSession {
   }
 
   private detach() {
+    // A shown menu's entries were sent too; only an attachment ends here.
+    if (this.attachment === "none") return;
     this.generation += 1;
     const wasAttached = this.attachment === "attached";
     this.attachment = "none";

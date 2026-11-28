@@ -8,6 +8,7 @@ import {
   addMenuEntries,
   describeAddMenu,
   toolChoice,
+  uploadChoice,
 } from "@/lib/shell/menus/describeAddMenu";
 import { modelChoice } from "@/lib/shell/menus/describeModelMenu";
 import { addMenuItems } from "@/lib/shell/menus/web/addMenuItems";
@@ -20,7 +21,6 @@ import { CloudFilePickerModal } from "../FileUpload/CloudFilePickerModal";
 import type { UseChatFileSourcesParams } from "@/hooks/files/useChatFileSources";
 import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { AddMenuState } from "@/lib/shell/menus/describeAddMenu";
-import type { MenuEntry } from "@/lib/shell/menus/menuEntry";
 
 /** The rows besides uploads and tools, as data; absent ones are not offered. */
 export type ChatInputAddMenuData = Pick<
@@ -119,11 +119,10 @@ export function ChatInputAddControls({
     hostContent: ExtraContent != null,
   };
   const choose = (itemId: string) => {
+    const source = uploadChoice(itemId);
+    if (source === "computer") return onSelectDisk();
+    if (source) return onSelectCloud(source);
     switch (itemId) {
-      case ADD_MENU_ID.uploadComputer:
-        return onSelectDisk();
-      case ADD_MENU_ID.uploadSharepoint:
-        return onSelectCloud("sharepoint");
       case ADD_MENU_ID.connectors:
         return actions.openConnectors();
       case ADD_MENU_ID.assistants:
@@ -140,23 +139,34 @@ export function ChatInputAddControls({
       onToggleFacet(facetId);
     }
   };
-  // A model row shows the model's icon and name as the composer's picker does.
-  const label = (entry: MenuEntry) => {
-    const chatProviderId = modelChoice(entry.id);
-    const model = menu.model?.models.find(
-      (candidate) => candidate.chat_provider_id === chatProviderId,
-    );
-    return model ? (
-      <ModelSelectorOptionContent model={model} compact />
-    ) : (
-      entry.label
-    );
-  };
   const {
     fileSources: sourceRows,
     tools,
     extraSections,
-  } = addMenuItems(addMenuEntries(state), { choose, toggle, label });
+  } = addMenuItems(addMenuEntries(state), {
+    choose,
+    toggle,
+    // A model row draws the model as the composer's picker does.
+    draw: (entry) => {
+      const chatProviderId = modelChoice(entry.id);
+      const model = menu.model?.models.find(
+        (candidate) => candidate.chat_provider_id === chatProviderId,
+      );
+      return model ? (
+        <ModelSelectorOptionContent model={model} compact />
+      ) : undefined;
+    },
+    // The rows' own ids, which the menu's test ids carry; a tool's is the
+    // facet's, as its chip's is.
+    webId: (entry) => {
+      const chatProviderId = modelChoice(entry.id);
+      return (
+        toolChoice(entry.id) ??
+        uploadChoice(entry.id) ??
+        (chatProviderId ? `model-${chatProviderId}` : entry.id)
+      );
+    },
+  });
 
   // While the composer waits, its "+" does nothing, as the web one is off.
   const waiting = disabled || isProcessing;

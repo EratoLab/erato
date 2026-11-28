@@ -1,7 +1,4 @@
-import {
-  ADD_MENU_SECTION,
-  toolChoice,
-} from "@/lib/shell/menus/describeAddMenu";
+import { ADD_MENU_SECTION } from "@/lib/shell/menus/describeAddMenu";
 
 import { MenuIconView } from "./MenuIconView";
 
@@ -25,8 +22,13 @@ export interface AddMenuItemsOptions {
   choose: (itemId: string) => void;
   /** A keep-open entry flipped; `on` is what the person asked for. */
   toggle: (itemId: string, on: boolean) => void;
-  /** The web's own drawing of an entry's label, where it shows more than text. */
-  label?: (entry: MenuEntry) => React.ReactNode;
+  /**
+   * The web's own drawing of an entry, icon included, where it shows more
+   * than the entry's label and icon; undefined draws those.
+   */
+  draw?: (entry: MenuEntry) => React.ReactNode;
+  /** The row's id in the web menu, which its test id and key carry. */
+  webId?: (entry: MenuEntry) => string;
 }
 
 const shownSubtitle = (entry: MenuEntry) =>
@@ -41,14 +43,25 @@ const shownSubtitle = (entry: MenuEntry) =>
  */
 export function addMenuItems(
   entries: readonly MenuEntry[],
-  { choose, toggle, label = (entry) => entry.label }: AddMenuItemsOptions,
+  {
+    choose,
+    toggle,
+    draw = () => undefined,
+    webId = (entry) => entry.id,
+  }: AddMenuItemsOptions,
 ): AddMenuItems {
-  const common = (entry: MenuEntry) => ({
-    id: entry.id,
-    label: label(entry),
-    icon: entry.icon ? <MenuIconView icon={entry.icon} /> : undefined,
-    ...(entry.disabled ? { disabled: true } : {}),
-  });
+  const common = (entry: MenuEntry) => {
+    const drawn = draw(entry);
+    return {
+      id: webId(entry),
+      label: drawn ?? entry.label,
+      icon:
+        drawn === undefined && entry.icon ? (
+          <MenuIconView icon={entry.icon} />
+        ) : undefined,
+      ...(entry.disabled ? { disabled: true } : {}),
+    };
+  };
   const action = (entry: MenuEntry): AddMenuActionItem => ({
     ...common(entry),
     description: shownSubtitle(entry),
@@ -100,11 +113,7 @@ export function addMenuItems(
     if (entry.id === ADD_MENU_SECTION.uploads) {
       items.fileSources = children.map(action);
     } else if (entry.id === ADD_MENU_SECTION.tools) {
-      // The tool's own id, which its chip and its row share.
-      items.tools = children.map((child) => ({
-        ...ticked(child, false),
-        id: toolChoice(child.id) ?? child.id,
-      }));
+      items.tools = children.map((child) => ticked(child, false));
     } else {
       items.extraSections.push(section(entry));
     }
