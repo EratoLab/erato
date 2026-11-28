@@ -235,6 +235,30 @@ describe("env audioConversationalVoiceMediaStreamOutput", () => {
   });
 });
 
+describe("env audioConversationalShellVoice", () => {
+  afterEach(() => {
+    delete window.AUDIO_CONVERSATIONAL_SHELL_VOICE;
+    vi.unstubAllEnvs();
+  });
+
+  it("is on unless the deployment says false", () => {
+    expect(env().audioConversationalShellVoice).toBe(true);
+    window.AUDIO_CONVERSATIONAL_SHELL_VOICE = "yes";
+    expect(env().audioConversationalShellVoice).toBe(true);
+  });
+
+  it.each([false, "false"])("is off for %s", (value) => {
+    window.AUDIO_CONVERSATIONAL_SHELL_VOICE = value;
+    expect(env().audioConversationalShellVoice).toBe(false);
+  });
+
+  it("prefers the Vite override", () => {
+    window.AUDIO_CONVERSATIONAL_SHELL_VOICE = false;
+    vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_SHELL_VOICE", "true");
+    expect(env().audioConversationalShellVoice).toBe(true);
+  });
+});
+
 describe("env faviconPath", () => {
   afterEach(() => {
     delete window.FAVICON_PATH;

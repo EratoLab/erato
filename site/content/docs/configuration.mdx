@@ -3250,6 +3250,17 @@ To always use the page's audio output, set the frontend variable `AUDIO_CONVERSA
 AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT = false
 ```
 
+#### Voice and microphone through the app
+
+Where an app that shows the page offers its own voice audio (the shell capability `voiceAudio`), a conversation's voice (replies, wait lines, approvals) and its microphone go through the app's audio engine instead of the page. The app cancels the voice's echo with the voice itself as the reference, as call apps do, and follows the route (loudspeaker, headset, car), calls and the system's microphone mode. The page still decides when to listen, what counts as speech, when the user talks over the voice and what is said; while the conversation lasts it opens no microphone and plays nothing of its own. The app buffers the start of a voice itself, with `voice_start_buffer_ms` and `voice_start_max_wait_ms`. Dictation, voice messages and read aloud outside a conversation stay in the page. Where the app does not offer it, or its audio cannot start (the app's microphone is turned off), the page uses its own audio as above.
+
+To always use the page's audio, set the frontend variable `AUDIO_CONVERSATIONAL_SHELL_VOICE` to `false`; any other value, or none, uses the app's voice audio where it is offered:
+
+```toml
+[frontend.additional_environment]
+AUDIO_CONVERSATIONAL_SHELL_VOICE = false
+```
+
 #### `audio_conversational.wait_lines`
 
 {/* erato_toml_config_key: audio_conversational.wait_lines */}

@@ -670,6 +670,7 @@ export const ChatInput = ({
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
     voiceMediaStreamOutput,
+    shellVoice,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
   // Hesitations sound like the language the user spoke last.
@@ -693,8 +694,8 @@ export const ChatInput = ({
     });
   }, [voiceStartBufferMs, voiceStartMaxWaitMs]);
   useEffect(() => {
-    configureVoiceOutput({ mediaStream: voiceMediaStreamOutput });
-  }, [voiceMediaStreamOutput]);
+    configureVoiceOutput({ mediaStream: voiceMediaStreamOutput, shellVoice });
+  }, [voiceMediaStreamOutput, shellVoice]);
   useEffect(() => {
     if (!isAudioMode) return;
     return holdConversationAudio();

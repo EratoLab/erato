@@ -104,6 +104,8 @@ interface AudioConversationalFeatureConfig {
   talkOverVoiceMinSpeechMs?: number;
   /** The voice is conversation audio while the microphone listens; on when omitted. */
   voiceMediaStreamOutput?: boolean;
+  /** The app shell's voice audio takes a conversation where offered; on when omitted. */
+  shellVoice?: boolean;
 }
 
 /**
@@ -511,6 +513,7 @@ function createFeatureConfig(
         environment.audioConversationalTalkOverVoiceMinSpeechMs,
       voiceMediaStreamOutput:
         environment.audioConversationalVoiceMediaStreamOutput,
+      shellVoice: environment.audioConversationalShellVoice,
     },
     auth: {
       showLogout: !environment.disableLogout,
