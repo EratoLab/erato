@@ -1,7 +1,5 @@
 import { registerWorkInProgress } from "@/lib/chunkLoadRecovery";
 
-import { shellVoiceAudio } from "./shellVoiceAudio";
-
 /** Optional host consent boundary. The ordinary web app uses browser consent. */
 export interface AudioCaptureAccessPolicy {
   beforeCapture: () => Promise<void>;
@@ -40,12 +38,8 @@ export async function requestAudioStream(
 
 const capturedStreams = new Set<MediaStream>();
 
-/**
- * Whether a microphone stream this page opened is still live, or the app
- * shell's voice audio listens for a conversation.
- */
+/** Whether a microphone stream this page opened is still live. */
 export function isAudioCaptureLive(): boolean {
-  if (shellVoiceAudio()) return true;
   for (const stream of capturedStreams) {
     if (stream.getTracks().some((track) => track.readyState === "live")) {
       return true;

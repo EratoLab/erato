@@ -31,6 +31,7 @@ import {
   CANONICAL_AUDIO_BYTES_PER_SAMPLE,
   CANONICAL_AUDIO_SAMPLE_RATE_HZ,
   createCanonicalWavBytesFromPcm,
+  getAudioLevelBarsFromSamples,
   getAudioLevelBarsFromTimeDomainData,
   mediaTrackSettingsToDiagnostics,
   resampleMonoFloat32ToPcm16,
@@ -60,12 +61,17 @@ import {
   type SpeechOnsetController,
 } from "./onsetFlipController";
 import {
+  conversationShellAudio,
   playbackOutputDelayMs,
   voiceHeardBy,
   voiceNoLongerHeardBy,
 } from "./pcmPlayback";
 import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
-import { settledShellVoiceAudio } from "./shellVoiceAudio";
+import {
+  onShellVoiceAudioChange,
+  settledShellVoiceAudio,
+  shellVoiceAudioLost,
+} from "./shellVoiceAudio";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
   overVoiceGate,
@@ -495,28 +501,25 @@ export function useAudioDictationRecorder({
   // latest one each render via its own Effect Event. No mount guard needed:
   // the watchdog removes all listeners and clears its timers on unmount, so
   // this can't fire after teardown.
-  const {
-    watchTrack: watchCaptureTrack,
-    watchShellVoice: watchCaptureShell,
-    unwatchTrack: unwatchCaptureTrack,
-  } = useMediaStreamTrackWatchdog({
-    onTrackLost: (reason) => {
-      if (reason === "hidden") {
-        if (mode === "dictation") stopDictation();
-        else cancelDictation();
+  const { watchTrack: watchCaptureTrack, unwatchTrack: unwatchCaptureTrack } =
+    useMediaStreamTrackWatchdog({
+      onTrackLost: (reason) => {
+        if (reason === "hidden") {
+          if (mode === "dictation") stopDictation();
+          else cancelDictation();
+          closeMicrophone();
+          onStoppedByHiddenPage?.();
+          return;
+        }
+        setDictationError(
+          reason === "ended"
+            ? t`The microphone was disconnected. Please check your microphone and start dictation again.`
+            : t`The microphone stopped sending audio. Please check your microphone and start dictation again.`,
+        );
+        stopDictation();
         closeMicrophone();
-        onStoppedByHiddenPage?.();
-        return;
-      }
-      setDictationError(
-        reason === "ended"
-          ? t`The microphone was disconnected. Please check your microphone and start dictation again.`
-          : t`The microphone stopped sending audio. Please check your microphone and start dictation again.`,
-      );
-      stopDictation();
-      closeMicrophone();
-    },
-  });
+      },
+    });
 
   useEffect(() => {
     onTranscriptChunkRef.current = onTranscriptChunk;
@@ -707,17 +710,22 @@ export function useAudioDictationRecorder({
 
   useEffect(() => {
     if (!conversing || !audioContinuesWhileHidden()) return;
-    // The app shell's voice audio owns the phone's audio session itself.
-    const shell = settledShellVoiceAudio();
-    if (!(shell instanceof Promise))
-      return shell ? undefined : holdPlayAndRecordSession();
     let release: (() => void) | undefined;
     let ended = false;
-    void shell.then((opened) => {
-      if (!ended && !opened) release = holdPlayAndRecordSession();
-    });
+    // The app shell's voice audio owns the device's audio session itself.
+    const follow = () =>
+      void Promise.resolve(settledShellVoiceAudio()).then((shell) => {
+        if (ended) return;
+        if (shell || shellVoiceAudioLost()) {
+          release?.();
+          release = undefined;
+        } else release ??= holdPlayAndRecordSession();
+      });
+    follow();
+    const unfollow = onShellVoiceAudioChange(follow);
     return () => {
       ended = true;
+      unfollow();
       release?.();
     };
   }, [conversing]);
@@ -1301,17 +1309,6 @@ export function useAudioDictationRecorder({
           : (navigator as Navigator & { mediaDevices?: MediaDevices })
               .mediaDevices;
 
-      // A conversation the app shell's voice audio has listens through it.
-      const shellAudio =
-        mode === "conversational" ? settledShellVoiceAudio() : null;
-
-      if (!shellAudio && typeof mediaDevices?.getUserMedia !== "function") {
-        setDictationError(t`Audio recording is not supported in this browser.`);
-        dispatchSession({ type: "abort" });
-        startInFlightRef.current = false;
-        return;
-      }
-
       const keepMicrophone = keepMicrophoneRef.current;
       const baseAudioConstraints: MediaTrackConstraints = {
         // Over the voice, the browser's echo cancellation keeps the voice
@@ -1361,79 +1358,81 @@ export function useAudioDictationRecorder({
         }
       };
 
-      try {
-        const shell =
-          shellAudio instanceof Promise ? await shellAudio : shellAudio;
-        let stream: MediaStream | null = null;
-        let trackSettings: MediaTrackSettings = {};
-        let audioContext: AudioContext | null = null;
-        if (shell) {
-          watchCaptureShell(shell);
+      /** The page's own microphone and capture context. */
+      const openPageCapture = async () => {
+        if (typeof mediaDevices?.getUserMedia !== "function")
+          throw new Error(t`Audio recording is not supported in this browser.`);
+        const kept = mediaStreamRef.current;
+        let stream: MediaStream;
+        if (
+          kept &&
+          keepsMicrophone(kept) &&
+          microphoneDeviceRef.current === selectedAudioInputDeviceId
+        ) {
+          stream = kept;
         } else {
-          if (typeof mediaDevices?.getUserMedia !== "function")
-            throw new Error(
-              t`Audio recording is not supported in this browser.`,
-            );
-          const kept = mediaStreamRef.current;
-          let opened: MediaStream;
-          if (
-            kept &&
-            keepsMicrophone(kept) &&
-            microphoneDeviceRef.current === selectedAudioInputDeviceId
-          ) {
-            opened = kept;
-          } else {
-            if (kept) closeMicrophone();
-            opened = await openMicrophone(mediaDevices);
-          }
-          if (!isMounted()) {
-            stopMicrophone(opened);
-            return;
-          }
-
-          stream = opened;
-          mediaStreamRef.current = opened;
-          if (
-            microphoneEchoCancelledRef.current &&
-            microphoneUsable(opened, true)
-          )
-            voiceHeardBy(opened);
-          const audioTrack = opened.getAudioTracks()[0];
-          // Start watching for mid-session device-loss (AirPods route change,
-          // incoming call, unplug) as soon as the track exists (ERMAIN-390).
-          watchCaptureTrack(audioTrack);
-          trackSettings = audioTrack.getSettings();
-          setDictationDiagnostics(
-            mediaTrackSettingsToDiagnostics(trackSettings),
-          );
-
-          // Build the audio pipeline BEFORE awaiting the socket handshake.
-          // Once the worklet node is connected, samples land in
-          // `preSessionSamplesRef` until the live session is constructed, so
-          // the user's first words aren't dropped during the (~250 ms–1 s)
-          // socket + session_state handshake. Sample extraction runs on the
-          // audio rendering thread via `AudioWorkletNode`, isolated from
-          // main-thread contention.
-          //
-          // Passing the track's sampleRate to the AudioContext constructor
-          // (when known and supported) prevents createMediaStreamSource from
-          // inserting an internal Web Audio resampler — one fewer documented
-          // source of startup latency between getUserMedia and the first
-          // sample reaching the worklet.
-          audioContext = await ensureAudioContextReady(
-            trackSettings.sampleRate,
-          );
-          if (!isMounted()) {
-            stopMicrophone(opened);
-            return;
-          }
+          if (kept) closeMicrophone();
+          stream = await openMicrophone(mediaDevices);
         }
+        if (!isMounted()) {
+          stopMicrophone(stream);
+          return null;
+        }
+
+        mediaStreamRef.current = stream;
+        if (
+          microphoneEchoCancelledRef.current &&
+          microphoneUsable(stream, true)
+        )
+          voiceHeardBy(stream);
+        const audioTrack = stream.getAudioTracks()[0];
+        // Start watching for mid-session device-loss (AirPods route change,
+        // incoming call, unplug) as soon as the track exists (ERMAIN-390).
+        watchCaptureTrack(audioTrack);
+        const trackSettings = audioTrack.getSettings();
+        setDictationDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
+
+        // Passing the track's sampleRate to the AudioContext constructor
+        // (when known and supported) prevents createMediaStreamSource from
+        // inserting an internal Web Audio resampler — one fewer documented
+        // source of startup latency between getUserMedia and the first
+        // sample reaching the worklet.
+        const audioContext = await ensureAudioContextReady(
+          trackSettings.sampleRate,
+        );
+        if (!isMounted()) {
+          stopMicrophone(stream);
+          return null;
+        }
+        return { stream, trackSettings, audioContext };
+      };
+
+      try {
+        const settled =
+          mode === "conversational" ? conversationShellAudio() : null;
+        // No await without a shell: the page's microphone is asked for in the
+        // same task as before.
+        const shell = settled instanceof Promise ? await settled : settled;
+        sessionAbort.signal.throwIfAborted();
+        if (shell) {
+          // A microphone kept from a turn without the shell would be a second
+          // owner of the device's audio.
+          closeMicrophone();
+          watchCaptureTrack(shell);
+        }
+        const page = shell ? null : await openPageCapture();
+        if (!shell && !page) return;
+        const audioContext = page?.audioContext ?? null;
+        const trackSettings = page?.trackSettings ?? {};
         let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
         let primerSamples: number[] = [];
-        /** Samples a frame holds before the page sees it. */
+        // On the shell a frame's sound is older than its `at` by the input
+        // delay and up to one system buffer, which the shell does not tell:
+        // a frame's length stands for it.
         const frameSamples = shell?.frameSamples ?? WORKLET_FRAME_SAMPLES;
         const inputDelayMs = () =>
           shell ? shell.inputDelayMs : inputLatencyMs(trackSettings);
+        let lastFrameAt: number | undefined;
         const capture = shell ?? audioContext;
         if (capture) {
           const rate = capture.sampleRate;
@@ -1500,7 +1499,7 @@ export function useAudioDictationRecorder({
             const asked = recordingSignalsRef.current;
             recordingSignalsRef.current = audioFrom(
               asked,
-              asked.startedAt - inputLatencyMs(trackSettings),
+              asked.startedAt - inputDelayMs(),
               primerMs,
             );
           }
@@ -1562,26 +1561,29 @@ export function useAudioDictationRecorder({
           };
 
           if (shell) {
-            let timed = false;
             shellInputStopRef.current = shell.onInput(({ samples, at }) => {
-              // Its first frame's first sample was captured at the earliest
-              // the input delay and the frame's length before it came.
               const signals = recordingSignalsRef.current;
-              if (!timed && signals) {
-                timed = true;
+              if (lastFrameAt === undefined && signals)
                 recordingSignalsRef.current = audioFrom(
                   signals,
-                  at - shell.inputDelayMs - (samples.length / rate) * 1000,
+                  at -
+                    inputDelayMs() -
+                    ((samples.length + frameSamples) / rate) * 1000,
                   primerMs,
                 );
-              }
+              lastFrameAt = at;
               acceptInput(samples);
-              setDictationBarsThrottled(
-                getAudioLevelBarsFromTimeDomainData(timeDomainBytes(samples)),
-              );
+              setDictationBarsThrottled(getAudioLevelBarsFromSamples(samples));
             });
-          } else if (audioContext && stream) {
-            const source = audioContext.createMediaStreamSource(stream);
+          } else if (audioContext && page) {
+            // Build the audio pipeline BEFORE awaiting the socket handshake. Once
+            // the worklet node is connected, samples land in
+            // `preSessionSamplesRef` until the live session is constructed, so
+            // the user's first words aren't dropped during the (~250 ms–1 s)
+            // socket + session_state handshake. Sample extraction runs on the
+            // audio rendering thread via `AudioWorkletNode`, isolated from
+            // main-thread contention.
+            const source = audioContext.createMediaStreamSource(page.stream);
             const analyser = audioContext.createAnalyser();
             const processor = new AudioWorkletNode(
               audioContext,
@@ -1981,7 +1983,7 @@ export function useAudioDictationRecorder({
             const unjudged = gate ? Math.max(0, gate.fed - gate.judged) : 0;
             recordingSignalsRef.current = audioFrom(
               recordingSignals(releasedAt, false),
-              releasedAt -
+              (lastFrameAt ?? releasedAt) -
                 ((unjudged + frameSamples) / sourceSampleRate) * 1000 -
                 inputDelayMs(),
               0,
@@ -2147,7 +2149,6 @@ export function useAudioDictationRecorder({
       stopVadEngine,
       tearDownCaptureGraph,
       vadAutoStopEnabled,
-      watchCaptureShell,
       watchCaptureTrack,
     ],
   );
@@ -2240,17 +2241,6 @@ function inputLatencyMs(settings: MediaTrackSettings): number {
   return typeof latency === "number" && Number.isFinite(latency)
     ? Math.max(latency * 1000, MIN_INPUT_LATENCY_MS)
     : MIN_INPUT_LATENCY_MS;
-}
-
-/** Samples as an analyser's time-domain bytes, for the level bars. */
-function timeDomainBytes(samples: Float32Array): Uint8Array {
-  const bytes = new Uint8Array(samples.length);
-  for (let index = 0; index < samples.length; index++)
-    bytes[index] = Math.max(
-      0,
-      Math.min(255, Math.round(128 + samples[index] * 128)),
-    );
-  return bytes;
 }
 
 function stopMicrophone(stream: MediaStream) {

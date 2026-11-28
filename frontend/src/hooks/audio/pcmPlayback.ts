@@ -1,5 +1,6 @@
 import { createLogger } from "@/utils/debugLogger";
 
+import { decodePcm16, isPlayablePcm16 } from "./audio-pcm-codec";
 import {
   closeShellVoiceAudio,
   createShellVoiceQueue,
@@ -7,6 +8,7 @@ import {
   settledShellVoiceAudio,
   ShellVoiceAudio,
   shellVoiceAudio,
+  shellVoiceAudioLost,
 } from "./shellVoiceAudio";
 import { reviveStandingClock } from "./useAudioContextInterruptionRecovery";
 
@@ -36,13 +38,12 @@ let reviving = false;
 export type VoicePlayback = AudioContext | ShellVoiceAudio;
 
 /**
- * Where all speech playback plays: the app shell's voice audio while it has
- * the conversation, otherwise the one AudioContext all speech playback
- * shares. Browsers keep a context suspended until it is resumed from a user
- * gesture, so the first call has to come from a click.
+ * Browsers keep a context suspended until it is resumed from a user gesture,
+ * so the first call has to come from a click.
  */
 export async function resumePlaybackContext(): Promise<VoicePlayback> {
-  const settled = settledShellVoiceAudio();
+  const settled = conversationShellAudio();
+  // No await without a shell: the context may only start within the tap.
   const shell = settled instanceof Promise ? await settled : settled;
   if (shell) return shell;
   if (!context) {
@@ -124,6 +125,9 @@ let stream: VoiceStream | undefined;
 let mediaStreamOutput = true;
 
 let shellOutput = true;
+/** Composers holding the conversation, and the close once none does. */
+let conversations = 0;
+let closing: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * The deployment's `AUDIO_CONVERSATIONAL_VOICE_MEDIA_STREAM_OUTPUT` and
@@ -146,20 +150,20 @@ export function configureVoiceOutput(settings: {
  */
 export function openConversationAudio(): Promise<ShellVoiceAudio | null> {
   if (!shellOutput) return Promise.resolve(null);
+  // A conversation starting again is not closed by the end of the last one.
+  clearTimeout(closing);
+  closing = undefined;
   const opening = openShellVoiceAudio(voiceStart);
   void opening
     .then(async (shell) => {
-      if (!shell) return;
+      if (shell?.state !== "running") return;
       releaseStream();
-      // Two owners of the phone's audio interrupt each other.
+      // Two owners of the device's audio interrupt each other.
       if (context?.state === "running") await context.suspend();
     })
     .catch(() => undefined);
   return opening;
 }
-
-let conversations = 0;
-let closing: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * A composer has the conversation; returns its release. The app shell's
@@ -182,6 +186,25 @@ export function holdConversationAudio(): () => void {
       if (conversations === 0) closeShellVoiceAudio();
     }, 0);
   };
+}
+
+/**
+ * The app shell's voice audio a conversation plays and listens through,
+ * opened again once the shell has closed it, as the shell expects.
+ */
+export function conversationShellAudio():
+  | ShellVoiceAudio
+  | null
+  | Promise<ShellVoiceAudio | null> {
+  const settled = settledShellVoiceAudio();
+  if (settled !== null || conversations === 0 || !shellVoiceAudioLost())
+    return settled;
+  const reopening = openConversationAudio();
+  // Refused: the page plays the conversation's voice itself from here on.
+  void reopening.then((shell) => {
+    if (!shell) resumePlaybackContext().catch(() => undefined);
+  });
+  return reopening;
 }
 
 /** Microphones with echo cancellation that may hear the voice. */
@@ -430,7 +453,7 @@ export interface PcmChunk {
   text?: string;
 }
 
-type OnScheduled = (
+export type OnScheduled = (
   text: string | undefined,
   startsAt: number,
   endsAt: number,
@@ -455,12 +478,14 @@ export function createPcmQueue(
       return onContext.active || onShell.active;
     },
     enqueue(playback, audio, sampleRate, text) {
+      if (!isPlayablePcm16(audio, sampleRate)) return false;
       if (playback instanceof ShellVoiceAudio)
         return onShell.enqueue(playback, { audio, sampleRate, text });
       return onContext.enqueue(playback, audio, sampleRate, text);
     },
     flush() {
       onContext.flush();
+      onShell.flush();
     },
     stop() {
       onContext.stop();
@@ -563,20 +588,9 @@ function createContextQueue(
       return sources.size > 0 || waiting !== null;
     },
     enqueue(context, audio, sampleRate, text) {
-      const raw = globalThis.atob(audio);
-      const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
-      if (
-        !bytes.length ||
-        bytes.length % 2 !== 0 ||
-        sampleRate < 8000 ||
-        sampleRate > 192000
-      )
-        return false;
-      const view = new DataView(bytes.buffer);
-      const buffer = context.createBuffer(1, bytes.length / 2, sampleRate);
-      const samples = buffer.getChannelData(0);
-      for (let i = 0; i < samples.length; i++)
-        samples[i] = view.getInt16(i * 2, true) / 32768;
+      const samples = decodePcm16(audio);
+      const buffer = context.createBuffer(1, samples.length, sampleRate);
+      buffer.getChannelData(0).set(samples);
       const chunk = { audio, sampleRate, text, buffer };
       // Playing on, or running dry in the middle: the chunk plays at once.
       if (!waiting && (sources.size > 0 || !fresh)) {

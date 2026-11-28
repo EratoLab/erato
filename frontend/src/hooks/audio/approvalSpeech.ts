@@ -8,6 +8,7 @@ import {
 } from "@/lib/toolCallGist/spokenCardFlow";
 import { createSSEConnection } from "@/utils/sse/sseClient";
 
+import { pcm16Bytes } from "./audio-pcm-codec";
 import { deploymentConfirmationPhrases } from "./confirmationPhrases";
 import { createPcmQueue, resumePlaybackContext } from "./pcmPlayback";
 import { useSpeechPlayback } from "./speechPlayback";
@@ -278,8 +279,7 @@ export const audioTooShort = (
   if (characters < MIN_CHARACTERS_CHECKED) return false;
   const ms = chunks.reduce(
     (sum, chunk) =>
-      sum +
-      ((globalThis.atob(chunk.audio).length / 2) * 1000) / chunk.sampleRate,
+      sum + ((pcm16Bytes(chunk.audio) / 2) * 1000) / chunk.sampleRate,
     0,
   );
   return ms < characters * MIN_MS_PER_CHARACTER;

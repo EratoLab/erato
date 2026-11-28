@@ -62,6 +62,46 @@ export function createCanonicalWavBytesFromPcm(
   return wavBytes;
 }
 
+/** Bytes of PCM in base64 `audio`, counted without decoding it. */
+export function pcm16Bytes(audio: string): number {
+  const padding = audio.endsWith("==") ? 2 : audio.endsWith("=") ? 1 : 0;
+  return Math.floor(((audio.length - padding) * 3) / 4);
+}
+
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/** Whether `audio` is base64 signed 16-bit PCM at a rate a voice plays. */
+export function isPlayablePcm16(audio: string, sampleRate: number): boolean {
+  const bytes = pcm16Bytes(audio);
+  return (
+    bytes > 0 &&
+    bytes % 2 === 0 &&
+    sampleRate >= 8000 &&
+    sampleRate <= 192000 &&
+    BASE64.test(audio)
+  );
+}
+
+/** Base64 signed 16-bit little-endian mono PCM as samples from -1 to 1. */
+export function decodePcm16(audio: string): Float32Array {
+  const raw = globalThis.atob(audio);
+  const samples = new Float32Array(raw.length >> 1);
+  for (let index = 0; index < samples.length; index++) {
+    const value =
+      raw.charCodeAt(2 * index) | (raw.charCodeAt(2 * index + 1) << 8);
+    samples[index] = (value >= 0x8000 ? value - 0x10000 : value) / 32768;
+  }
+  return samples;
+}
+
+/** `audio` with silence after it, up to `samples` samples in all. */
+export function padPcm16(audio: string, samples: number): string {
+  const raw = globalThis.atob(audio);
+  return globalThis.btoa(
+    raw + "\0".repeat(Math.max(0, samples * 2 - raw.length)),
+  );
+}
+
 /**
  * Linear-interpolated downsample from arbitrary AudioContext source
  * rate to the canonical 16 kHz target rate, packed as little-endian
@@ -169,22 +209,33 @@ export function getAudioLevelBarsFromTimeDomainData(
   audioLevelData: Uint8Array,
   gain = 1,
 ): number[] {
+  return getAudioLevelBarsFromSamples(
+    Float32Array.from(audioLevelData, (value) => (value - 128) / 128),
+    gain,
+  );
+}
+
+/** The same for samples from -1 to 1. */
+export function getAudioLevelBarsFromSamples(
+  samples: Float32Array,
+  gain = 1,
+): number[] {
   const samplesPerBar = Math.max(
     1,
-    Math.floor(audioLevelData.length / AUDIO_BARS_COUNT),
+    Math.floor(samples.length / AUDIO_BARS_COUNT),
   );
 
   return Array.from({ length: AUDIO_BARS_COUNT }, (_, barIndex) => {
     const startSample = barIndex * samplesPerBar;
     const endSample =
       barIndex + 1 === AUDIO_BARS_COUNT
-        ? audioLevelData.length
+        ? samples.length
         : (barIndex + 1) * samplesPerBar;
     let squaredTotal = 0;
     let peak = 0;
 
     for (let index = startSample; index < endSample; index++) {
-      const centeredSample = (audioLevelData[index] - 128) / 128;
+      const centeredSample = samples[index];
       const absoluteSample = Math.abs(centeredSample);
       squaredTotal += centeredSample * centeredSample;
       peak = Math.max(peak, absoluteSample);

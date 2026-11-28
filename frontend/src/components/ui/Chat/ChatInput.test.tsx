@@ -29,6 +29,7 @@ import { dictatedTurnFor } from "@/hooks/audio/dictatedTurns";
 import { playbackContext } from "@/hooks/audio/pcmPlayback";
 import {
   closeShellVoiceAudio,
+  ShellVoiceAudio,
   shellVoiceAudio,
 } from "@/hooks/audio/shellVoiceAudio";
 import {
@@ -2960,18 +2961,28 @@ describe("ChatInput", () => {
           </QueryClientProvider>
         );
         const { rerender } = render(composer(false));
+        // A context an earlier test left must not be what the voice plays on.
+        const leftover = playbackContext();
+        const resumed = leftover
+          ? vi.spyOn(leftover as AudioContext, "resume")
+          : undefined;
 
         fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
-        expect(request).toHaveBeenCalledWith("voiceAudio.open", {
-          mode: "conversation",
-          startBufferMs: 400,
-          startMaxWaitMs: 350,
-        });
+        await waitFor(() =>
+          expect(request).toHaveBeenCalledWith("voiceAudio.open", {
+            startBufferMs: 400,
+            startMaxWaitMs: 350,
+          }),
+        );
         rerender(composer(true));
         await waitFor(() =>
-          expect(useSpeechPlayback.getState().blocked).toBe(false),
+          expect(playbackContext()).toBeInstanceOf(ShellVoiceAudio),
         );
+        await act(async () => {});
+        expect(useSpeechPlayback.getState().blocked).toBe(false);
         expect(AudioContextMock).not.toHaveBeenCalled();
+        expect(resumed?.mock.calls ?? []).toHaveLength(0);
+        resumed?.mockRestore();
 
         rerender(composer(false));
         await waitFor(() =>
@@ -2982,6 +2993,41 @@ describe("ChatInput", () => {
         closeShellVoiceAudio();
         removeHostShell();
         vi.unstubAllGlobals();
+      }
+    });
+
+    it("keeps a conversation's audio in the page where the deployment turns the app shell's voice off", async () => {
+      const request = installHostShell(
+        { voiceAudio: 1 },
+        shellAnswers({ "voiceAudio.open": {}, "voiceAudio.close": null }),
+      );
+      try {
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          maxRecordingDurationSeconds: 1200,
+          shellVoice: false,
+        });
+        const { i18n } = await import("@lingui/core");
+        render(
+          <QueryClientProvider client={new QueryClient()}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput onSendMessage={vi.fn()} />
+            </I18nProvider>
+          </QueryClientProvider>,
+        );
+
+        fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+        await waitFor(() =>
+          expect(useSpeechPlayback.getState().conversational).toBe(true),
+        );
+        expect(
+          request.mock.calls.filter(([method]) => method === "voiceAudio.open"),
+        ).toHaveLength(0);
+        expect(shellVoiceAudio()).toBeNull();
+      } finally {
+        closeShellVoiceAudio();
+        removeHostShell();
       }
     });
 

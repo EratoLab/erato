@@ -1,45 +1,54 @@
 /* eslint-disable lingui/no-unlocalized-strings -- the contract's capability, method and event names */
+import { registerWorkInProgress } from "@/lib/chunkLoadRecovery";
 import { hostShellWithCapability } from "@/lib/hostShell";
 import { createLogger } from "@/utils/debugLogger";
 
+import {
+  CANONICAL_AUDIO_SAMPLE_RATE_HZ,
+  decodePcm16,
+  padPcm16,
+  pcm16Bytes,
+} from "./audio-pcm-codec";
+
+import type { OnScheduled, PcmChunk } from "./pcmPlayback";
 import type { HostShell } from "@/lib/hostShell";
 
 const logger = createLogger("HOOK", "shellVoiceAudio");
 
 const CAPABILITY = "voiceAudio";
-
-export type ShellVoiceAudioState = "running" | "interrupted" | "closed";
+/** The largest piece the shell plays. */
+const MAX_PIECE_BYTES = 960_000;
 
 /** One frame of the processed microphone. */
 export interface ShellVoiceInput {
   samples: Float32Array;
-  /** When the shell received it, in Unix ms; the sound is up to `inputDelayMs` older. */
+  /**
+   * When the shell received the system buffer that completed the frame, in
+   * Unix ms; the sound is older by `inputDelayMs` and up to one such buffer.
+   */
   at: number;
-}
-
-/** A piece of a voice: base64 signed 16-bit little-endian mono PCM. */
-export interface ShellVoiceChunk {
-  audio: string;
-  sampleRate: number;
-  text?: string;
 }
 
 interface Owner {
   /** Handed to the shell and not yet heard to their end, in play order. */
   pieces: Piece[];
   onDrained: () => void;
-  onScheduled?: (
-    text: string | undefined,
-    startsAt: number,
-    endsAt: number,
-  ) => void;
+  onScheduled?: OnScheduled;
+  pauses: number;
+  /** Of the last pause's pieces, what the shell heard to its end, in order. */
+  heard: { pause: number; audio: string[] } | null;
 }
 
 interface Piece {
   id: string;
-  chunk: ShellVoiceChunk;
+  chunk: PcmChunk;
+  /** What the shell is sent: a piece too short for it ends in silence. */
+  audio: string;
   seconds: number;
   owner: Owner;
+  /** The owner's pause it was queued after. */
+  pause: number;
+  sent: boolean;
   logged: boolean;
 }
 
@@ -51,22 +60,15 @@ const record = (payload: unknown): Record<string, unknown> =>
 const finite = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
 
-/** Bytes of PCM in base64 `audio`, without decoding it. */
-function pcmBytes(audio: string): number {
-  const padding = audio.endsWith("==") ? 2 : audio.endsWith("=") ? 1 : 0;
-  return Math.floor(((audio.length - padding) * 3) / 4);
-}
-
-/** Base64 signed 16-bit little-endian mono PCM as samples from -1 to 1. */
-export function decodePcm16(audio: string): Float32Array {
-  const raw = globalThis.atob(audio);
-  const samples = new Float32Array(raw.length >> 1);
-  for (let index = 0; index < samples.length; index++) {
-    const value =
-      raw.charCodeAt(2 * index) | (raw.charCodeAt(2 * index + 1) << 8);
-    samples[index] = (value >= 0x8000 ? value - 0x10000 : value) / 32768;
-  }
-  return samples;
+let line: Promise<unknown> = Promise.resolve();
+/**
+ * Runs `step` once every earlier voiceAudio request has been answered and
+ * handled: the shell may handle requests sent together in any order.
+ */
+function inLine<T>(step: () => Promise<T>): Promise<T> {
+  const turn = line.then(step);
+  line = turn.catch(() => undefined);
+  return turn;
 }
 
 /**
@@ -77,14 +79,16 @@ export function decodePcm16(audio: string): Float32Array {
  * shell's `at` values, Unix time, so that the said log and a pause compare.
  */
 export class ShellVoiceAudio {
-  state: ShellVoiceAudioState = "running";
-  sampleRate = 16000;
+  state: "running" | "closed" = "running";
+  /** Another app or a call has the audio; the shell keeps the voice queued. */
+  interrupted = false;
+  sampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
   frameSamples = 512;
   outputDelayMs = 0;
   inputDelayMs = 0;
   private readonly pieces = new Map<string, Piece>();
   private readonly inputs = new Set<(input: ShellVoiceInput) => void>();
-  private readonly watchers = new Set<(state: ShellVoiceAudioState) => void>();
+  private readonly watchers = new Set<() => void>();
   private readonly detach: (() => void)[];
   private serial = 0;
 
@@ -96,13 +100,11 @@ export class ShellVoiceAudio {
       on("started", (payload) => this.started(payload)),
       on("played", (payload) => this.played(payload)),
       on("route", (payload) => this.routed(payload)),
-      on("interrupted", () => this.become("interrupted")),
-      on("resumed", () => {
-        if (this.state === "interrupted") this.become("running");
-      }),
+      on("interrupted", () => this.interrupt(true)),
+      on("resumed", () => this.interrupt(false)),
       on("closed", (payload) => {
         logger.log("[VOICE] the shell closed its voice audio", payload);
-        this.end();
+        this.end(true);
       }),
     ];
   }
@@ -114,8 +116,7 @@ export class ShellVoiceAudio {
 
   /** Starts the engine; false when the shell would not. */
   async open(start: { bufferMs: number; maxWaitMs: number }): Promise<boolean> {
-    const answer = await this.request("open", {
-      mode: "conversation",
+    const answer = await this.ask("open", {
       startBufferMs: start.bufferMs,
       startMaxWaitMs: start.maxWaitMs,
     });
@@ -133,32 +134,37 @@ export class ShellVoiceAudio {
     return () => this.inputs.delete(listener);
   }
 
-  /** Whether the voice plays and the microphone hears, as it changes. */
-  onStateChange(listener: (state: ShellVoiceAudioState) => void): () => void {
+  /** Hears an interruption, its end, and a close by the shell. */
+  onStateChange(listener: () => void): () => void {
     this.watchers.add(listener);
     return () => this.watchers.delete(listener);
   }
 
   lower(lowered: boolean) {
-    this.send("lower", { lowered });
+    if (this.state === "running") void this.ask("lower", { lowered });
   }
 
-  /** Queues `chunk` for `owner`; false for a chunk that is no PCM. */
-  queue(owner: Owner, chunk: ShellVoiceChunk): boolean {
-    const bytes = pcmBytes(chunk.audio);
-    if (
-      this.state === "closed" ||
-      bytes <= 0 ||
-      bytes % 2 !== 0 ||
-      chunk.sampleRate < 8000 ||
-      chunk.sampleRate > 192000
-    )
-      return false;
+  /** What is queued plays now, without waiting for the start buffer. */
+  flush() {
+    if (this.state === "running") void this.ask("flush");
+  }
+
+  /** Queues `chunk` for `owner`; false for a piece the shell would refuse. */
+  queue(owner: Owner, chunk: PcmChunk): boolean {
+    const bytes = pcm16Bytes(chunk.audio);
+    if (this.state === "closed" || bytes > MAX_PIECE_BYTES) return false;
+    const minSamples = Math.ceil(chunk.sampleRate / 100);
     const piece: Piece = {
       id: "",
       chunk,
+      audio:
+        bytes / 2 < minSamples
+          ? padPcm16(chunk.audio, minSamples)
+          : chunk.audio,
       seconds: bytes / 2 / chunk.sampleRate,
       owner,
+      pause: owner.pauses,
+      sent: false,
       logged: false,
     };
     owner.pieces.push(piece);
@@ -167,66 +173,104 @@ export class ShellVoiceAudio {
   }
 
   /**
-   * Silences what `owner` queued and returns it, the piece playing first:
-   * what the page knows at once. The shell's answer then takes out of that
-   * list what it heard to its end meanwhile, and plays again what it
-   * silenced of other owners.
+   * Silences what `owner` queued and returns it, the piece playing first.
+   * After a pause, what the shell answers it heard to its end meanwhile is
+   * not played again when it comes back; what the stop silenced of other
+   * owners plays again before anything queued after the stop.
    */
-  silence(owner: Owner): ShellVoiceChunk[] {
+  silence(owner: Owner, pausing: boolean): PcmChunk[] {
     const stopped = owner.pieces;
     if (stopped.length === 0) return [];
     owner.pieces = [];
+    owner.pauses += 1;
+    owner.heard = null;
+    const pause = owner.pauses;
     for (const piece of stopped) this.pieces.delete(piece.id);
-    const unplayed = stopped.map((piece) => piece.chunk);
-    void this.request("stop").then((answer) => {
+    void this.ask("stop", undefined, (answer) => {
       const ids = record(answer).unplayed;
       if (!Array.isArray(ids) || this.state === "closed") return;
-      const left = new Set(ids);
-      for (const piece of stopped) {
-        if (left.has(piece.id)) continue;
-        const at = unplayed.indexOf(piece.chunk);
-        if (at >= 0) unplayed.splice(at, 1);
+      const unplayed = new Set<unknown>(ids);
+      if (pausing && owner.pauses === pause) {
+        const heard: string[] = [];
+        for (const piece of stopped) {
+          if (!piece.sent || unplayed.has(piece.id)) break;
+          heard.push(piece.chunk.audio);
+        }
+        if (heard.length > 0) owner.heard = { pause, audio: heard };
       }
-      for (const id of ids) {
-        const other = typeof id === "string" ? this.pieces.get(id) : undefined;
-        if (!other) continue;
-        this.pieces.delete(id as string);
-        this.play(other);
+      const again = ids.flatMap((id) => {
+        const piece = typeof id === "string" ? this.pieces.get(id) : undefined;
+        return piece ? [piece] : [];
+      });
+      for (const piece of again) piece.logged = false;
+      const later = [...this.pieces.values()].filter(
+        (piece) => !piece.sent && !again.includes(piece),
+      );
+      for (const piece of [...again, ...later]) {
+        this.pieces.delete(piece.id);
+        this.play(piece);
       }
     });
-    return unplayed;
+    return stopped.map((piece) => piece.chunk);
   }
 
   /**
-   * Gives the audio back to the system. The page's own close reports no
-   * loss: whoever closes it has stopped listening.
+   * Gives the audio back to the system; `tell` false for an engine that
+   * never opened. The page's own close reports no loss: whoever closes it
+   * has stopped listening.
    */
-  close() {
+  close(tell = true) {
+    if (tell) void this.ask("close");
     if (this.state === "closed") return;
-    void this.request("close");
     this.watchers.clear();
-    this.end();
-  }
-
-  /** Forgets a session that never opened. */
-  dispose() {
-    this.watchers.clear();
-    this.end();
+    this.end(false);
   }
 
   private play(piece: Piece) {
     this.serial += 1;
     piece.id = `v${this.serial}`;
+    piece.sent = false;
     this.pieces.set(piece.id, piece);
     const { id } = piece;
-    void this.request("play", {
-      id,
-      audio: piece.chunk.audio,
-      sampleRate: piece.chunk.sampleRate,
-    }).then((answer) => {
-      if (answer !== undefined || this.pieces.get(id) !== piece) return;
+    void inLine(async () => {
+      if (this.pieces.get(id) !== piece || this.heardBefore(piece)) return;
+      piece.sent = true;
+      const answer = await this.request("play", {
+        id,
+        audio: piece.audio,
+        sampleRate: piece.chunk.sampleRate,
+      });
       // Refused: nothing of it will be heard.
-      this.done(piece);
+      if (answer === undefined && this.pieces.get(id) === piece)
+        this.done(piece);
+    });
+  }
+
+  /** The piece was heard to its end before a pause, and comes again. */
+  private heardBefore(piece: Piece): boolean {
+    const { owner } = piece;
+    const heard = owner.heard;
+    if (heard?.pause !== piece.pause) return false;
+    if (heard.audio[0] !== piece.chunk.audio) {
+      owner.heard = null;
+      return false;
+    }
+    heard.audio.shift();
+    if (heard.audio.length === 0) owner.heard = null;
+    this.done(piece);
+    return true;
+  }
+
+  /** In line with every other request; `handle` sees the answer first. */
+  private ask(
+    method: string,
+    params?: unknown,
+    handle?: (answer: unknown) => void,
+  ): Promise<unknown> {
+    return inLine(async () => {
+      const answer = await this.request(method, params);
+      handle?.(answer);
+      return answer;
     });
   }
 
@@ -246,10 +290,6 @@ export class ShellVoiceAudio {
     }
   }
 
-  private send(method: string, params?: unknown) {
-    if (this.state !== "closed") void this.request(method, params);
-  }
-
   private done(piece: Piece) {
     this.pieces.delete(piece.id);
     const { owner } = piece;
@@ -259,6 +299,7 @@ export class ShellVoiceAudio {
     if (owner.pieces.length === 0) owner.onDrained();
   }
 
+  /** Once per piece: the shell starts a piece again after an interruption. */
   private log(piece: Piece, startsAt: number) {
     if (piece.logged) return;
     piece.logged = true;
@@ -304,83 +345,121 @@ export class ShellVoiceAudio {
     this.inputDelayMs = finite(route.inputDelayMs) ?? this.inputDelayMs;
   }
 
-  private become(state: ShellVoiceAudioState) {
-    if (this.state === state || this.state === "closed") return;
-    this.state = state;
-    for (const watcher of [...this.watchers]) watcher(state);
+  private interrupt(interrupted: boolean) {
+    if (this.state === "closed" || this.interrupted === interrupted) return;
+    this.interrupted = interrupted;
+    for (const watcher of [...this.watchers]) watcher();
   }
 
   /** Nothing of it plays or listens any more: every voice counts as ended. */
-  private end() {
+  private end(byShell: boolean) {
     if (this.state === "closed") return;
-    if (current === this) current = null;
+    this.state = "closed";
+    if (current === this) {
+      current = null;
+      lost = byShell;
+    }
     for (const stop of this.detach) stop();
     const owners = new Set([...this.pieces.values()].map((p) => p.owner));
     this.pieces.clear();
     this.inputs.clear();
-    this.become("closed");
+    for (const watcher of [...this.watchers]) watcher();
     this.watchers.clear();
     for (const owner of owners) {
       owner.pieces = [];
       owner.onDrained();
     }
+    changed();
   }
 }
 
 let current: ShellVoiceAudio | null = null;
-let opening: Promise<ShellVoiceAudio | null> | null = null;
-/** Counts opens and closes, so that an open closed meanwhile is let go. */
-let generation = 0;
+interface Opening {
+  promise: Promise<ShellVoiceAudio | null>;
+  /** The conversation ended while it opened. */
+  letGo: boolean;
+}
+let opening: Opening | null = null;
+/** The shell closed the conversation's session: it expects a new open. */
+let lost = false;
+const changes = new Set<() => void>();
+const changed = () => {
+  for (const listener of [...changes]) listener();
+};
+
+registerWorkInProgress(() => current !== null);
 
 /** The session that has the conversation's audio, while it is open. */
 export function shellVoiceAudio(): ShellVoiceAudio | null {
   return current;
 }
 
-/** The open session; while one is being opened, a promise of it. */
+/**
+ * The open session; while one is being opened, a promise of it. A closed
+ * session from it means the conversation ended meanwhile, not that the page
+ * should play and record itself.
+ */
 export function settledShellVoiceAudio():
   | ShellVoiceAudio
   | null
   | Promise<ShellVoiceAudio | null> {
-  return opening ?? current;
+  return opening?.promise ?? current;
+}
+
+/** Whether the shell closed the conversation's session since it opened. */
+export function shellVoiceAudioLost(): boolean {
+  return lost;
+}
+
+/** Hears a session open, fail to open, or close. Returns the unsubscribe. */
+export function onShellVoiceAudioChange(listener: () => void): () => void {
+  changes.add(listener);
+  return () => changes.delete(listener);
 }
 
 /**
  * Opens the app shell's voice audio for a conversation, or returns the one
- * open. Null where the shell does not offer it or it would not start: the
- * page then plays and records as in a browser.
+ * open or opening. Null where the shell does not offer it or it would not
+ * start: the page then plays and records as in a browser.
  */
 export function openShellVoiceAudio(start: {
   bufferMs: number;
   maxWaitMs: number;
 }): Promise<ShellVoiceAudio | null> {
   if (current) return Promise.resolve(current);
-  if (opening) return opening;
+  if (opening) {
+    opening.letGo = false;
+    return opening.promise;
+  }
   const shell = hostShellWithCapability(CAPABILITY, 1);
   if (!shell) return Promise.resolve(null);
   const voice = new ShellVoiceAudio(shell);
-  const mine = ++generation;
-  opening = voice.open(start).then((opened) => {
-    const wanted = generation === mine;
-    if (wanted) opening = null;
-    if (!opened || voice.state === "closed") {
-      voice.dispose();
-      return null;
-    }
-    if (!wanted) {
-      voice.close();
-      return null;
-    }
-    current = voice;
-    return voice;
-  });
-  return opening;
+  const attempt: Opening = {
+    letGo: false,
+    promise: voice.open(start).then((opened) => {
+      opening = null;
+      lost = false;
+      let result: ShellVoiceAudio | null = voice;
+      if (!opened || voice.state === "closed") {
+        voice.close(opened);
+        result = null;
+      } else if (attempt.letGo) {
+        voice.close();
+      } else {
+        current = voice;
+      }
+      changed();
+      return result;
+    }),
+  };
+  opening = attempt;
+  return attempt.promise;
 }
 
 /** Ends the conversation's session, also one still being opened. */
 export function closeShellVoiceAudio() {
-  generation += 1;
-  opening = null;
+  lost = false;
+  if (opening) opening.letGo = true;
   current?.close();
 }
 
@@ -389,36 +468,46 @@ export function closeShellVoiceAudio() {
  * stop silences only when it has any in the shell.
  */
 export interface ShellVoiceQueue {
-  enqueue(voice: ShellVoiceAudio, chunk: ShellVoiceChunk): boolean;
+  enqueue(voice: ShellVoiceAudio, chunk: PcmChunk): boolean;
+  flush(): void;
   /** What had not been heard to its end, the piece playing first. */
-  pause(): ShellVoiceChunk[];
+  pause(): PcmChunk[];
   stop(): void;
   readonly active: boolean;
 }
 
 export function createShellVoiceQueue(
   onDrained: () => void,
-  onScheduled?: Owner["onScheduled"],
+  onScheduled?: OnScheduled,
 ): ShellVoiceQueue {
-  const owner: Owner = { pieces: [], onDrained, onScheduled };
+  const owner: Owner = {
+    pieces: [],
+    onDrained,
+    onScheduled,
+    pauses: 0,
+    heard: null,
+  };
   let session: ShellVoiceAudio | null = null;
-  const pause = () => {
+  const silence = (pausing: boolean) => {
     const playing = session;
     session = null;
-    return playing ? playing.silence(owner) : [];
+    return playing ? playing.silence(owner, pausing) : [];
   };
   return {
     get active() {
       return owner.pieces.length > 0;
     },
     enqueue(voice, chunk) {
-      if (session !== voice) pause();
+      if (session !== voice) silence(false);
       session = voice;
       return voice.queue(owner, chunk);
     },
-    pause,
+    flush() {
+      if (owner.pieces.length > 0) session?.flush();
+    },
+    pause: () => silence(true),
     stop() {
-      pause();
+      silence(false);
     },
   };
 }

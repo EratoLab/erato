@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 
 import { MUTE_GRACE_MS } from "./audioTuning";
-
-import type { ShellVoiceAudio } from "./shellVoiceAudio";
+import { ShellVoiceAudio } from "./shellVoiceAudio";
 
 /** A timer this much later than asked for was not run by a live page. */
 const FROZEN_PAGE_SLACK_MS = 2_000;
@@ -33,6 +32,9 @@ export type TrackLossReason = "ended" | "muted" | "hidden";
  *     `hidden` at once, whichever of the two came first: the page is not
  *     shown, so nobody is talking to it, and the timers of a locked phone
  *     may only run again after unlocking, too late to tell a lock apart.
+ *   - The app shell's voice audio is watched the same way: a close by the
+ *     shell is `ended` at once, an interruption (a call, another app) is a
+ *     mute. It keeps listening while the page is hidden.
  *
  * No re-acquire: re-running getUserMedia can return a different sample rate
  * that collides with the rate-coupled `new AudioContext({ sampleRate })`, so
@@ -49,15 +51,12 @@ export function useMediaStreamTrackWatchdog({
 }: {
   onTrackLost: (reason: TrackLossReason) => void;
 }): {
-  watchTrack: (track: MediaStreamTrack) => void;
-  /**
-   * The same for the app shell's voice audio: closed is lost at once, an
-   * interruption (a call, Siri) once it outlives the mute grace.
-   */
-  watchShellVoice: (voice: ShellVoiceAudio) => void;
+  watchTrack: (track: MediaStreamTrack | ShellVoiceAudio) => void;
   unwatchTrack: () => void;
 } {
-  const watchedTrackRef = useRef<MediaStreamTrack | null>(null);
+  const watchedTrackRef = useRef<MediaStreamTrack | ShellVoiceAudio | null>(
+    null,
+  );
   // Detaches the listeners from the currently-watched track. Held in a ref
   // (rather than re-derived) so watchTrack/unwatchTrack stay stable and the
   // closed-over handlers are released exactly once.
@@ -103,11 +102,28 @@ export function useMediaStreamTrackWatchdog({
   );
 
   const watchTrack = useCallback(
-    (track: MediaStreamTrack) => {
+    (track: MediaStreamTrack | ShellVoiceAudio) => {
       if (watchedTrackRef.current === track) {
         return;
       }
       unwatchTrack();
+      if (track instanceof ShellVoiceAudio) {
+        const follow = () => {
+          clearPendingLossTimer();
+          if (track.state === "closed") reportLost("ended");
+          else if (track.interrupted)
+            pendingLossTimerRef.current = window.setTimeout(() => {
+              pendingLossTimerRef.current = null;
+              if (track.interrupted) reportLost("muted");
+            }, MUTE_GRACE_MS);
+        };
+        detachRef.current = track.onStateChange(follow);
+        watchedTrackRef.current = track;
+        // As for a track: never back into the start that is still running.
+        if (track.state === "closed" || track.interrupted)
+          pendingLossTimerRef.current = window.setTimeout(follow, 0);
+        return;
+      }
 
       const handleEnded = () => reportLost("ended");
       const reportIfHidden = () => {
@@ -184,34 +200,11 @@ export function useMediaStreamTrackWatchdog({
     [clearPendingLossTimer, reportLost, unwatchTrack],
   );
 
-  const watchShellVoice = useCallback(
-    (voice: ShellVoiceAudio) => {
-      unwatchTrack();
-      const follow = () => {
-        clearPendingLossTimer();
-        if (voice.state === "closed") {
-          reportLost("ended");
-          return;
-        }
-        if (voice.state !== "interrupted") return;
-        pendingLossTimerRef.current = window.setTimeout(() => {
-          pendingLossTimerRef.current = null;
-          if (voice.state === "interrupted") reportLost("muted");
-        }, MUTE_GRACE_MS);
-      };
-      detachRef.current = voice.onStateChange(follow);
-      // As for a track: never back into the start that is still running.
-      if (voice.state !== "running")
-        pendingLossTimerRef.current = window.setTimeout(follow, 0);
-    },
-    [clearPendingLossTimer, reportLost, unwatchTrack],
-  );
-
   useEffect(() => {
     return () => {
       unwatchTrack();
     };
   }, [unwatchTrack]);
 
-  return { watchTrack, watchShellVoice, unwatchTrack };
+  return { watchTrack, unwatchTrack };
 }
