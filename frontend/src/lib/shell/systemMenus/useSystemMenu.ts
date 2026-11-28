@@ -1,13 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { hostShellWithCapability, shellAnchor } from "@/lib/hostShell";
+import { observePopoverViewport } from "@/lib/popoverViewport";
 import {
+  requestSystemMenus,
   SYSTEM_MENUS_CAPABILITY,
   SYSTEM_MENUS_EVENT,
   SYSTEM_MENUS_METHOD,
   SYSTEM_MENUS_VERSION,
 } from "@/lib/shell/contract/systemMenus";
 import {
+  CONFIRM_ACTION_ID,
   confirmParams,
   findMenuEntry,
   menuIcons,
@@ -48,9 +51,15 @@ export interface NativeMenu {
   attachTo(trigger: Element | null): void;
 }
 
-const CONFIRM_ACTION_ID = "confirm";
 /** A first menu waits this long at most for its icons to be drawn. */
 const ICON_WAIT_MS = 400;
+/**
+ * How long a shown menu may take to appear: the icons' wait, then the app's
+ * own second before it answers that nothing opened. A tap later than that,
+ * with the menu's answer still on its way back, is taken as a menu that
+ * never came; the app does not say when its menu appeared.
+ */
+const SHOW_GRACE_MS = 1500;
 /**
  * How often an attached trigger's place is checked: a transform (the phone
  * drawer pushing the page aside) moves it without any event to hear.
@@ -127,6 +136,9 @@ class SystemMenuSession {
   private options: SystemMenuOptions;
   /** The id of the shown menu while it is open. */
   private shownId: string | null = null;
+  /** Counts shown menus; the answer to one the page gave up on is dropped. */
+  private shows = 0;
+  private shownAt = 0;
   private trigger: Element | null = null;
   private attachment: "none" | "pending" | "attached" = "none";
   /** Ends an attach still on its way when anything changes first. */
@@ -214,8 +226,16 @@ class SystemMenuSession {
 
   private open(trigger: Element, web: () => void): boolean {
     if (!isDrawable(this.options.entries)) return false;
-    // A second tap while the first menu is coming changes nothing.
-    if (this.shownId !== null) return true;
+    if (this.shownId !== null) {
+      // A second tap while the menu is coming changes nothing. The page is
+      // not tapped while the app's menu is up, so a tap after that means it
+      // never appeared: the web menu takes this one.
+      if (Date.now() - this.shownAt < SHOW_GRACE_MS) return true;
+      this.shows += 1;
+      this.shownId = null;
+      this.stopListeningUnlessUsed();
+      return false;
+    }
     // An attached menu's own id stays with its button; this one is the
     // shown menu a key or VoiceOver opened from the same trigger.
     const id =
@@ -223,22 +243,31 @@ class SystemMenuSession {
         ? // eslint-disable-next-line lingui/no-unlocalized-strings -- menu id
           `${this.options.id}:shown`
         : this.options.id;
+    const show = ++this.shows;
     this.shownId = id;
+    this.shownAt = Date.now();
     this.listen();
     void (async () => {
-      await this.iconsDrawn();
-      const items = this.items();
       let answer: unknown;
       try {
-        answer = await this.shell.request(SYSTEM_MENUS_METHOD.show, {
-          id,
-          anchor: shellAnchor(trigger),
-          ...(this.options.title ? { title: this.options.title } : {}),
-          items,
-        });
+        await this.iconsDrawn();
+        if (show !== this.shows) return;
+        const items = this.items();
+        this.sentItems = JSON.stringify(items);
+        answer = await requestSystemMenus(
+          this.shell,
+          SYSTEM_MENUS_METHOD.show,
+          {
+            id,
+            anchor: shellAnchor(trigger),
+            ...(this.options.title ? { title: this.options.title } : {}),
+            items,
+          },
+        );
       } catch {
         answer = undefined;
       }
+      if (show !== this.shows) return;
       this.shownId = null;
       this.stopListeningUnlessUsed();
       if (field(answer, "shown") !== true) {
@@ -258,10 +287,14 @@ class SystemMenuSession {
     if (entry.confirm) {
       let answer: unknown;
       try {
-        answer = await this.shell.request(SYSTEM_MENUS_METHOD.confirm, {
-          ...confirmParams(entry.confirm, CONFIRM_ACTION_ID),
-          ...(trigger ? { anchor: shellAnchor(trigger) } : {}),
-        });
+        answer = await requestSystemMenus(
+          this.shell,
+          SYSTEM_MENUS_METHOD.confirm,
+          confirmParams(
+            entry.confirm,
+            trigger ? shellAnchor(trigger) : undefined,
+          ),
+        );
       } catch {
         // Not asked is not agreed: the person can pick it again.
         return;
@@ -313,11 +346,15 @@ class SystemMenuSession {
       const anchor = shellAnchor(trigger);
       let answer: unknown;
       try {
-        answer = await this.shell.request(SYSTEM_MENUS_METHOD.attach, {
-          id: this.options.id,
-          anchor,
-          items,
-        });
+        answer = await requestSystemMenus(
+          this.shell,
+          SYSTEM_MENUS_METHOD.attach,
+          {
+            id: this.options.id,
+            anchor,
+            items,
+          },
+        );
       } catch {
         answer = undefined;
       }
@@ -332,6 +369,7 @@ class SystemMenuSession {
         if (field(answer, "unsupported") !== undefined) {
           this.refusedItems = JSON.stringify(items);
         }
+        this.stopListeningUnlessUsed();
         return;
       }
       this.attachment = "attached";
@@ -343,6 +381,8 @@ class SystemMenuSession {
   }
 
   private detach() {
+    // A shown menu's entries were sent too; only an attachment ends here.
+    if (this.attachment === "none") return;
     this.generation += 1;
     const wasAttached = this.attachment === "attached";
     this.attachment = "none";
@@ -352,9 +392,9 @@ class SystemMenuSession {
   }
 
   private requestDetach() {
-    void this.shell
-      .request(SYSTEM_MENUS_METHOD.detach, { id: this.options.id })
-      .catch(() => {});
+    void requestSystemMenus(this.shell, SYSTEM_MENUS_METHOD.detach, {
+      id: this.options.id,
+    }).catch(() => {});
   }
 
   /** New entries for an open or attached menu, when they changed. */
@@ -366,9 +406,10 @@ class SystemMenuSession {
     const sent = JSON.stringify(items);
     if (sent === this.sentItems) return;
     this.sentItems = sent;
-    void this.shell
-      .request(SYSTEM_MENUS_METHOD.update, { id, items })
-      .catch(() => {});
+    void requestSystemMenus(this.shell, SYSTEM_MENUS_METHOD.update, {
+      id,
+      items,
+    }).catch(() => {});
   }
 
   /**
@@ -387,18 +428,16 @@ class SystemMenuSession {
         const sent = JSON.stringify(anchor);
         if (sent === this.sentAnchor) return;
         this.sentAnchor = sent;
-        void this.shell
-          .request(SYSTEM_MENUS_METHOD.update, { id: this.options.id, anchor })
-          .catch(() => {});
+        void requestSystemMenus(this.shell, SYSTEM_MENUS_METHOD.update, {
+          id: this.options.id,
+          anchor,
+        }).catch(() => {});
       });
     };
     const resize = new ResizeObserver(check);
     resize.observe(trigger);
     resize.observe(document.documentElement);
-    const viewport = window.visualViewport;
-    viewport?.addEventListener("resize", check);
-    viewport?.addEventListener("scroll", check);
-    window.addEventListener("scroll", check, true);
+    const stopViewport = observePopoverViewport(check);
     document.addEventListener("transitionend", check, true);
     const interval = window.setInterval(check, PLACE_CHECK_MS);
     // A page restored from the back-forward cache lost its attachment.
@@ -412,9 +451,7 @@ class SystemMenuSession {
       window.cancelAnimationFrame(frame);
       window.clearInterval(interval);
       resize.disconnect();
-      viewport?.removeEventListener("resize", check);
-      viewport?.removeEventListener("scroll", check);
-      window.removeEventListener("scroll", check, true);
+      stopViewport();
       document.removeEventListener("transitionend", check, true);
       window.removeEventListener("pageshow", restored);
     };

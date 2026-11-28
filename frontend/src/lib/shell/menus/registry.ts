@@ -14,7 +14,7 @@ export type ShellMenuName =
   | "filterMenu"
   | "accountMenu";
 
-export interface ShellMenu {
+interface ShellMenu {
   /**
    * `attach` for a button that stays put, so the app owns its touch;
    * `show` for a tap the page received on something that moves.
@@ -49,7 +49,7 @@ export const SHELL_MENUS: Record<ShellMenuName, ShellMenu> = {
   },
 };
 
-export type WebMenuReason =
+type WebMenuReason =
   /** A system menu cannot draw it (free content, a field that keeps focus). */
   | { stays: "web"; why: string }
   /** Entries only, so a candidate; not described yet. */

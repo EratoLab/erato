@@ -3,30 +3,24 @@ import { useMemo } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
 import { useChatFileSources } from "@/hooks/files/useChatFileSources";
-import { compactChatLabel } from "@/lib/shell/menus/addMenuTexts";
 import {
   ADD_MENU_ID,
+  addMenuEntries,
   describeAddMenu,
   toolChoice,
+  uploadChoice,
 } from "@/lib/shell/menus/describeAddMenu";
 import { modelChoice } from "@/lib/shell/menus/describeModelMenu";
+import { addMenuItems } from "@/lib/shell/menus/web/addMenuItems";
 import { useSystemMenu } from "@/lib/shell/systemMenus/useSystemMenu";
 
-import { CloudFilePickerModal } from "../FileUpload/CloudFilePickerModal";
-import { ResolvedIcon } from "../icons";
 import { ChatInputAddMenu } from "./ChatInputAddMenu";
-import { getFacetDisplayName } from "./FacetSelector";
 import { ModelSelectorOptionContent } from "./ModelSelector";
-import { buildAssistantMentionSection } from "./assistantMentionSection";
-import { buildMcpToolsSection } from "./mcpToolsSection";
+import { CloudFilePickerModal } from "../FileUpload/CloudFilePickerModal";
 
-import type { AddMenuSection, AddMenuToolItem } from "./ChatInputAddMenu";
 import type { UseChatFileSourcesParams } from "@/hooks/files/useChatFileSources";
 import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type {
-  AddMenuFileSource,
-  AddMenuState,
-} from "@/lib/shell/menus/describeAddMenu";
+import type { AddMenuState } from "@/lib/shell/menus/describeAddMenu";
 
 /** The rows besides uploads and tools, as data; absent ones are not offered. */
 export type ChatInputAddMenuData = Pick<
@@ -76,7 +70,7 @@ export interface ChatInputAddControlsProps {
 /**
  * Mobile composer control: a single "+" menu that merges file sources and
  * tool toggles, replacing the separate upload button + Tools dropdown that the
- * desktop layout uses. The menu's state is one description, drawn by
+ * desktop layout uses. The menu is one description, drawn by
  * ChatInputAddMenu on the web and by the host app where it offers system
  * menus; this container wires upload behavior and what each row does.
  */
@@ -94,7 +88,7 @@ export function ChatInputAddControls({
 }: ChatInputAddControlsProps) {
   const {
     isProcessing,
-    fileSourceItems,
+    fileSources,
     onSelectDisk,
     onSelectCloud,
     onSelectFiles,
@@ -116,74 +110,72 @@ export function ChatInputAddControls({
     [selectedFacetIds],
   );
 
-  const toolsLocked = menu.toolsLocked !== undefined;
-  const tools: AddMenuToolItem[] = facets.map((facet) => ({
-    id: facet.id,
-    label: getFacetDisplayName(facet),
-    icon: <ResolvedIcon iconId={facet.icon} className="size-4" />,
-    checked: selectedFacetIdSet.has(facet.id),
-    onToggle: () => onToggleFacet(facet.id),
-    disabled: disabled || toolsLocked,
-    description: menu.toolsLocked?.reason,
-  }));
-
-  const extraSections = [
-    menu.connectors &&
-      buildMcpToolsSection({
-        ...menu.connectors,
-        onOpen: actions.openConnectors,
-        disabled,
-      }),
-    menu.assistants &&
-      buildAssistantMentionSection({
-        ...menu.assistants,
-        onOpen: actions.openAssistants,
-        disabled,
-      }),
-    menu.compaction && compactionSection(menu.compaction, actions.compact),
-    menu.model && modelSection(menu.model, actions.selectModel),
-  ].filter((section): section is AddMenuSection => Boolean(section));
+  const state: AddMenuState = {
+    ...menu,
+    fileSources: canUpload ? fileSources : [],
+    uploadLimitReached: uploadDisabled,
+    facets,
+    selectedFacetIds,
+    hostContent: ExtraContent != null,
+  };
+  const choose = (itemId: string) => {
+    const source = uploadChoice(itemId);
+    if (source === "computer") return onSelectDisk();
+    if (source) return onSelectCloud(source);
+    switch (itemId) {
+      case ADD_MENU_ID.connectors:
+        return actions.openConnectors();
+      case ADD_MENU_ID.assistants:
+        return actions.openAssistants();
+      case ADD_MENU_ID.compact:
+        return actions.compact();
+    }
+    const chatProviderId = modelChoice(itemId);
+    if (chatProviderId) actions.selectModel(chatProviderId);
+  };
+  const toggle = (itemId: string, on: boolean) => {
+    const facetId = toolChoice(itemId);
+    if (facetId && selectedFacetIdSet.has(facetId) !== on) {
+      onToggleFacet(facetId);
+    }
+  };
+  const {
+    fileSources: sourceRows,
+    tools,
+    extraSections,
+  } = addMenuItems(addMenuEntries(state), {
+    choose,
+    toggle,
+    // A model row draws the model as the composer's picker does.
+    draw: (entry) => {
+      const chatProviderId = modelChoice(entry.id);
+      const model = menu.model?.models.find(
+        (candidate) => candidate.chat_provider_id === chatProviderId,
+      );
+      return model ? (
+        <ModelSelectorOptionContent model={model} compact />
+      ) : undefined;
+    },
+    // The rows' own ids, which the menu's test ids carry; a tool's is the
+    // facet's, as its chip's is.
+    webId: (entry) => {
+      const chatProviderId = modelChoice(entry.id);
+      return (
+        toolChoice(entry.id) ??
+        uploadChoice(entry.id) ??
+        (chatProviderId ? `model-${chatProviderId}` : entry.id)
+      );
+    },
+  });
 
   // While the composer waits, its "+" does nothing, as the web one is off.
   const waiting = disabled || isProcessing;
   const nativeMenu = useSystemMenu({
     id: "chat-input-add",
     mode: "attach",
-    entries: waiting
-      ? null
-      : describeAddMenu({
-          ...menu,
-          busy: false,
-          fileSources: canUpload
-            ? fileSourceItems.map((item) => item.id as AddMenuFileSource)
-            : [],
-          uploadLimitReached: uploadDisabled,
-          facets,
-          selectedFacetIds,
-          hostContent: ExtraContent != null,
-        }),
-    onChoose: (itemId) => {
-      switch (itemId) {
-        case ADD_MENU_ID.uploadComputer:
-          return onSelectDisk();
-        case ADD_MENU_ID.uploadSharepoint:
-          return onSelectCloud("sharepoint");
-        case ADD_MENU_ID.connectors:
-          return actions.openConnectors();
-        case ADD_MENU_ID.assistants:
-          return actions.openAssistants();
-        case ADD_MENU_ID.compact:
-          return actions.compact();
-      }
-      const chatProviderId = modelChoice(itemId);
-      if (chatProviderId) actions.selectModel(chatProviderId);
-    },
-    onToggle: (itemId, on) => {
-      const facetId = toolChoice(itemId);
-      if (facetId && selectedFacetIdSet.has(facetId) !== on) {
-        onToggleFacet(facetId);
-      }
-    },
+    entries: waiting ? null : describeAddMenu(state),
+    onChoose: choose,
+    onToggle: toggle,
   });
 
   return (
@@ -201,7 +193,7 @@ export function ChatInputAddControls({
       )}
 
       <ChatInputAddMenu
-        fileSources={canUpload ? fileSourceItems : []}
+        fileSources={sourceRows}
         tools={tools}
         extraSections={extraSections.length > 0 ? extraSections : undefined}
         extraContent={
@@ -228,51 +220,4 @@ export function ChatInputAddControls({
       )}
     </>
   );
-}
-
-function compactionSection(
-  compaction: NonNullable<AddMenuState["compaction"]>,
-  compact: () => void,
-): AddMenuSection {
-  return {
-    id: "compaction",
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- AddMenuSection placement enum
-    placement: "belowTools",
-    items: [
-      {
-        id: ADD_MENU_ID.compact,
-        label: compactChatLabel(),
-        description: compaction.description,
-        onSelect: compact,
-        disabled: compaction.pending,
-      },
-    ],
-  };
-}
-
-function modelSection(
-  { models, selectedId, ready }: NonNullable<AddMenuState["model"]>,
-  selectModel: (chatProviderId: string) => void,
-): AddMenuSection {
-  const selected = models.find(
-    (model) => model.chat_provider_id === selectedId,
-  );
-  return {
-    id: "model",
-    header: t({ id: "chatInput.addMenu.modelHeader", message: "Model" }),
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- AddMenuSection placement enum
-    placement: "belowTools",
-    // A list of models outgrows the menu, so it opens as its own page; a
-    // single model stays one row, there is nothing to choose between.
-    submenu:
-      models.length > 1 ? { summary: selected?.model_display_name } : undefined,
-    items: models.map((model) => ({
-      id: `model-${model.chat_provider_id}`,
-      label: <ModelSelectorOptionContent model={model} compact />,
-      checked: model.chat_provider_id === selectedId,
-      exclusive: true,
-      disabled: !ready,
-      onToggle: () => selectModel(model.chat_provider_id),
-    })),
-  };
 }

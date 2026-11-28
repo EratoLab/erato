@@ -1,6 +1,6 @@
-import Ajv2020 from "ajv/dist/2020";
 import { describe, expect, it } from "vitest";
 
+import { schemaChecks } from "@/lib/shell/catalogue/schemaChecks";
 import schema from "@/lib/shell/contract/systemMenus.v1.schema.json";
 
 import {
@@ -10,27 +10,12 @@ import {
 import { buildSystemMenusCatalogue } from "./catalogue";
 import { menuRuleViolations } from "./menuRules";
 import { SHELL_MENUS, WEB_MENUS } from "./registry";
-import { schemaFeatures, usedFeatures } from "./schemaCoverage";
 
 import type { ShellMenuItem } from "@/lib/shell/contract/systemMenus";
 
-// `if` blocks name properties their parent declares.
-const ajv = new Ajv2020({
-  allErrors: true,
-  strict: true,
-  strictRequired: false,
-});
-ajv.addSchema(schema);
-const validateDocument = ajv.getSchema(schema.$id);
-if (!validateDocument) throw new Error("schema did not compile");
-
-const matches = (pointer: string, value: unknown) => {
-  const validate = ajv.getSchema(`${schema.$id}${pointer}`);
-  if (!validate) throw new Error(`no schema at ${pointer}`);
-  return validate(value) === true;
-};
-
+const checks = schemaChecks(schema);
 const catalogue = buildSystemMenusCatalogue();
+const { menus } = catalogue.index;
 
 const itemsOf = (document: unknown): ShellMenuItem[] | undefined => {
   const params = (document as { params?: { items?: ShellMenuItem[] } }).params;
@@ -41,9 +26,7 @@ describe("the systemMenus catalogue", () => {
   it.each(catalogue.documents.map(({ name, document }) => [name, document]))(
     "%s fits the schema",
     (_name, document) => {
-      const valid = validateDocument(document);
-      expect(validateDocument.errors ?? []).toEqual([]);
-      expect(valid).toBe(true);
+      expect(checks.errors(document)).toEqual([]);
     },
   );
 
@@ -56,20 +39,13 @@ describe("the systemMenus catalogue", () => {
   });
 
   it("uses every property, value and alternative of the schema", () => {
-    const used = new Set<string>();
-    for (const { document } of catalogue.documents) {
-      for (const feature of usedFeatures(schema, document, matches))
-        used.add(feature);
-    }
-    const unused = [...schemaFeatures(schema)].filter((f) => !used.has(f));
-    expect(unused).toEqual([]);
+    const documents = catalogue.documents.map(({ document }) => document);
+    expect(checks.unused(documents)).toEqual([]);
   });
 
   it("describes every fixture of every registered menu, or keeps it web", () => {
-    expect(Object.keys(catalogue.menus).sort()).toEqual(
-      Object.keys(SHELL_MENUS).sort(),
-    );
-    for (const [menu, { fixtures }] of Object.entries(catalogue.menus)) {
+    expect(Object.keys(menus).sort()).toEqual(Object.keys(SHELL_MENUS).sort());
+    for (const [menu, { fixtures }] of Object.entries(menus)) {
       expect(Object.keys(fixtures).length, menu).toBeGreaterThan(0);
       for (const name of Object.values(fixtures)) {
         if (name === null) continue;
@@ -77,7 +53,7 @@ describe("the systemMenus catalogue", () => {
         expect(itemsOf(document?.document)?.length, name).toBeGreaterThan(0);
       }
     }
-    expect(catalogue.menus.addMenu.fixtures.hostContent).toBeNull();
+    expect(menus.addMenu.fixtures.hostContent).toBeNull();
   });
 
   it("names each document once", () => {
@@ -180,6 +156,6 @@ describe("the systemMenus schema", () => {
     ],
     ["an empty menu", []],
   ])("refuses %s", (_case, items) => {
-    expect(validateDocument(show(items))).toBe(false);
+    expect(checks.errors(show(items))).not.toEqual([]);
   });
 });

@@ -10,7 +10,6 @@
  * in their own tree — the hidden dropzone input and the cloud picker modal —
  * using the props this hook returns.
  */
-import { Cloud, Computer } from "iconoir-react";
 import {
   useCallback,
   useEffect,
@@ -32,7 +31,6 @@ import {
   useCreateChat,
   useLinkFile,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { uploadSourceLabel } from "@/lib/shell/menus/addMenuTexts";
 import {
   useCloudProvidersFeature,
   useUploadFeature,
@@ -45,13 +43,13 @@ import {
   validateFileSizes,
 } from "@/utils/validateFileSizes";
 
-import type { AddMenuActionItem } from "@/components/ui/Chat/ChatInputAddMenu";
 import type { CloudFilePickerModalProps } from "@/components/ui/FileUpload/CloudFilePickerModal";
 import type {
   CloudProvider,
   SelectedCloudFile,
 } from "@/lib/api/cloudProviders/types";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { AddMenuFileSource } from "@/lib/shell/menus/addMenuTexts";
 import type { FileType } from "@/utils/fileTypes";
 import type { DropzoneInputProps, DropzoneRootProps } from "react-dropzone";
 
@@ -89,8 +87,8 @@ export interface UseChatFileSourcesResult {
   onSelectCloud: (provider: CloudProvider) => void;
   /** Upload already-resolved File objects (used by hosts/drag-drop). */
   onSelectFiles: (files: File[]) => Promise<void>;
-  /** Ready-made action items for the unified "+" menu. */
-  fileSourceItems: AddMenuActionItem[];
+  /** Where files can come from, for the unified "+" menu. */
+  fileSources: AddMenuFileSource[];
   /** Spread onto the hidden dropzone wrapper. */
   dropzoneRootProps: (props?: DropzoneRootProps) => DropzoneRootProps;
   /** Spread onto the hidden dropzone <input>. */
@@ -341,28 +339,9 @@ export function useChatFileSources({
   }, [exceedsTokenLimit, onTokenLimitExceeded]);
 
   const hasSharepoint = availableProviders.includes("sharepoint");
-  const fileSourceItems: AddMenuActionItem[] = useMemo(
-    () => [
-      {
-        id: "computer",
-        label: uploadSourceLabel("computer"),
-        icon: <Computer className="size-4" />,
-        onSelect: handleSelectDisk,
-        disabled,
-      },
-      ...(hasSharepoint
-        ? [
-            {
-              id: "sharepoint",
-              label: uploadSourceLabel("sharepoint"),
-              icon: <Cloud className="size-4" />,
-              onSelect: () => handleSelectCloud("sharepoint"),
-              disabled,
-            } satisfies AddMenuActionItem,
-          ]
-        : []),
-    ],
-    [hasSharepoint, disabled, handleSelectDisk, handleSelectCloud],
+  const fileSources = useMemo<AddMenuFileSource[]>(
+    () => (hasSharepoint ? ["computer", "sharepoint"] : ["computer"]),
+    [hasSharepoint],
   );
 
   const cloudPickerProps: CloudFilePickerModalProps | null =
@@ -390,7 +369,7 @@ export function useChatFileSources({
     onSelectDisk: handleSelectDisk,
     onSelectCloud: handleSelectCloud,
     onSelectFiles: selectFiles,
-    fileSourceItems,
+    fileSources,
     dropzoneRootProps: getRootProps,
     dropzoneInputProps: getInputProps,
     cloudPickerProps,

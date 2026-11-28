@@ -8,7 +8,7 @@ import type { MenuEntry } from "../menuEntry";
 import type { ChatHistoryRowMenuId } from "@/components/ui/Chat/chatHistoryRowMenuIds";
 import type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
 
-export type RowMenuHandlers = Partial<
+type RowMenuHandlers = Partial<
   Record<ChatHistoryRowMenuId, (() => void) | undefined>
 >;
 
@@ -27,7 +27,7 @@ export const rowMenuHandles = (
     ]),
   );
 
-export interface RowMenuOptions {
+interface RowMenuOptions {
   pinnedChatsCount: number;
   pinnedChatsLimit: number;
   onPin?: () => void;

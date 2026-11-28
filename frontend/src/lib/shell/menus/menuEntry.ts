@@ -1,3 +1,6 @@
+import { everyValue } from "@/utils/everyValue";
+
+import type { ShellAnchor } from "@/lib/hostShell";
 import type {
   ConfirmParams,
   ShellMenuIcon,
@@ -32,15 +35,25 @@ export interface MenuConfirm {
   cancelLabel: string;
 }
 
+/** How the page's own menu draws an entry, beyond the wire's fields. */
+export interface MenuEntryWebDrawing {
+  /** The entry opens a dialog, so the web menu goes at once. */
+  closesImmediately?: boolean;
+  /** Its subtitle may take two lines. */
+  twoLineSubtitle?: boolean;
+}
+
 /**
  * One entry of a menu as data: what the web menu and the system menu both
- * draw. The wire's fields, with icons named instead of drawn and the
- * confirmation the page asks before the pick takes effect.
+ * draw. The wire's fields, with icons named instead of drawn, the
+ * confirmation the page asks before the pick takes effect, and how the web
+ * menu draws it; the last two are never sent.
  */
 export interface MenuEntry extends Omit<ShellMenuItem, "icon" | "children"> {
   icon?: MenuIcon;
   children?: MenuEntry[];
   confirm?: MenuConfirm;
+  web?: MenuEntryWebDrawing;
 }
 
 /**
@@ -65,6 +78,27 @@ export function menuIcons(entries: readonly MenuEntry[]): MenuIcon[] {
 }
 
 /**
+ * The wire's fields an entry sends as it holds them, every one the contract
+ * types besides the drawn icon and the children; nothing else of an entry
+ * reaches the app.
+ */
+/* eslint-disable lingui/no-unlocalized-strings -- the wire's field names */
+const WIRE_FIELDS = everyValue<
+  Exclude<keyof ShellMenuItem, "icon" | "children">
+>()(
+  "id",
+  "label",
+  "subtitle",
+  "state",
+  "selection",
+  "disabled",
+  "disabledReason",
+  "keepOpen",
+  "inline",
+);
+/* eslint-enable lingui/no-unlocalized-strings */
+
+/**
  * The wire's items. An icon without a drawing is left out rather than sent
  * empty, so a failed drawing costs the picture, not the menu.
  */
@@ -72,11 +106,18 @@ export function toShellMenuItems(
   entries: readonly MenuEntry[],
   drawIcon: (icon: MenuIcon) => ShellMenuIcon | undefined,
 ): ShellMenuItem[] {
-  return entries.map(({ icon, children, confirm: _confirm, ...rest }) => {
-    const item: ShellMenuItem = { ...rest };
-    const drawn = icon ? drawIcon(icon) : undefined;
+  return entries.map((entry) => {
+    const item: ShellMenuItem = { id: entry.id };
+    for (const field of WIRE_FIELDS) {
+      if (entry[field] !== undefined) {
+        Object.assign(item, { [field]: entry[field] });
+      }
+    }
+    const drawn = entry.icon ? drawIcon(entry.icon) : undefined;
     if (drawn) item.icon = drawn;
-    if (children) item.children = toShellMenuItems(children, drawIcon);
+    if (entry.children) {
+      item.children = toShellMenuItems(entry.children, drawIcon);
+    }
     return item;
   });
 }
@@ -93,15 +134,19 @@ export function findMenuEntry(
   return undefined;
 }
 
+/** The one action of an entry's confirmation; the cancel button is the app's. */
+export const CONFIRM_ACTION_ID = "confirm";
+
 /** The action sheet the app shows for an entry's confirmation. */
 export function confirmParams(
   confirm: MenuConfirm,
-  confirmActionId: string,
+  anchor?: ShellAnchor,
 ): ConfirmParams {
   return {
     title: confirm.title,
     ...(confirm.message ? { message: confirm.message } : {}),
+    ...(anchor ? { anchor } : {}),
     cancelLabel: confirm.cancelLabel,
-    actions: [{ id: confirmActionId, label: confirm.confirmLabel }],
+    actions: [{ id: CONFIRM_ACTION_ID, label: confirm.confirmLabel }],
   };
 }

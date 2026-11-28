@@ -1,6 +1,7 @@
-import { t } from "@lingui/core/macro";
 import { Cloud, Computer } from "iconoir-react";
 import { memo } from "react";
+
+import { uploadSourceLabel } from "@/lib/shell/menus/addMenuTexts";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { PlusIcon } from "../icons";
@@ -54,10 +55,7 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
     const menuItems: DropdownMenuItem[] = [
       // Always show "Upload from Computer" option
       {
-        label: t({
-          id: "fileSourceSelector.uploadFromComputer",
-          message: "Upload from Computer",
-        }),
+        label: uploadSourceLabel("computer"),
         icon: <Computer className="size-4" />,
         onClick: onSelectDisk,
         disabled,
@@ -67,10 +65,7 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
     // Add cloud provider options
     if (availableProviders.includes("sharepoint")) {
       menuItems.push({
-        label: t({
-          id: "fileSourceSelector.uploadFromOneDrive",
-          message: "Upload from Sharepoint",
-        }),
+        label: uploadSourceLabel("sharepoint"),
         icon: <Cloud className="size-4" />,
         onClick: () => onSelectCloud("sharepoint"),
         disabled,

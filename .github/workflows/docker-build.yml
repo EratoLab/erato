@@ -229,6 +229,11 @@ jobs:
         if: success() || failure()
         run: pnpm run check:adaptive-cards
 
+      - name: "Shell contract types are up-to-date"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run check:shell-types
+
       - name: "Frontend lint"
         working-directory: ./frontend
         if: success() || failure()

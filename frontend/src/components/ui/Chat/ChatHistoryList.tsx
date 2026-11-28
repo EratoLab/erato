@@ -158,20 +158,6 @@ export interface ChatHistoryRowMenuOptions extends ChatHistoryRowMenuHandlers {
   session: ChatSession;
 }
 
-export type ChatHistoryRowMenuState = RowMenuState;
-
-/**
- * The row's dropdown items, already gated. A caller renders the array as it
- * comes; nothing it leaves out can drop a rule.
- *
- * Host-only, withheld from the kit surface by name in the generator: building
- * the state by hand loses the run and pending-confirmation gates.
- */
-export const buildChatHistoryRowMenuItems = (
-  state: ChatHistoryRowMenuState,
-  handlers: ChatHistoryRowMenuHandlers,
-): DropdownMenuItem[] => rowMenu(state, handlers).items;
-
 const chatHistoryRowMenuOptions = (
   {
     onSessionArchive,
@@ -204,7 +190,7 @@ const rowMenuState = (
   session: ChatSession,
   status: ChatAttentionStatus | null,
   waitingOnly: boolean,
-): ChatHistoryRowMenuState => ({
+): RowMenuState => ({
   archived: session.archivedAt != null,
   isPinned: session.isPinned ?? false,
   canEdit: session.canEdit ?? true,
@@ -222,10 +208,8 @@ export const useChatHistoryRowMenuItems = ({
   const status = useChatRowStatus(session.id, session);
   const waitingOnly = useChatWaitsOnly(session.id);
 
-  return buildChatHistoryRowMenuItems(
-    rowMenuState(session, status, waitingOnly),
-    handlers,
-  );
+  // Already gated: a caller renders the items as they come.
+  return rowMenu(rowMenuState(session, status, waitingOnly), handlers).items;
 };
 
 export interface ChatHistoryRow extends ChatHistoryRowPresentation {

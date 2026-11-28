@@ -25,7 +25,7 @@ import type {
 } from "@/hooks/chat/store/chatHistoryFilterStore";
 
 /** A pick in the filter menu, as both drawings apply it. */
-export type FilterMenuChoice =
+type FilterMenuChoice =
   | { kind: "type"; value: ChatHistoryTypeFilter }
   | { kind: "status"; value: ChatHistoryStatusFilter }
   | { kind: "delegated"; value: ChatHistoryDelegatedFilter }
@@ -41,7 +41,7 @@ export type FilterMenuRowKey =
   | "source"
   | "groupBy";
 
-export const FILTER_MENU_RESET_ID = "reset";
+const FILTER_MENU_RESET_ID = "reset";
 // eslint-disable-next-line lingui/no-unlocalized-strings -- entry id
 const SOURCE_MODE_SECTION_ID = "sourceMode";
 const SOURCES_SECTION_ID = "sources";
@@ -86,7 +86,7 @@ export function filterMenuChoice(itemId: string): FilterMenuChoice | null {
   }
 }
 
-export interface FilterMenuSetters {
+interface FilterMenuSetters {
   setTypeFilter: (value: ChatHistoryTypeFilter) => void;
   setStatusFilter: (value: ChatHistoryStatusFilter) => void;
   setDelegatedFilter: (value: ChatHistoryDelegatedFilter) => void;

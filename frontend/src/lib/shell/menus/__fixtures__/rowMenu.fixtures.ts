@@ -1,10 +1,10 @@
 /* eslint-disable lingui/no-unlocalized-strings -- fixture data standing in for what a server sends */
-import { everyValue } from "./everyValue";
+import { everyValue } from "@/utils/everyValue";
 
 import type { RowMenuGates, RowMenuState } from "../describeRowMenu";
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 
-export interface RowMenuFixture {
+interface RowMenuFixture {
   state: RowMenuState;
   gates: RowMenuGates;
   /** The chat's title, which the system menu shows above the entries. */

@@ -5,7 +5,7 @@ import type { ChatModel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const MODEL_ID_PREFIX = "model:";
 
-export const modelEntryId = (chatProviderId: string) =>
+const modelEntryId = (chatProviderId: string) =>
   `${MODEL_ID_PREFIX}${chatProviderId}`;
 
 /** The chat provider an entry id names, or null for another entry. */
